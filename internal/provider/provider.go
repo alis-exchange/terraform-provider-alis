@@ -44,8 +44,7 @@ type bigtableProviderModel struct {
 
 // Metadata returns the provider type name.
 func (p *bigtableProvider) Metadata(_ context.Context, _ provider.MetadataRequest, resp *provider.MetadataResponse) {
-	// TODO: Rename
-	resp.TypeName = "alisbuild"
+	resp.TypeName = "alis"
 	resp.Version = p.version
 }
 

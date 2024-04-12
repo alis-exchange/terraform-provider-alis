@@ -1,17 +1,17 @@
 terraform {
   required_providers {
     bigtable = {
-      source = "alis.exchange/db/alisbuild"
+      source = "alis.exchange/db/alis"
     }
   }
 }
 
-provider "alisbuild" {
+provider "alis" {
   host     = "localhost:8080"
 }
 
-data "alisbuild_tables" "test" {}
+data "alis_bigtable_tables" "test" {}
 
 output "test_tables" {
-  value = data.alisbuild_tables.test
+  value = data.alis_bigtable_tables.test
 }

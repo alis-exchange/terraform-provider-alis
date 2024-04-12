@@ -9,7 +9,7 @@ import (
 	"log"
 
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
-	"terraform-provider-alisbuild/internal/provider"
+	"terraform-provider-alis/internal/provider"
 )
 
 // Run "go generate" to format example terraform files and generate the docs for the registry/website
@@ -43,7 +43,7 @@ func main() {
 		// provider address is used in these tutorials in conjunction with a
 		// specific Terraform CLI configuration for manual development testing
 		// of this provider.
-		Address: "registry.terraform.io/hashicorp/alisbuild",
+		Address: "registry.terraform.io/hashicorp/alis",
 		Debug:   debug,
 	}
 

@@ -1,4 +1,4 @@
-module terraform-provider-alisbuild
+module terraform-provider-alis
 
 go 1.22
 
@@ -9,7 +9,9 @@ require (
 	github.com/hashicorp/terraform-plugin-framework v1.7.0
 	github.com/hashicorp/terraform-plugin-log v0.9.0
 	go.alis.build/client v0.0.6
-	go.protobuf.mentenova.exchange v0.0.0-20240410104614-a5fd88198732
+	go.protobuf.mentenova.exchange v0.0.0-20240412133445-cb79fa0ab071
+	google.golang.org/protobuf v1.33.0
+
 )
 
 require (
@@ -83,7 +85,6 @@ require (
 	google.golang.org/appengine v1.6.8 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240213162025-012b6fc9bca9 // indirect
 	google.golang.org/grpc v1.62.1 // indirect
-	google.golang.org/protobuf v1.33.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
 	gopkg.in/yaml.v2 v2.3.0 // indirect
 )

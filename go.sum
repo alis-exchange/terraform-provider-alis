@@ -235,8 +235,8 @@ go.opentelemetry.io/otel/metric v1.23.0 h1:pazkx7ss4LFVVYSxYew7L5I6qvLXHA0Ap2pwV
 go.opentelemetry.io/otel/metric v1.23.0/go.mod h1:MqUW2X2a6Q8RN96E2/nqNoT+z9BSms20Jb7Bbp+HiTo=
 go.opentelemetry.io/otel/trace v1.23.0 h1:37Ik5Ib7xfYVb4V1UtnT97T1jI+AoIYkJyPkuL4iJgI=
 go.opentelemetry.io/otel/trace v1.23.0/go.mod h1:GSGTbIClEsuZrGIzoEHqsVfxgn5UkggkflQwDScNUsk=
-go.protobuf.mentenova.exchange v0.0.0-20240410104614-a5fd88198732 h1:7lsIW/QNF1U1qvQdDmPOYBZ5/pTZvJqnnbsRwDXRvQY=
-go.protobuf.mentenova.exchange v0.0.0-20240410104614-a5fd88198732/go.mod h1:V93f3owjP4yEF8pM7F8n932sRY91PyOhBf3A9kLYj40=
+go.protobuf.mentenova.exchange v0.0.0-20240412133445-cb79fa0ab071 h1:le/8Uf2NbNr3sW1GCo4BRYba4ejvR5smYv2Fz3E3W7o=
+go.protobuf.mentenova.exchange v0.0.0-20240412133445-cb79fa0ab071/go.mod h1:V93f3owjP4yEF8pM7F8n932sRY91PyOhBf3A9kLYj40=
 golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2/go.mod h1:djNgcEr1/C05ACkg1iLfiJU5Ep61QUkGW8qpdssI0+w=
 golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9/go.mod h1:LzIPMQfyMNhhGPhUkYOs5KpL4U8rLKemX1yGLhDgUto=
 golang.org/x/crypto v0.0.0-20210921155107-089bfa567519/go.mod h1:GvvjBRRGRdwPK5ydBHafDWAxML/pGHZbMvKqRZ5+Abc=

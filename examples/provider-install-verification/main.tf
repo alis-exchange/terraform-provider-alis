@@ -1,11 +1,11 @@
 terraform {
   required_providers {
     bigtable = {
-      source = "alis.exchange/db/alisbuild"
+      source = "alis.exchange/db/alis"
     }
   }
 }
 
-provider "alisbuild" {}
+provider "alis" {}
 
-data "alisbuild_tables" "example" {}
+data "alis_bigtable_tables" "example" {}
