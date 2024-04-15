@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -24,23 +25,17 @@ type bigtableGarbageCollectionPolicyDataSource struct {
 	client pb.BigtableServiceClient
 }
 
+type bigtableGarbageCollectionPoliciesDataSourceModel struct {
+	GcPolicies []bigtableGarbageCollectionPolicyModel `tfsdk:"gc_policies"`
+}
+
 type bigtableGarbageCollectionPolicyModel struct {
-	Project        types.String            `tfsdk:"project"`
-	InstanceName   types.String            `tfsdk:"instance_name"`
-	Table          types.String            `tfsdk:"table"`
-	ColumFamily    types.String            `tfsdk:"column_family"`
-	DeletionPolicy types.String            `tfsdk:"deletion_policy"`
-	MaxVersion     bigtableMaxVersionModel `tfsdk:"max_version"`
-	MaxAge         bigtableMaxAgeModel     `tfsdk:"max_age"`
-	GcRules        types.String            `tfsdk:"gc_rules"`
-}
-
-type bigtableMaxVersionModel struct {
-	Number types.Int64 `tfsdk:"number"`
-}
-
-type bigtableMaxAgeModel struct {
-	Duration types.String `tfsdk:"duration"`
+	Project        types.String `tfsdk:"project"`
+	InstanceName   types.String `tfsdk:"instance_name"`
+	Table          types.String `tfsdk:"table"`
+	ColumFamily    types.String `tfsdk:"column_family"`
+	DeletionPolicy types.String `tfsdk:"deletion_policy"`
+	GcRules        types.String `tfsdk:"gc_rules"`
 }
 
 // Metadata returns the data source type name.
@@ -56,9 +51,6 @@ func (d *bigtableGarbageCollectionPolicyDataSource) Schema(_ context.Context, _ 
 				Computed: true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
-						"name": schema.StringAttribute{
-							Computed: true,
-						},
 						"project": schema.StringAttribute{
 							Computed: true,
 						},
@@ -77,22 +69,6 @@ func (d *bigtableGarbageCollectionPolicyDataSource) Schema(_ context.Context, _ 
 						"gc_rules": schema.StringAttribute{
 							Computed: true,
 						},
-						"max_version": schema.SingleNestedAttribute{
-							Computed: true,
-							Attributes: map[string]schema.Attribute{
-								"number": schema.NumberAttribute{
-									Computed: true,
-								},
-							},
-						},
-						"max_age": schema.SingleNestedAttribute{
-							Computed: true,
-							Attributes: map[string]schema.Attribute{
-								"duration": schema.StringAttribute{
-									Computed: true,
-								},
-							},
-						},
 					},
 				},
 			},
@@ -102,18 +78,18 @@ func (d *bigtableGarbageCollectionPolicyDataSource) Schema(_ context.Context, _ 
 
 // Read refreshes the Terraform state with the latest data.
 func (d *bigtableGarbageCollectionPolicyDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
-	var state bigtableGarbageCollectionPolicyModel
+	// Get current state
+	var state bigtableGarbageCollectionPoliciesDataSourceModel
 
 	// Get project and instance name
-	project := state.Project.ValueString()
-	instanceName := state.InstanceName.ValueString()
-	tableId := state.Table.ValueString()
-	columnFamilyId := state.ColumFamily.ValueString()
+	// TODO: Populate project and instance name
+	project := ""
+	instanceName := ""
+	tableId := ""
 
 	// Read garbage collection policy
-	gcPolicy, err := d.client.GetGarbageCollectionPolicy(ctx, &pb.GetGarbageCollectionPolicyRequest{
-		Parent:         fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instanceName, tableId),
-		ColumnFamilyId: columnFamilyId,
+	gcPoliciesRes, err := d.client.ListGarbageCollectionPolicies(ctx, &pb.ListGarbageCollectionPoliciesRequest{
+		Parent: fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instanceName, tableId),
 	})
 	if err != nil {
 		resp.Diagnostics.AddError(
@@ -123,30 +99,40 @@ func (d *bigtableGarbageCollectionPolicyDataSource) Read(ctx context.Context, re
 		return
 	}
 
-	// Populate deletion policy
-	switch gcPolicy.GetDeletionPolicy() {
-	case pb.Table_ColumnFamily_GarbageCollectionPolicy_ABANDON:
-		state.DeletionPolicy = types.StringValue("ABANDON")
-	}
+	// Populate deletion policies
+	for _, gcPolicy := range gcPoliciesRes.GetGcPolicies() {
+		// TODO: Populate project, instance name, table, and column family
+		policyModel := bigtableGarbageCollectionPolicyModel{}
 
-	// Populate rules
-	if gcPolicy.GetGcRule() != nil {
-		switch gcPolicy.GetGcRule().GetRule().(type) {
-		case *pb.Table_ColumnFamily_GarbageCollectionPolicy_GcRule_MaxNumVersions:
-			state.MaxVersion = bigtableMaxVersionModel{
-				Number: types.Int64Value(int64(gcPolicy.GetGcRule().GetMaxNumVersions())),
-			}
-		case *pb.Table_ColumnFamily_GarbageCollectionPolicy_GcRule_MaxAge:
-			if gcPolicy.GetGcRule().GetMaxAge() != nil {
-				state.MaxAge = bigtableMaxAgeModel{
-					Duration: types.StringValue(gcPolicy.GetGcRule().GetMaxAge().AsDuration().String()),
-				}
-			}
-		case *pb.Table_ColumnFamily_GarbageCollectionPolicy_GcRule_Union_:
-			// TODO: Implement Union
-		case *pb.Table_ColumnFamily_GarbageCollectionPolicy_GcRule_Intersection_:
-			// TODO: Implement Intersection
+		switch gcPolicy.GetDeletionPolicy() {
+		case pb.Table_ColumnFamily_GarbageCollectionPolicy_ABANDON:
+			policyModel.DeletionPolicy = types.StringValue("ABANDON")
 		}
+
+		// Populate rules
+		if gcPolicy.GetGcRule() != nil {
+			gcRuleMap, err := GcPolicyToGCRuleMap(gcPolicy.GetGcRule(), true)
+			if err != nil {
+				resp.Diagnostics.AddError(
+					"Unable to Parse GC Policy to GC Rule String",
+					err.Error(),
+				)
+				return
+			}
+
+			gcRuleBytes, err := json.Marshal(gcRuleMap)
+			if err != nil {
+				resp.Diagnostics.AddError(
+					"Unable to Marshal GC Rule Map to JSON",
+					err.Error(),
+				)
+				return
+			}
+
+			policyModel.GcRules = types.StringValue(string(gcRuleBytes))
+		}
+
+		state.GcPolicies = append(state.GcPolicies, policyModel)
 	}
 
 	// Set state

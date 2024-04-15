@@ -30,22 +30,17 @@ type bigtableTablesDataSourceModel struct {
 }
 
 type bigtableTableModel struct {
-	Name                  types.String                              `tfsdk:"name"`
-	Project               types.String                              `tfsdk:"project"`
-	InstanceName          types.String                              `tfsdk:"instance_name"`
-	SplitKeys             []types.String                            `tfsdk:"split_keys"`
-	DeletionProtection    types.Bool                                `tfsdk:"deletion_protection"`
-	ChangeStreamRetention types.String                              `tfsdk:"change_stream_retention"`
-	ColumnFamilies        map[string]bigtableTableColumnFamilyModel `tfsdk:"column_families"`
+	Name                  types.String                     `tfsdk:"name"`
+	Project               types.String                     `tfsdk:"project"`
+	InstanceName          types.String                     `tfsdk:"instance_name"`
+	SplitKeys             []types.String                   `tfsdk:"split_keys"`
+	DeletionProtection    types.Bool                       `tfsdk:"deletion_protection"`
+	ChangeStreamRetention types.String                     `tfsdk:"change_stream_retention"`
+	ColumnFamilies        []bigtableTableColumnFamilyModel `tfsdk:"column_families"`
 }
 
 type bigtableTableColumnFamilyModel struct {
-	Name                    types.String                                          `tfsdk:"name"`
-	GarbageCollectionPolicy bigtableTableColumnFamilyGarbageCollectionPolicyModel `tfsdk:"garbage_collection_policy"`
-}
-
-type bigtableTableColumnFamilyGarbageCollectionPolicyModel struct {
-	DeletionPolicy types.String `tfsdk:"deletion_policy"`
+	Name types.String `tfsdk:"name"`
 }
 
 // Metadata returns the data source type name.
@@ -81,21 +76,12 @@ func (d *bigtableTablesDataSource) Schema(_ context.Context, _ datasource.Schema
 						"change_stream_retention": schema.StringAttribute{
 							Optional: true,
 						},
-						"column_families": schema.MapNestedAttribute{
+						"column_families": schema.ListNestedAttribute{
 							Optional: true,
 							NestedObject: schema.NestedAttributeObject{
 								Attributes: map[string]schema.Attribute{
 									"name": schema.StringAttribute{
 										Required: true,
-									},
-									"garbage_collection_policy": schema.SingleNestedAttribute{
-										Optional: true,
-										Attributes: map[string]schema.Attribute{
-											"deletion_policy": schema.StringAttribute{
-												Computed: true,
-												Optional: true,
-											},
-										},
 									},
 								},
 							},
@@ -154,26 +140,15 @@ func (d *bigtableTablesDataSource) Read(ctx context.Context, req datasource.Read
 		}
 
 		// Get column families
-		var columnFamilies map[string]bigtableTableColumnFamilyModel
+		var columnFamilies []bigtableTableColumnFamilyModel
 		// Populate column families if any
 		if table.GetColumnFamilies() != nil && len(table.GetColumnFamilies()) > 0 {
-			columnFamilies = map[string]bigtableTableColumnFamilyModel{}
-			for columnFamilyName, columnFamily := range table.GetColumnFamilies() {
-				// Get deletion policy
-				var deletionPolicy types.String
-				// Populate deletion policy if any
-				switch columnFamily.GetGcPolicy().GetDeletionPolicy() {
-				case pb.Table_ColumnFamily_GarbageCollectionPolicy_ABANDON:
-					deletionPolicy = types.StringValue("ABANDON")
-				}
-
+			columnFamilies = make([]bigtableTableColumnFamilyModel, 0)
+			for columnFamilyName := range table.GetColumnFamilies() {
 				// Populate column family
-				columnFamilies[columnFamilyName] = bigtableTableColumnFamilyModel{
+				columnFamilies = append(columnFamilies, bigtableTableColumnFamilyModel{
 					Name: types.StringValue(columnFamilyName),
-					GarbageCollectionPolicy: bigtableTableColumnFamilyGarbageCollectionPolicyModel{
-						DeletionPolicy: deletionPolicy,
-					},
-				}
+				})
 			}
 		}
 

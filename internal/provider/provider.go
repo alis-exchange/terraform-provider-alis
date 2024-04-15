@@ -139,6 +139,7 @@ func (p *bigtableProvider) Configure(ctx context.Context, req provider.Configure
 func (p *bigtableProvider) DataSources(_ context.Context) []func() datasource.DataSource {
 	return []func() datasource.DataSource{
 		NewBigtableTablesDataSource,
+		NewBigtableGarbageCollectionPolicyDataSource,
 	}
 }
 
@@ -146,5 +147,6 @@ func (p *bigtableProvider) DataSources(_ context.Context) []func() datasource.Da
 func (p *bigtableProvider) Resources(_ context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		NewTableResource,
+		NewGarbageCollectionPolicyResource,
 	}
 }

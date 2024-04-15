@@ -59,20 +59,12 @@ func (r *tableResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 			"change_stream_retention": schema.StringAttribute{
 				Optional: true,
 			},
-			"column_families": schema.MapNestedAttribute{
+			"column_families": schema.ListNestedAttribute{
 				Optional: true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"name": schema.StringAttribute{
 							Required: true,
-						},
-						"garbage_collection_policy": schema.SingleNestedAttribute{
-							Optional: true,
-							Attributes: map[string]schema.Attribute{
-								"deletion_policy": schema.StringAttribute{
-									Optional: true,
-								},
-							},
 						},
 					},
 				},
@@ -135,29 +127,10 @@ func (r *tableResource) Create(ctx context.Context, req resource.CreateRequest, 
 
 	// Populate column families if any
 	if plan.ColumnFamilies != nil && len(plan.ColumnFamilies) > 0 {
-		for columnFamilyName, columnFamily := range plan.ColumnFamilies {
-			// Get deletion policy
-			var deletionPolicy pb.Table_ColumnFamily_GarbageCollectionPolicy_DeletionPolicy
-			// Populate deletion policy if any
-			if !columnFamily.GarbageCollectionPolicy.DeletionPolicy.IsNull() {
-				switch columnFamily.GarbageCollectionPolicy.DeletionPolicy.ValueString() {
-				case "ABANDON":
-					deletionPolicy = pb.Table_ColumnFamily_GarbageCollectionPolicy_ABANDON
-				default:
-					resp.Diagnostics.AddError(
-						"Error Parsing Deletion Policy",
-						"Could not parse Deletion Policy: "+columnFamily.GarbageCollectionPolicy.DeletionPolicy.ValueString()+". Supported values are: ABANDON",
-					)
-					return
-				}
-			}
-
+		for _, columnFamily := range plan.ColumnFamilies {
 			// Populate column family
-			table.ColumnFamilies[columnFamilyName] = &pb.Table_ColumnFamily{
-				Name: columnFamilyName,
-				GcPolicy: &pb.Table_ColumnFamily_GarbageCollectionPolicy{
-					DeletionPolicy: deletionPolicy,
-				},
+			table.ColumnFamilies[columnFamily.Name.ValueString()] = &pb.Table_ColumnFamily{
+				Name: columnFamily.Name.ValueString(),
 			}
 		}
 	}
@@ -251,26 +224,15 @@ func (r *tableResource) Read(ctx context.Context, req resource.ReadRequest, resp
 	state.ChangeStreamRetention = changeStreamRetention
 
 	// Get column families
-	var columnFamilies map[string]bigtableTableColumnFamilyModel
+	var columnFamilies []bigtableTableColumnFamilyModel
 	// Populate column families if any
 	if table.GetColumnFamilies() != nil && len(table.GetColumnFamilies()) > 0 {
-		columnFamilies = map[string]bigtableTableColumnFamilyModel{}
-		for columnFamilyName, columnFamily := range table.GetColumnFamilies() {
-			// Get deletion policy
-			var deletionPolicy types.String
-			// Populate deletion policy if any
-			switch columnFamily.GetGcPolicy().GetDeletionPolicy() {
-			case pb.Table_ColumnFamily_GarbageCollectionPolicy_ABANDON:
-				deletionPolicy = types.StringValue("ABANDON")
-			}
-
+		columnFamilies = make([]bigtableTableColumnFamilyModel, 0)
+		for columnFamilyName := range table.GetColumnFamilies() {
 			// Populate column family
-			columnFamilies[columnFamilyName] = bigtableTableColumnFamilyModel{
+			columnFamilies = append(columnFamilies, bigtableTableColumnFamilyModel{
 				Name: types.StringValue(columnFamilyName),
-				GarbageCollectionPolicy: bigtableTableColumnFamilyGarbageCollectionPolicyModel{
-					DeletionPolicy: deletionPolicy,
-				},
-			}
+			})
 		}
 	}
 	state.ColumnFamilies = columnFamilies
@@ -337,29 +299,10 @@ func (r *tableResource) Update(ctx context.Context, req resource.UpdateRequest, 
 
 	// Populate column families if any
 	if plan.ColumnFamilies != nil && len(plan.ColumnFamilies) > 0 {
-		for columnFamilyName, columnFamily := range plan.ColumnFamilies {
-			// Get deletion policy
-			var deletionPolicy pb.Table_ColumnFamily_GarbageCollectionPolicy_DeletionPolicy
-			// Populate deletion policy if any
-			if !columnFamily.GarbageCollectionPolicy.DeletionPolicy.IsNull() {
-				switch columnFamily.GarbageCollectionPolicy.DeletionPolicy.ValueString() {
-				case "ABANDON":
-					deletionPolicy = pb.Table_ColumnFamily_GarbageCollectionPolicy_ABANDON
-				default:
-					resp.Diagnostics.AddError(
-						"Error Parsing Deletion Policy",
-						"Could not parse Deletion Policy: "+columnFamily.GarbageCollectionPolicy.DeletionPolicy.ValueString()+". Supported values are: ABANDON",
-					)
-					return
-				}
-			}
-
+		for _, columnFamily := range plan.ColumnFamilies {
 			// Populate column family
-			table.ColumnFamilies[columnFamilyName] = &pb.Table_ColumnFamily{
-				Name: columnFamilyName,
-				GcPolicy: &pb.Table_ColumnFamily_GarbageCollectionPolicy{
-					DeletionPolicy: deletionPolicy,
-				},
+			table.ColumnFamilies[columnFamily.Name.ValueString()] = &pb.Table_ColumnFamily{
+				Name: columnFamily.Name.ValueString(),
 			}
 		}
 	}
@@ -456,4 +399,13 @@ func (r *tableResource) Configure(_ context.Context, req resource.ConfigureReque
 	}
 
 	r.client = client
+}
+
+func (r *tableResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {
+	return []resource.ConfigValidator{
+		//resourcevalidator.Conflicting(
+		//	path.MatchRoot("attribute_one"),
+		//	path.MatchRoot("attribute_two"),
+		//),
+	}
 }

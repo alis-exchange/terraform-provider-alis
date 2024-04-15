@@ -12,15 +12,14 @@ provider "alis" {
 }
 
 resource "alis_bigtable_table" "test" {
-  project       = "mentenova-db-prod-woi"
-  instance_name = "default"
-  name          = "mentenova-db-prod-woi-test"
-}
-
-resource "alis_bigtable_table" "test2" {
-  project       = "mentenova-db-prod-woi"
-  instance_name = "default"
-  name          = "mentenova-db-prod-woi-test2"
+  project         = "mentenova-db-prod-woi"
+  instance_name   = "default"
+  name            = "mentenova-db-prod-woi-test"
+  column_families = [
+    {
+      name = "0"
+    },
+  ]
 }
 
 output "test_table" {
