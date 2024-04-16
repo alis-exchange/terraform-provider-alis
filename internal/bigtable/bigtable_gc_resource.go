@@ -1,4 +1,4 @@
-package provider
+package bigtable
 
 import (
 	"context"
@@ -14,6 +14,7 @@ import (
 	pb "go.protobuf.mentenova.exchange/mentenova/db/resources/bigtable/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	"terraform-provider-alis/internal/provider"
 )
 
 const (
@@ -35,6 +36,15 @@ func NewGarbageCollectionPolicyResource() resource.Resource {
 
 type garbageCollectionPolicyResource struct {
 	client pb.BigtableServiceClient
+}
+
+type bigtableGarbageCollectionPolicyModel struct {
+	Project        types.String `tfsdk:"project"`
+	InstanceName   types.String `tfsdk:"instance_name"`
+	Table          types.String `tfsdk:"table"`
+	ColumFamily    types.String `tfsdk:"column_family"`
+	DeletionPolicy types.String `tfsdk:"deletion_policy"`
+	GcRules        types.String `tfsdk:"gc_rules"`
 }
 
 // Metadata returns the resource type name.
@@ -348,18 +358,18 @@ func (r *garbageCollectionPolicyResource) Configure(_ context.Context, req resou
 		return
 	}
 
-	client, ok := req.ProviderData.(pb.BigtableServiceClient)
+	clients, ok := req.ProviderData.(provider.ProviderClients)
 
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected pb.BigtableServiceClient, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+			fmt.Sprintf("Expected ProviderClients, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
 
 		return
 	}
 
-	r.client = client
+	r.client = clients.Bigtable
 }
 
 // Recursively convert Bigtable GC policy to JSON format in a map.

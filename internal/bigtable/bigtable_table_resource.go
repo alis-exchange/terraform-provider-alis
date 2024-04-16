@@ -1,4 +1,4 @@
-package provider
+package bigtable
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 	pb "go.protobuf.mentenova.exchange/mentenova/db/resources/bigtable/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	"terraform-provider-alis/internal/provider"
 )
 
 // Ensure the implementation satisfies the expected interfaces.
@@ -29,6 +30,20 @@ func NewTableResource() resource.Resource {
 
 type tableResource struct {
 	client pb.BigtableServiceClient
+}
+
+type bigtableTableModel struct {
+	Name                  types.String                     `tfsdk:"name"`
+	Project               types.String                     `tfsdk:"project"`
+	InstanceName          types.String                     `tfsdk:"instance_name"`
+	SplitKeys             []types.String                   `tfsdk:"split_keys"`
+	DeletionProtection    types.Bool                       `tfsdk:"deletion_protection"`
+	ChangeStreamRetention types.String                     `tfsdk:"change_stream_retention"`
+	ColumnFamilies        []bigtableTableColumnFamilyModel `tfsdk:"column_families"`
+}
+
+type bigtableTableColumnFamilyModel struct {
+	Name types.String `tfsdk:"name"`
 }
 
 // Metadata returns the resource type name.
@@ -387,18 +402,17 @@ func (r *tableResource) Configure(_ context.Context, req resource.ConfigureReque
 		return
 	}
 
-	client, ok := req.ProviderData.(pb.BigtableServiceClient)
-
+	clients, ok := req.ProviderData.(provider.ProviderClients)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected pb.BigtableServiceClient, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+			fmt.Sprintf("Expected ProviderClients, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
 
 		return
 	}
 
-	r.client = client
+	r.client = clients.Bigtable
 }
 
 func (r *tableResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {

@@ -130,6 +130,8 @@ github.com/hashicorp/terraform-plugin-docs v0.18.0 h1:2bINhzXc+yDeAcafurshCrIjtd
 github.com/hashicorp/terraform-plugin-docs v0.18.0/go.mod h1:iIUfaJpdUmpi+rI42Kgq+63jAjI8aZVTyxp3Bvk9Hg8=
 github.com/hashicorp/terraform-plugin-framework v1.7.0 h1:wOULbVmfONnJo9iq7/q+iBOBJul5vRovaYJIu2cY/Pw=
 github.com/hashicorp/terraform-plugin-framework v1.7.0/go.mod h1:jY9Id+3KbZ17OMpulgnWLSfwxNVYSoYBQFTgsx044CI=
+github.com/hashicorp/terraform-plugin-framework-validators v0.12.0 h1:HOjBuMbOEzl7snOdOoUfE2Jgeto6JOjLVQ39Ls2nksc=
+github.com/hashicorp/terraform-plugin-framework-validators v0.12.0/go.mod h1:jfHGE/gzjxYz6XoUwi/aYiiKrJDeutQNUtGQXkaHklg=
 github.com/hashicorp/terraform-plugin-go v0.22.1 h1:iTS7WHNVrn7uhe3cojtvWWn83cm2Z6ryIUDTRO0EV7w=
 github.com/hashicorp/terraform-plugin-go v0.22.1/go.mod h1:qrjnqRghvQ6KnDbB12XeZ4FluclYwptntoWCr9QaXTI=
 github.com/hashicorp/terraform-plugin-log v0.9.0 h1:i7hOA+vdAItN1/7UrfBqBwvYPQ9TFvymaRGZED3FCV0=
@@ -241,8 +243,8 @@ go.opentelemetry.io/otel/metric v1.23.0 h1:pazkx7ss4LFVVYSxYew7L5I6qvLXHA0Ap2pwV
 go.opentelemetry.io/otel/metric v1.23.0/go.mod h1:MqUW2X2a6Q8RN96E2/nqNoT+z9BSms20Jb7Bbp+HiTo=
 go.opentelemetry.io/otel/trace v1.23.0 h1:37Ik5Ib7xfYVb4V1UtnT97T1jI+AoIYkJyPkuL4iJgI=
 go.opentelemetry.io/otel/trace v1.23.0/go.mod h1:GSGTbIClEsuZrGIzoEHqsVfxgn5UkggkflQwDScNUsk=
-go.protobuf.mentenova.exchange v0.0.0-20240415102003-cc76171a6b2f h1:1JcVgAt9Z9+uJn/dyrFt7I2+5ScYAy6P3Qj/Nsx9tkY=
-go.protobuf.mentenova.exchange v0.0.0-20240415102003-cc76171a6b2f/go.mod h1:V93f3owjP4yEF8pM7F8n932sRY91PyOhBf3A9kLYj40=
+go.protobuf.mentenova.exchange v0.0.0-20240416121448-f0813927718d h1:cfTqS96SaLx2AuuS6hv/OoQ858KZU/xcEGkwuQaNNaM=
+go.protobuf.mentenova.exchange v0.0.0-20240416121448-f0813927718d/go.mod h1:V93f3owjP4yEF8pM7F8n932sRY91PyOhBf3A9kLYj40=
 golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2/go.mod h1:djNgcEr1/C05ACkg1iLfiJU5Ep61QUkGW8qpdssI0+w=
 golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9/go.mod h1:LzIPMQfyMNhhGPhUkYOs5KpL4U8rLKemX1yGLhDgUto=
 golang.org/x/crypto v0.0.0-20210921155107-089bfa567519/go.mod h1:GvvjBRRGRdwPK5ydBHafDWAxML/pGHZbMvKqRZ5+Abc=

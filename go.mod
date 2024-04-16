@@ -5,12 +5,12 @@ go 1.22
 require (
 	github.com/hashicorp/terraform-plugin-docs v0.18.0
 	github.com/hashicorp/terraform-plugin-framework v1.7.0
+	github.com/hashicorp/terraform-plugin-framework-validators v0.12.0
 	github.com/hashicorp/terraform-plugin-log v0.9.0
 	go.alis.build/client v0.0.6
+	go.protobuf.mentenova.exchange v0.0.0-20240416121448-f0813927718d
 	google.golang.org/protobuf v1.33.0
 )
-
-require go.protobuf.mentenova.exchange v0.0.0-20240415102003-cc76171a6b2f
 
 require (
 	cloud.google.com/go/compute v1.24.0 // indirect

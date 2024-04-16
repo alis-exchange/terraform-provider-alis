@@ -13,6 +13,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"go.alis.build/client"
 	pb "go.protobuf.mentenova.exchange/mentenova/db/resources/bigtable/v1"
+	"terraform-provider-alis/internal/bigtable"
+	"terraform-provider-alis/internal/spanner"
 )
 
 // Ensure the implementation satisfies the expected interfaces.
@@ -40,6 +42,12 @@ type bigtableProvider struct {
 // bigtableProviderModel maps provider schema data to a Go type.
 type bigtableProviderModel struct {
 	Host types.String `tfsdk:"host"`
+}
+
+// ProviderClients is a container for all provider clients.
+type ProviderClients struct {
+	Bigtable pb.BigtableServiceClient
+	Spanner  pb.SpannerServiceClient
 }
 
 // Metadata returns the provider type name.
@@ -113,6 +121,7 @@ func (p *bigtableProvider) Configure(ctx context.Context, req provider.Configure
 	tflog.Debug(ctx, "Creating DB client")
 
 	var bigtableServiceClient pb.BigtableServiceClient
+	var spannerServiceClient pb.SpannerServiceClient
 
 	// GOOGLE_APPLICATION_CREDENTIALS="/Users/newtonnthiga/Projects/Terraform/terraform-provider-alis-build/key-mentenova-db-prod-woi.json" terraform plan
 	if conn, err := client.NewConn(ctx, host, true); err != nil {
@@ -125,28 +134,33 @@ func (p *bigtableProvider) Configure(ctx context.Context, req provider.Configure
 		return
 	} else {
 		bigtableServiceClient = pb.NewBigtableServiceClient(conn)
+		spannerServiceClient = pb.NewSpannerServiceClient(conn)
 	}
 
 	// Make the DB client available during DataSource and Resource
 	// type Configure methods.
-	resp.DataSourceData = bigtableServiceClient
-	resp.ResourceData = bigtableServiceClient
+	resp.DataSourceData = ProviderClients{
+		Bigtable: bigtableServiceClient,
+		Spanner:  spannerServiceClient,
+	}
+	resp.ResourceData = ProviderClients{
+		Bigtable: bigtableServiceClient,
+		Spanner:  spannerServiceClient,
+	}
 
 	tflog.Info(ctx, "Configured DB client", map[string]any{"success": true})
 }
 
 // DataSources defines the data sources implemented in the provider.
 func (p *bigtableProvider) DataSources(_ context.Context) []func() datasource.DataSource {
-	return []func() datasource.DataSource{
-		NewBigtableTablesDataSource,
-		NewBigtableGarbageCollectionPolicyDataSource,
-	}
+	return []func() datasource.DataSource{}
 }
 
 // Resources defines the resources implemented in the provider.
 func (p *bigtableProvider) Resources(_ context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
-		NewTableResource,
-		NewGarbageCollectionPolicyResource,
+		bigtable.NewTableResource,
+		bigtable.NewGarbageCollectionPolicyResource,
+		spanner.NewSpannerDatabaseResource,
 	}
 }
