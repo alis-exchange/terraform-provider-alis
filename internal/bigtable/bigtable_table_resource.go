@@ -3,17 +3,20 @@ package bigtable
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	pb "go.protobuf.mentenova.exchange/mentenova/db/resources/bigtable/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
-	"terraform-provider-alis/internal/provider"
+	"terraform-provider-alis/internal/utils"
 )
 
 // Ensure the implementation satisfies the expected interfaces.
@@ -73,6 +76,9 @@ func (r *tableResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 			},
 			"change_stream_retention": schema.StringAttribute{
 				Optional: true,
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(regexp.MustCompile(`^[1-9][0-9]*s$`), "Version Retention Period must be a valid duration specified in seconds in the format `{seconds}s` e.g. 60s"),
+				},
 			},
 			"column_families": schema.ListNestedAttribute{
 				Optional: true,
@@ -99,9 +105,9 @@ func (r *tableResource) Create(ctx context.Context, req resource.CreateRequest, 
 	}
 
 	// Generate table from plan
-	table := &pb.Table{
+	table := &pb.BigtableTable{
 		SplitKeys:      make([]string, 0),
-		ColumnFamilies: make(map[string]*pb.Table_ColumnFamily),
+		ColumnFamilies: make(map[string]*pb.BigtableTable_ColumnFamily),
 	}
 
 	// Get project and instance name
@@ -119,12 +125,12 @@ func (r *tableResource) Create(ctx context.Context, req resource.CreateRequest, 
 	// Populate deletion protection if any
 	if !plan.DeletionProtection.IsNull() {
 		if plan.DeletionProtection.ValueBool() {
-			table.DeletionProtection = pb.Table_PROTECTED
+			table.DeletionProtection = pb.BigtableTable_PROTECTED
 		} else {
-			table.DeletionProtection = pb.Table_UNPROTECTED
+			table.DeletionProtection = pb.BigtableTable_UNPROTECTED
 		}
 	} else {
-		table.DeletionProtection = pb.Table_DELETION_PROTECTION_UNSPECIFIED
+		table.DeletionProtection = pb.BigtableTable_DELETION_PROTECTION_UNSPECIFIED
 	}
 
 	// Populate change stream retention if any
@@ -144,14 +150,14 @@ func (r *tableResource) Create(ctx context.Context, req resource.CreateRequest, 
 	if plan.ColumnFamilies != nil && len(plan.ColumnFamilies) > 0 {
 		for _, columnFamily := range plan.ColumnFamilies {
 			// Populate column family
-			table.ColumnFamilies[columnFamily.Name.ValueString()] = &pb.Table_ColumnFamily{
+			table.ColumnFamilies[columnFamily.Name.ValueString()] = &pb.BigtableTable_ColumnFamily{
 				Name: columnFamily.Name.ValueString(),
 			}
 		}
 	}
 
 	// Create table
-	_, err := r.client.CreateTable(ctx, &pb.CreateTableRequest{
+	_, err := r.client.CreateBigtableTable(ctx, &pb.CreateBigtableTableRequest{
 		Parent:  fmt.Sprintf("projects/%s/instances/%s", project, instanceName),
 		TableId: tableId,
 		Table:   table,
@@ -191,7 +197,7 @@ func (r *tableResource) Read(ctx context.Context, req resource.ReadRequest, resp
 	tableName := state.Name.ValueString()
 
 	// Get table from API
-	table, err := r.client.GetTable(ctx, &pb.GetTableRequest{
+	table, err := r.client.GetBigtableTable(ctx, &pb.GetBigtableTableRequest{
 		Name: fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instanceName, tableName),
 	})
 	if err != nil {
@@ -219,11 +225,11 @@ func (r *tableResource) Read(ctx context.Context, req resource.ReadRequest, resp
 	var deletionProtection types.Bool
 	// Populate deletion protection if any
 	switch table.GetDeletionProtection() {
-	case pb.Table_DELETION_PROTECTION_UNSPECIFIED:
+	case pb.BigtableTable_DELETION_PROTECTION_UNSPECIFIED:
 		deletionProtection = types.BoolValue(false)
-	case pb.Table_PROTECTED:
+	case pb.BigtableTable_PROTECTED:
 		deletionProtection = types.BoolValue(true)
-	case pb.Table_UNPROTECTED:
+	case pb.BigtableTable_UNPROTECTED:
 		deletionProtection = types.BoolValue(false)
 	}
 	state.DeletionProtection = deletionProtection
@@ -275,10 +281,10 @@ func (r *tableResource) Update(ctx context.Context, req resource.UpdateRequest, 
 	tableId := plan.Name.ValueString()
 
 	// Generate table from plan
-	table := &pb.Table{
+	table := &pb.BigtableTable{
 		Name:           fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instanceName, tableId),
 		SplitKeys:      make([]string, 0),
-		ColumnFamilies: make(map[string]*pb.Table_ColumnFamily),
+		ColumnFamilies: make(map[string]*pb.BigtableTable_ColumnFamily),
 	}
 
 	// Populate split keys if any
@@ -291,12 +297,12 @@ func (r *tableResource) Update(ctx context.Context, req resource.UpdateRequest, 
 	// Populate deletion protection if any
 	if !plan.DeletionProtection.IsNull() {
 		if plan.DeletionProtection.ValueBool() {
-			table.DeletionProtection = pb.Table_PROTECTED
+			table.DeletionProtection = pb.BigtableTable_PROTECTED
 		} else {
-			table.DeletionProtection = pb.Table_UNPROTECTED
+			table.DeletionProtection = pb.BigtableTable_UNPROTECTED
 		}
 	} else {
-		table.DeletionProtection = pb.Table_DELETION_PROTECTION_UNSPECIFIED
+		table.DeletionProtection = pb.BigtableTable_DELETION_PROTECTION_UNSPECIFIED
 	}
 
 	// Populate change stream retention if any
@@ -316,14 +322,14 @@ func (r *tableResource) Update(ctx context.Context, req resource.UpdateRequest, 
 	if plan.ColumnFamilies != nil && len(plan.ColumnFamilies) > 0 {
 		for _, columnFamily := range plan.ColumnFamilies {
 			// Populate column family
-			table.ColumnFamilies[columnFamily.Name.ValueString()] = &pb.Table_ColumnFamily{
+			table.ColumnFamilies[columnFamily.Name.ValueString()] = &pb.BigtableTable_ColumnFamily{
 				Name: columnFamily.Name.ValueString(),
 			}
 		}
 	}
 
 	// Update existing table
-	_, err := r.client.UpdateTable(ctx, &pb.UpdateTableRequest{
+	_, err := r.client.UpdateBigtableTable(ctx, &pb.UpdateBigtableTableRequest{
 		Table: table,
 		UpdateMask: &fieldmaskpb.FieldMask{
 			Paths: []string{"split_keys", "deletion_protection", "change_stream_retention", "column_families"},
@@ -365,7 +371,7 @@ func (r *tableResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 	tableName := state.Name.ValueString()
 
 	// Delete existing table
-	_, err := r.client.DeleteTable(ctx, &pb.DeleteTableRequest{
+	_, err := r.client.DeleteBigtableTable(ctx, &pb.DeleteBigtableTableRequest{
 		Name: fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instanceName, tableName),
 	})
 	if err != nil {
@@ -402,7 +408,7 @@ func (r *tableResource) Configure(_ context.Context, req resource.ConfigureReque
 		return
 	}
 
-	clients, ok := req.ProviderData.(provider.ProviderClients)
+	clients, ok := req.ProviderData.(utils.ProviderClients)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Data Source Configure Type",

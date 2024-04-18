@@ -15,6 +15,7 @@ import (
 	pb "go.protobuf.mentenova.exchange/mentenova/db/resources/bigtable/v1"
 	"terraform-provider-alis/internal/bigtable"
 	"terraform-provider-alis/internal/spanner"
+	"terraform-provider-alis/internal/utils"
 )
 
 // Ensure the implementation satisfies the expected interfaces.
@@ -42,12 +43,6 @@ type bigtableProvider struct {
 // bigtableProviderModel maps provider schema data to a Go type.
 type bigtableProviderModel struct {
 	Host types.String `tfsdk:"host"`
-}
-
-// ProviderClients is a container for all provider clients.
-type ProviderClients struct {
-	Bigtable pb.BigtableServiceClient
-	Spanner  pb.SpannerServiceClient
 }
 
 // Metadata returns the provider type name.
@@ -139,11 +134,11 @@ func (p *bigtableProvider) Configure(ctx context.Context, req provider.Configure
 
 	// Make the DB client available during DataSource and Resource
 	// type Configure methods.
-	resp.DataSourceData = ProviderClients{
+	resp.DataSourceData = utils.ProviderClients{
 		Bigtable: bigtableServiceClient,
 		Spanner:  spannerServiceClient,
 	}
-	resp.ResourceData = ProviderClients{
+	resp.ResourceData = utils.ProviderClients{
 		Bigtable: bigtableServiceClient,
 		Spanner:  spannerServiceClient,
 	}
@@ -162,5 +157,6 @@ func (p *bigtableProvider) Resources(_ context.Context) []func() resource.Resour
 		bigtable.NewTableResource,
 		bigtable.NewGarbageCollectionPolicyResource,
 		spanner.NewSpannerDatabaseResource,
+		spanner.NewSpannerTableResource,
 	}
 }

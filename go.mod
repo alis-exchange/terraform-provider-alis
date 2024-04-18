@@ -8,7 +8,7 @@ require (
 	github.com/hashicorp/terraform-plugin-framework-validators v0.12.0
 	github.com/hashicorp/terraform-plugin-log v0.9.0
 	go.alis.build/client v0.0.6
-	go.protobuf.mentenova.exchange v0.0.0-20240416121448-f0813927718d
+	go.protobuf.mentenova.exchange v0.0.0-20240418083827-6cf8ad5b1842
 	google.golang.org/protobuf v1.33.0
 )
 
@@ -83,6 +83,7 @@ require (
 	golang.org/x/text v0.14.0 // indirect
 	google.golang.org/api v0.167.0 // indirect
 	google.golang.org/appengine v1.6.8 // indirect
+	google.golang.org/genproto v0.0.0-20240205150955-31a09d347014 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240304161311-37d4d3c04a78 // indirect
 	google.golang.org/grpc v1.62.1 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect

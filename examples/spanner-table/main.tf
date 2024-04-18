@@ -11,7 +11,7 @@ provider "alis" {
   host = "localhost:8080"
 }
 
-resource "alis_spanner_database" "test" {
+resource "alis_spanner_table" "test" {
   project                  = "mentenova-db-prod-woi"
   instance_name            = "default"
   name                     = "mentenova-db-prod-woi-test"
@@ -21,5 +21,5 @@ resource "alis_spanner_database" "test" {
 }
 
 output "test_table" {
-  value = alis_spanner_database.test
+  value = alis_spanner_table.test
 }
