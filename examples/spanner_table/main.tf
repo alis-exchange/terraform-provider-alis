@@ -23,36 +23,43 @@ resource "alis_spanner_table" "test" {
         type           = "INT64",
         is_primary_key = true,
         unique         = true,
-        nullable       = false,
+        required       = true,
       },
       {
-        name     = "display_name",
-        type     = "STRING",
-        size     = 255,
-        nullable = true,
+        name = "display_name",
+        type = "STRING",
+        size = 255,
       },
       {
-        name     = "is_active",
-        type     = "BOOL",
-        nullable = true,
+        name = "is_active",
+        type = "BOOL",
       },
       {
         name          = "latest_return",
         type          = "FLOAT64",
-        nullable      = true,
         default_value = 0.0,
       },
       {
-        name     = "inception_date",
-        type     = "DATE",
-        nullable = true,
+        name = "inception_date",
+        type = "DATE",
       },
       {
-        name     = "last_refreshed_at",
-        type     = "TIMESTAMP",
-        nullable = true,
+        name = "last_refreshed_at",
+        type = "TIMESTAMP",
       }
     ],
+    indices = [
+      {
+        name    = "display_name_idx",
+        columns = ["display_name"],
+        unique  = true,
+      },
+      {
+        name    = "inception_date_idx",
+        columns = ["inception_date", "last_refreshed_at"],
+        unique  = false,
+      }
+    ]
   }
 }
 

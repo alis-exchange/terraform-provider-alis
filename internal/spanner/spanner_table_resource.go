@@ -14,6 +14,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	pb "go.protobuf.mentenova.exchange/mentenova/db/resources/bigtable/v1"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 	"terraform-provider-alis/internal/utils"
 )
 
@@ -47,27 +49,29 @@ type spannerTableSchema struct {
 }
 
 type spannerTableColumn struct {
-	Name         types.String `tfsdk:"name"`
-	IsPrimaryKey types.Bool   `tfsdk:"is_primary_key"`
-	Unique       types.Bool   `tfsdk:"unique"`
-	Type         types.String `tfsdk:"type"`
-	Size         types.Int64  `tfsdk:"size"`
-	Precision    types.Int64  `tfsdk:"precision"`
-	Scale        types.Int64  `tfsdk:"scale"`
-	Nullable     types.Bool   `tfsdk:"nullable"`
-	DefaultValue types.String `tfsdk:"default_value"`
+	Name          types.String `tfsdk:"name"`
+	IsPrimaryKey  types.Bool   `tfsdk:"is_primary_key"`
+	AutoIncrement types.Bool   `tfsdk:"auto_increment"`
+	Unique        types.Bool   `tfsdk:"unique"`
+	Type          types.String `tfsdk:"type"`
+	Size          types.Int64  `tfsdk:"size"`
+	Precision     types.Int64  `tfsdk:"precision"`
+	Scale         types.Int64  `tfsdk:"scale"`
+	Required      types.Bool   `tfsdk:"required"`
+	DefaultValue  types.String `tfsdk:"default_value"`
 }
 
 func (o spannerTableColumn) attrTypes() map[string]attr.Type {
 	return map[string]attr.Type{
 		"name":           types.StringType,
 		"is_primary_key": types.BoolType,
+		"auto_increment": types.BoolType,
 		"unique":         types.BoolType,
 		"type":           types.StringType,
 		"size":           types.Int64Type,
 		"precision":      types.Int64Type,
 		"scale":          types.Int64Type,
-		"nullable":       types.BoolType,
+		"required":       types.BoolType,
 		"default_value":  types.StringType,
 	}
 }
@@ -127,6 +131,9 @@ func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaReques
 								"is_primary_key": schema.BoolAttribute{
 									Optional: true,
 								},
+								"auto_increment": schema.BoolAttribute{
+									Optional: true,
+								},
 								"unique": schema.BoolAttribute{
 									Optional: true,
 								},
@@ -145,7 +152,7 @@ func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaReques
 								"scale": schema.Int64Attribute{
 									Optional: true,
 								},
-								"nullable": schema.BoolAttribute{
+								"required": schema.BoolAttribute{
 									Optional: true,
 								},
 								"default_value": schema.StringAttribute{
@@ -218,19 +225,129 @@ func (r *spannerTableResource) Create(ctx context.Context, req resource.CreateRe
 			Indices:    nil,
 			Interleave: nil,
 		}
+
 		if !plan.Schema.Columns.IsNull() {
-			columns := make([]*pb.SpannerTable_Schema_Column, 0, len(plan.Schema.Columns.Elements()))
+			columns := make([]spannerTableColumn, 0, len(plan.Schema.Columns.Elements()))
 			d := plan.Schema.Columns.ElementsAs(ctx, &columns, false)
+			if d.HasError() {
+				tflog.Error(ctx, fmt.Sprintf("Error reading columns: %v", d))
+				return
+			}
 			diags.Append(d...)
 
-			tableSchema.Columns = columns
+			for _, column := range columns {
+				col := &pb.SpannerTable_Schema_Column{}
+
+				// Populate column name
+				if !column.Name.IsNull() {
+					col.Name = column.Name.ValueString()
+				}
+
+				// Populate is primary key
+				if !column.IsPrimaryKey.IsNull() {
+					col.IsPrimaryKey = wrapperspb.Bool(column.IsPrimaryKey.ValueBool())
+				}
+
+				// Populate auto increment
+				if !column.AutoIncrement.IsNull() {
+					col.AutoIncrement = wrapperspb.Bool(column.AutoIncrement.ValueBool())
+				}
+
+				// Populate unique
+				if !column.Unique.IsNull() {
+					col.Unique = wrapperspb.Bool(column.Unique.ValueBool())
+				}
+
+				// Populate type
+				if !column.Type.IsNull() {
+					switch column.Type.ValueString() {
+					case utils.SpannerTableDataType_BOOL.String():
+						col.Type = pb.SpannerTable_Schema_Column_BOOL
+					case utils.SpannerTableDataType_INT64.String():
+						col.Type = pb.SpannerTable_Schema_Column_INT64
+					case utils.SpannerTableDataType_FLOAT64.String():
+						col.Type = pb.SpannerTable_Schema_Column_FLOAT64
+					case utils.SpannerTableDataType_STRING.String():
+						col.Type = pb.SpannerTable_Schema_Column_STRING
+					case utils.SpannerTableDataType_BYTES.String():
+						col.Type = pb.SpannerTable_Schema_Column_BYTES
+					case utils.SpannerTableDataType_DATE.String():
+						col.Type = pb.SpannerTable_Schema_Column_DATE
+					case utils.SpannerTableDataType_TIMESTAMP.String():
+						col.Type = pb.SpannerTable_Schema_Column_TIMESTAMP
+					case utils.SpannerTableDataType_NUMERIC.String():
+						col.Type = pb.SpannerTable_Schema_Column_NUMERIC
+					case utils.SpannerTableDataType_JSON.String():
+						col.Type = pb.SpannerTable_Schema_Column_JSON
+					}
+				}
+
+				// Populate size
+				if !column.Size.IsNull() {
+					col.Size = wrapperspb.Int64(column.Size.ValueInt64())
+				}
+
+				// Populate precision
+				if !column.Precision.IsNull() {
+					col.Precision = wrapperspb.Int64(column.Precision.ValueInt64())
+				}
+
+				// Populate scale
+				if !column.Scale.IsNull() {
+					col.Scale = wrapperspb.Int64(column.Scale.ValueInt64())
+				}
+
+				// Populate required
+				if !column.Required.IsNull() {
+					col.Required = wrapperspb.Bool(column.Required.ValueBool())
+				}
+
+				// Populate default value
+				if !column.DefaultValue.IsNull() {
+					col.DefaultValue = wrapperspb.String(column.DefaultValue.ValueString())
+				}
+
+				tableSchema.Columns = append(tableSchema.GetColumns(), col)
+			}
 		}
+
 		if !plan.Schema.Indices.IsNull() {
-			indices := make([]*pb.SpannerTable_Schema_Index, 0, len(plan.Schema.Indices.Elements()))
+			indices := make([]spannerTableIndex, 0, len(plan.Schema.Indices.Elements()))
 			d := plan.Schema.Indices.ElementsAs(ctx, &indices, false)
+			if d.HasError() {
+				tflog.Error(ctx, fmt.Sprintf("Error reading indices: %v", d))
+				return
+			}
 			diags.Append(d...)
 
-			tableSchema.Indices = indices
+			for _, index := range indices {
+				idx := &pb.SpannerTable_Schema_Index{}
+
+				// Populate index name
+				if !index.Name.IsNull() {
+					idx.Name = index.Name.ValueString()
+				}
+
+				// Populate unique
+				if !index.Unique.IsNull() {
+					idx.Unique = wrapperspb.Bool(index.Unique.ValueBool())
+				}
+
+				// Populate columns
+				if !index.Columns.IsNull() {
+					columns := make([]string, 0, len(index.Columns.Elements()))
+					d := index.Columns.ElementsAs(ctx, &columns, false)
+					if d.HasError() {
+						tflog.Error(ctx, fmt.Sprintf("Error reading index columns: %v", d))
+						return
+					}
+					diags.Append(d...)
+
+					idx.Columns = columns
+				}
+
+				tableSchema.Indices = append(tableSchema.GetIndices(), idx)
+			}
 		}
 
 		table.Schema = tableSchema
@@ -300,17 +417,27 @@ func (r *spannerTableResource) Read(ctx context.Context, req resource.ReadReques
 
 	// Populate schema
 	if table.GetSchema() != nil {
-		schema := &spannerTableSchema{}
+		s := &spannerTableSchema{}
 		if table.GetSchema().GetColumns() != nil {
 			columns := make([]*spannerTableColumn, 0)
 			for _, column := range table.GetSchema().GetColumns() {
 				col := &spannerTableColumn{
-					Name:         types.StringValue(column.GetName()),
-					IsPrimaryKey: types.BoolValue(column.GetIsPrimaryKey()),
-					Unique:       types.BoolValue(column.GetUnique()),
-					Type:         types.String{},
-					Nullable:     types.BoolValue(column.GetNullable()),
-					DefaultValue: types.StringValue(column.GetDefaultValue()),
+					Name: types.StringValue(column.GetName()),
+				}
+
+				// Get primary key
+				if column.GetIsPrimaryKey() != nil {
+					col.IsPrimaryKey = types.BoolValue(column.GetIsPrimaryKey().GetValue())
+				}
+
+				// Get auto increment
+				if column.GetAutoIncrement() != nil {
+					col.AutoIncrement = types.BoolValue(column.GetAutoIncrement().GetValue())
+				}
+
+				// Get unique
+				if column.GetUnique() != nil {
+					col.Unique = types.BoolValue(column.GetUnique().GetValue())
 				}
 
 				// Get type
@@ -350,6 +477,16 @@ func (r *spannerTableResource) Read(ctx context.Context, req resource.ReadReques
 					col.Scale = types.Int64Value(column.GetScale().GetValue())
 				}
 
+				// Get required
+				if column.GetRequired() != nil {
+					col.Required = types.BoolValue(column.GetRequired().GetValue())
+				}
+
+				// Get default value
+				if column.GetDefaultValue() != nil {
+					col.DefaultValue = types.StringValue(column.GetDefaultValue().GetValue())
+				}
+
 				columns = append(columns, col)
 			}
 
@@ -358,7 +495,7 @@ func (r *spannerTableResource) Read(ctx context.Context, req resource.ReadReques
 			}, columns)
 			diags.Append(d...)
 
-			schema.Columns = generatedList
+			s.Columns = generatedList
 		}
 		if table.GetSchema().GetIndices() != nil {
 			indices := make([]*spannerTableIndex, 0, len(table.GetSchema().GetIndices()))
@@ -391,10 +528,10 @@ func (r *spannerTableResource) Read(ctx context.Context, req resource.ReadReques
 			}, indices)
 			diags.Append(d...)
 
-			schema.Indices = generatedList
+			s.Indices = generatedList
 		}
 
-		state.Schema = schema
+		state.Schema = s
 	}
 
 	// Set refreshed state
@@ -416,6 +553,180 @@ func (r *spannerTableResource) Update(ctx context.Context, req resource.UpdateRe
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	// Get project and instance name
+	project := plan.Project.ValueString()
+	instanceName := plan.InstanceName.ValueString()
+	databaseId := plan.DatabaseName.ValueString()
+	tableId := plan.Name.ValueString()
+
+	// Generate table from plan
+	table := &pb.SpannerTable{
+		Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", project, instanceName, databaseId, tableId),
+		Schema: &pb.SpannerTable_Schema{
+			Columns:    nil,
+			Indices:    nil,
+			Interleave: nil,
+		},
+	}
+
+	// Populate schema if any
+	if plan.Schema != nil {
+		tableSchema := &pb.SpannerTable_Schema{
+			Columns:    nil,
+			Indices:    nil,
+			Interleave: nil,
+		}
+
+		if !plan.Schema.Columns.IsNull() {
+			columns := make([]spannerTableColumn, 0, len(plan.Schema.Columns.Elements()))
+			d := plan.Schema.Columns.ElementsAs(ctx, &columns, false)
+			if d.HasError() {
+				tflog.Error(ctx, fmt.Sprintf("Error reading columns: %v", d))
+				return
+			}
+			diags.Append(d...)
+
+			for _, column := range columns {
+				col := &pb.SpannerTable_Schema_Column{}
+
+				// Populate column name
+				if !column.Name.IsNull() {
+					col.Name = column.Name.ValueString()
+				}
+
+				// Populate is primary key
+				if !column.IsPrimaryKey.IsNull() {
+					col.IsPrimaryKey = wrapperspb.Bool(column.IsPrimaryKey.ValueBool())
+				}
+
+				// Populate auto increment
+				if !column.AutoIncrement.IsNull() {
+					col.AutoIncrement = wrapperspb.Bool(column.AutoIncrement.ValueBool())
+				}
+
+				// Populate unique
+				if !column.Unique.IsNull() {
+					col.Unique = wrapperspb.Bool(column.Unique.ValueBool())
+				}
+
+				// Populate type
+				if !column.Type.IsNull() {
+					switch column.Type.ValueString() {
+					case utils.SpannerTableDataType_BOOL.String():
+						col.Type = pb.SpannerTable_Schema_Column_BOOL
+					case utils.SpannerTableDataType_INT64.String():
+						col.Type = pb.SpannerTable_Schema_Column_INT64
+					case utils.SpannerTableDataType_FLOAT64.String():
+						col.Type = pb.SpannerTable_Schema_Column_FLOAT64
+					case utils.SpannerTableDataType_STRING.String():
+						col.Type = pb.SpannerTable_Schema_Column_STRING
+					case utils.SpannerTableDataType_BYTES.String():
+						col.Type = pb.SpannerTable_Schema_Column_BYTES
+					case utils.SpannerTableDataType_DATE.String():
+						col.Type = pb.SpannerTable_Schema_Column_DATE
+					case utils.SpannerTableDataType_TIMESTAMP.String():
+						col.Type = pb.SpannerTable_Schema_Column_TIMESTAMP
+					case utils.SpannerTableDataType_NUMERIC.String():
+						col.Type = pb.SpannerTable_Schema_Column_NUMERIC
+					case utils.SpannerTableDataType_JSON.String():
+						col.Type = pb.SpannerTable_Schema_Column_JSON
+					}
+				}
+
+				// Populate size
+				if !column.Size.IsNull() {
+					col.Size = wrapperspb.Int64(column.Size.ValueInt64())
+				}
+
+				// Populate precision
+				if !column.Precision.IsNull() {
+					col.Precision = wrapperspb.Int64(column.Precision.ValueInt64())
+				}
+
+				// Populate scale
+				if !column.Scale.IsNull() {
+					col.Scale = wrapperspb.Int64(column.Scale.ValueInt64())
+				}
+
+				// Populate required
+				if !column.Required.IsNull() {
+					col.Required = wrapperspb.Bool(column.Required.ValueBool())
+				}
+
+				// Populate default value
+				if !column.DefaultValue.IsNull() {
+					col.DefaultValue = wrapperspb.String(column.DefaultValue.ValueString())
+				}
+
+				tableSchema.Columns = append(tableSchema.GetColumns(), col)
+			}
+		}
+
+		if !plan.Schema.Indices.IsNull() {
+			indices := make([]spannerTableIndex, 0, len(plan.Schema.Indices.Elements()))
+			d := plan.Schema.Indices.ElementsAs(ctx, &indices, false)
+			if d.HasError() {
+				tflog.Error(ctx, fmt.Sprintf("Error reading indices: %v", d))
+				return
+			}
+			diags.Append(d...)
+
+			for _, index := range indices {
+				idx := &pb.SpannerTable_Schema_Index{}
+
+				// Populate index name
+				if !index.Name.IsNull() {
+					idx.Name = index.Name.ValueString()
+				}
+
+				// Populate unique
+				if !index.Unique.IsNull() {
+					idx.Unique = wrapperspb.Bool(index.Unique.ValueBool())
+				}
+
+				// Populate columns
+				if !index.Columns.IsNull() {
+					columns := make([]string, 0, len(index.Columns.Elements()))
+					d := index.Columns.ElementsAs(ctx, &columns, false)
+					if d.HasError() {
+						tflog.Error(ctx, fmt.Sprintf("Error reading index columns: %v", d))
+						return
+					}
+					diags.Append(d...)
+
+					idx.Columns = columns
+				}
+
+				tableSchema.Indices = append(tableSchema.GetIndices(), idx)
+			}
+		}
+
+		table.Schema = tableSchema
+	}
+
+	// Update table
+	_, err := r.client.UpdateSpannerTable(ctx, &pb.UpdateSpannerTableRequest{
+		Table: table,
+		UpdateMask: &fieldmaskpb.FieldMask{
+			Paths: []string{
+				"schema.columns",
+				"schema.indices",
+				"schema.interleave",
+			},
+		},
+		AllowMissing: true,
+	})
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Error Creating Table",
+			"Could not create Table ("+plan.Name.ValueString()+"): "+err.Error(),
+		)
+		return
+	}
+
+	// Map response body to schema and populate Computed attribute values
+	plan.Name = types.StringValue(tableId)
 
 	// Set state to fully populated data
 	diags = resp.State.Set(ctx, plan)

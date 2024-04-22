@@ -148,7 +148,10 @@ func (p *bigtableProvider) Configure(ctx context.Context, req provider.Configure
 
 // DataSources defines the data sources implemented in the provider.
 func (p *bigtableProvider) DataSources(_ context.Context) []func() datasource.DataSource {
-	return []func() datasource.DataSource{}
+	return []func() datasource.DataSource{
+		bigtable.NewIamPolicyDataSource,
+		spanner.NewIamPolicyDataSource,
+	}
 }
 
 // Resources defines the resources implemented in the provider.
@@ -156,7 +159,13 @@ func (p *bigtableProvider) Resources(_ context.Context) []func() resource.Resour
 	return []func() resource.Resource{
 		bigtable.NewTableResource,
 		bigtable.NewGarbageCollectionPolicyResource,
+		bigtable.NewIamPolicyResource,
+		bigtable.NewIamBindingResource,
+		bigtable.NewIamMemberResource,
 		spanner.NewSpannerDatabaseResource,
+		spanner.NewIamPolicyResource,
+		spanner.NewIamBindingResource,
+		spanner.NewIamMemberResource,
 		spanner.NewSpannerTableResource,
 	}
 }

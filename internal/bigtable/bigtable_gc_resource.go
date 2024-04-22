@@ -11,6 +11,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	pb "go.protobuf.mentenova.exchange/mentenova/db/resources/bigtable/v1"
@@ -69,6 +71,9 @@ func (r *garbageCollectionPolicyResource) Schema(_ context.Context, _ resource.S
 			},
 			"column_family": schema.StringAttribute{
 				Required: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"deletion_policy": schema.StringAttribute{
 				Optional: true,
@@ -117,7 +122,7 @@ func (r *garbageCollectionPolicyResource) Create(ctx context.Context, req resour
 			return
 		}
 
-		gcRule, err := getGCPolicyFromJSON(gcRuleMap, true)
+		gcRule, err := GetGCPolicyFromJSON(gcRuleMap, true)
 		if err != nil {
 			resp.Diagnostics.AddError(
 				"Invalid GC Rules",
@@ -151,6 +156,35 @@ func (r *garbageCollectionPolicyResource) Create(ctx context.Context, req resour
 
 	// Map response body to schema and populate Computed attribute values
 	plan.ColumFamily = types.StringValue(columnFamilyId)
+
+	//// Populate deletion policy
+	//switch createdPolicy.GetDeletionPolicy() {
+	//case pb.BigtableTable_ColumnFamily_GarbageCollectionPolicy_ABANDON:
+	//	plan.DeletionPolicy = types.StringValue("ABANDON")
+	//}
+	//
+	//// Populate rules
+	//if createdPolicy.GetGcRule() != nil {
+	//	gcRuleMap, err := GcPolicyToGCRuleMap(createdPolicy.GetGcRule(), true)
+	//	if err != nil {
+	//		resp.Diagnostics.AddError(
+	//			"Unable to Parse GC Policy to GC Rule String",
+	//			err.Error(),
+	//		)
+	//		return
+	//	}
+	//
+	//	gcRuleBytes, err := json.Marshal(gcRuleMap)
+	//	if err != nil {
+	//		resp.Diagnostics.AddError(
+	//			"Unable to Marshal GC Rule Map to JSON",
+	//			err.Error(),
+	//		)
+	//		return
+	//	}
+	//
+	//	plan.GcRules = types.StringValue(string(gcRuleBytes))
+	//}
 
 	// Set state to fully populated data
 	diags = resp.State.Set(ctx, plan)
@@ -265,7 +299,7 @@ func (r *garbageCollectionPolicyResource) Update(ctx context.Context, req resour
 			return
 		}
 
-		gcRule, err := getGCPolicyFromJSON(gcRuleMap, true)
+		gcRule, err := GetGCPolicyFromJSON(gcRuleMap, true)
 		if err != nil {
 			resp.Diagnostics.AddError(
 				"Invalid GC Rules",
@@ -297,6 +331,35 @@ func (r *garbageCollectionPolicyResource) Update(ctx context.Context, req resour
 
 	// Map response body to schema and populate Computed attribute values
 	plan.ColumFamily = types.StringValue(columnFamilyId)
+
+	//// Populate deletion policy
+	//switch updatedPolicy.GetDeletionPolicy() {
+	//case pb.BigtableTable_ColumnFamily_GarbageCollectionPolicy_ABANDON:
+	//	plan.DeletionPolicy = types.StringValue("ABANDON")
+	//}
+	//
+	//// Populate rules
+	//if updatedPolicy.GetGcRule() != nil {
+	//	gcRuleMap, err := GcPolicyToGCRuleMap(updatedPolicy.GetGcRule(), true)
+	//	if err != nil {
+	//		resp.Diagnostics.AddError(
+	//			"Unable to Parse GC Policy to GC Rule String",
+	//			err.Error(),
+	//		)
+	//		return
+	//	}
+	//
+	//	gcRuleBytes, err := json.Marshal(gcRuleMap)
+	//	if err != nil {
+	//		resp.Diagnostics.AddError(
+	//			"Unable to Marshal GC Rule Map to JSON",
+	//			err.Error(),
+	//		)
+	//		return
+	//	}
+	//
+	//	plan.GcRules = types.StringValue(string(gcRuleBytes))
+	//}
 
 	// Set state to fully populated data
 	diags = resp.State.Set(ctx, plan)
@@ -445,7 +508,7 @@ func GcPolicyToGCRuleMap(gcRule *pb.BigtableTable_ColumnFamily_GarbageCollection
 	return result, nil
 }
 
-func getGCPolicyFromJSON(inputPolicy map[string]interface{}, isTopLevel bool) (*pb.BigtableTable_ColumnFamily_GarbageCollectionPolicy_GcRule, error) {
+func GetGCPolicyFromJSON(inputPolicy map[string]interface{}, isTopLevel bool) (*pb.BigtableTable_ColumnFamily_GarbageCollectionPolicy_GcRule, error) {
 	policy := make([]*pb.BigtableTable_ColumnFamily_GarbageCollectionPolicy_GcRule, 0)
 
 	if err := validateNestedPolicy(inputPolicy, isTopLevel); err != nil {
@@ -483,7 +546,7 @@ func getGCPolicyFromJSON(inputPolicy map[string]interface{}, isTopLevel bool) (*
 		}
 
 		if childPolicy["mode"] != nil {
-			n, err := getGCPolicyFromJSON(childPolicy /*isTopLevel=*/, false)
+			n, err := GetGCPolicyFromJSON(childPolicy /*isTopLevel=*/, false)
 			if err != nil {
 				return nil, err
 			}

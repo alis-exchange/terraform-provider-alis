@@ -209,9 +209,9 @@ func (r *spannerDatabaseResource) Create(ctx context.Context, req resource.Creat
 	if !plan.Dialect.IsNull() {
 		switch plan.Dialect.ValueString() {
 		case DatabaseDialect_GoogleStandardSQL:
-			database.Dialect = pb.SpannerDatabase_GOOGLE_STANDARD_SQL
+			database.Dialect = pb.SpannerDatabaseDialect_GOOGLE_STANDARD_SQL
 		case DatabaseDialect_PostgreSQL:
-			database.Dialect = pb.SpannerDatabase_POSTGRESQL
+			database.Dialect = pb.SpannerDatabaseDialect_POSTGRESQL
 		}
 	}
 
@@ -352,9 +352,9 @@ func (r *spannerDatabaseResource) Read(ctx context.Context, req resource.ReadReq
 
 	// Populate dialect
 	switch database.GetDialect() {
-	case pb.SpannerDatabase_GOOGLE_STANDARD_SQL:
+	case pb.SpannerDatabaseDialect_GOOGLE_STANDARD_SQL:
 		state.Dialect = types.StringValue(DatabaseDialect_GoogleStandardSQL)
-	case pb.SpannerDatabase_POSTGRESQL:
+	case pb.SpannerDatabaseDialect_POSTGRESQL:
 		state.Dialect = types.StringValue(DatabaseDialect_PostgreSQL)
 	}
 
@@ -458,9 +458,10 @@ func (r *spannerDatabaseResource) Update(ctx context.Context, req resource.Updat
 	if !plan.Dialect.IsNull() {
 		switch plan.Dialect.ValueString() {
 		case DatabaseDialect_GoogleStandardSQL:
-			database.Dialect = pb.SpannerDatabase_GOOGLE_STANDARD_SQL
+			database.Dialect = pb.SpannerDatabaseDialect_GOOGLE_STANDARD_SQL
+
 		case DatabaseDialect_PostgreSQL:
-			database.Dialect = pb.SpannerDatabase_POSTGRESQL
+			database.Dialect = pb.SpannerDatabaseDialect_POSTGRESQL
 		}
 	}
 
