@@ -224,7 +224,7 @@ func TestDeleteBigtableTable(t *testing.T) {
 			name: "Test_DeleteBigtableTable",
 			args: args{
 				ctx:  context.Background(),
-				name: fmt.Sprintf("projects/%s/instances/%s/tables/%s", TestProject, TestInstance, "mentenova-db-prod-woi-test"),
+				name: fmt.Sprintf("projects/%s/instances/%s/tables/%s", TestProject, TestInstance, "tf-test"),
 			},
 			want:    &emptypb.Empty{},
 			wantErr: false,

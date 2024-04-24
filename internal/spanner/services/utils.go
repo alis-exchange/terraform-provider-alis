@@ -9,7 +9,6 @@ import (
 	"time"
 
 	dynamicstruct "github.com/ompluscator/dynamic-struct"
-	pb "go.protobuf.mentenova.exchange/mentenova/db/resources/bigtable/v1"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/migrator"
@@ -33,9 +32,6 @@ const (
 
 func (t SpannerTableDataType) String() string {
 	return [...]string{"BOOL", "INT64", "FLOAT64", "STRING", "BYTES", "DATE", "TIMESTAMP", "NUMERIC", "JSON"}[t-1]
-}
-func (t SpannerTableDataType) Proto() pb.SpannerTable_Schema_Column_SchemaType {
-	return pb.SpannerTable_Schema_Column_SchemaType(t)
 }
 
 // SpannerTableDataTypes is a list of all Spanner table column data types.

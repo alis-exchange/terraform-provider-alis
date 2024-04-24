@@ -11,7 +11,6 @@ import (
 	"cloud.google.com/go/spanner/admin/database/apiv1/databasepb"
 	spannergorm "github.com/googleapis/go-gorm-spanner"
 	_ "github.com/googleapis/go-sql-spanner"
-	pb "go.protobuf.mentenova.exchange/mentenova/db/resources/bigtable/v1"
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -644,7 +643,7 @@ func UpdateSpannerBackup(ctx context.Context, backup *databasepb.Backup, updateM
 	if updateMask != nil && len(updateMask.GetPaths()) > 0 {
 		// Normalize the update mask
 		updateMask.Normalize()
-		if valid := updateMask.IsValid(&pb.SpannerBackup{}); !valid {
+		if valid := updateMask.IsValid(&databasepb.Backup{}); !valid {
 			return nil, status.Error(codes.InvalidArgument, "invalid update mask")
 		}
 	}
