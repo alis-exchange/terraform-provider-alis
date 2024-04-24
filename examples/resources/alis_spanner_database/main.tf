@@ -13,7 +13,7 @@ provider "google" {
 
 resource "alis_spanner_database" "test" {
   project                  = var.ALIS_OS_PROJECT
-  instance            = var.ALIS_OS_SPANNER_INSTANCE
+  instance                 = var.ALIS_OS_SPANNER_INSTANCE
   name                     = "tf-test"
   dialect                  = "GOOGLE_STANDARD_SQL"
   enable_drop_protection   = false

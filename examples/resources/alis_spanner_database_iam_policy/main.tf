@@ -14,7 +14,7 @@ provider "google" {
 resource "alis_spanner_database_iam_policy" "policy" {
   project  = var.ALIS_OS_PROJECT
   instance = var.ALIS_OS_SPANNER_INSTANCE
-  database    = "tf-test"
+  database = "tf-test"
   bindings = [
     {
       role = "roles/bigtable.user",

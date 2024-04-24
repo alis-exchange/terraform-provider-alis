@@ -14,7 +14,7 @@ provider "google" {
 resource "alis_spanner_database_iam_binding" "editor" {
   project  = var.ALIS_OS_PROJECT
   instance = var.ALIS_OS_SPANNER_INSTANCE
-  database    = "tf-test"
+  database = "tf-test"
   role     = "roles/bigtable.user"
   members = [
     "user:jane@example.com",

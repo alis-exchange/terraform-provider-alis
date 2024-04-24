@@ -12,9 +12,9 @@ provider "alis" {
 }
 
 resource "alis_bigtable_table" "test" {
-  project         = var.ALIS_OS_PROJECT
-  instance        = var.ALIS_OS_BIGTABLE_INSTANCE
-  name            = "tf-test"
+  project  = var.ALIS_OS_PROJECT
+  instance = var.ALIS_OS_BIGTABLE_INSTANCE
+  name     = "tf-test"
   column_families = [
     {
       name = "0"
