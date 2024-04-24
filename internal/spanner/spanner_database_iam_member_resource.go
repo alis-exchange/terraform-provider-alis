@@ -12,10 +12,10 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	pb "go.protobuf.mentenova.exchange/mentenova/db/resources/bigtable/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	"terraform-provider-alis/internal/spanner/services"
 	"terraform-provider-alis/internal/utils"
 )
 
@@ -32,7 +32,6 @@ func NewIamMemberResource() resource.Resource {
 }
 
 type databaseIamMemberResource struct {
-	client pb.SpannerServiceClient
 }
 
 type databaseIamMemberModel struct {
@@ -97,12 +96,12 @@ func (r *databaseIamMemberResource) Create(ctx context.Context, req resource.Cre
 	role := plan.Role.ValueString()
 	member := plan.Member.ValueString()
 
-	policy, err := r.client.GetSpannerDatabaseIamPolicy(ctx, &pb.GetSpannerDatabaseIamPolicyRequest{
-		Parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
-		Options: &pb.GetSpannerDatabaseIamPolicyRequest_GetPolicyOptions{
+	policy, err := services.GetSpannerDatabaseIamPolicy(ctx,
+		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
+		&iampb.GetPolicyOptions{
 			RequestedPolicyVersion: utils.IamPolicyVersion,
 		},
-	})
+	)
 	if err != nil {
 		if status.Code(err) != codes.NotFound {
 			resp.Diagnostics.AddError(
@@ -164,11 +163,11 @@ func (r *databaseIamMemberResource) Create(ctx context.Context, req resource.Cre
 		newPolicy.Bindings = append(newPolicy.Bindings, binding)
 	}
 
-	_, err = r.client.SetSpannerDatabaseIamPolicy(ctx, &pb.SetSpannerDatabaseIamPolicyRequest{
-		Parent:     fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
-		Policy:     newPolicy,
-		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"bindings"}},
-	})
+	_, err = services.SetSpannerDatabaseIamPolicy(ctx,
+		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
+		newPolicy,
+		&fieldmaskpb.FieldMask{Paths: []string{"bindings"}},
+	)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Setting IAM Policy",
@@ -202,12 +201,12 @@ func (r *databaseIamMemberResource) Read(ctx context.Context, req resource.ReadR
 	role := state.Role.ValueString()
 	member := state.Member.ValueString()
 
-	policy, err := r.client.GetSpannerDatabaseIamPolicy(ctx, &pb.GetSpannerDatabaseIamPolicyRequest{
-		Parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
-		Options: &pb.GetSpannerDatabaseIamPolicyRequest_GetPolicyOptions{
+	policy, err := services.GetSpannerDatabaseIamPolicy(ctx,
+		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
+		&iampb.GetPolicyOptions{
 			RequestedPolicyVersion: utils.IamPolicyVersion,
 		},
-	})
+	)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Reading IAM Policy",
@@ -262,12 +261,12 @@ func (r *databaseIamMemberResource) Update(ctx context.Context, req resource.Upd
 	role := plan.Role.ValueString()
 	member := plan.Member.ValueString()
 
-	policy, err := r.client.GetSpannerDatabaseIamPolicy(ctx, &pb.GetSpannerDatabaseIamPolicyRequest{
-		Parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
-		Options: &pb.GetSpannerDatabaseIamPolicyRequest_GetPolicyOptions{
+	policy, err := services.GetSpannerDatabaseIamPolicy(ctx,
+		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
+		&iampb.GetPolicyOptions{
 			RequestedPolicyVersion: utils.IamPolicyVersion,
 		},
-	})
+	)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Reading IAM Policy",
@@ -318,11 +317,11 @@ func (r *databaseIamMemberResource) Update(ctx context.Context, req resource.Upd
 		newPolicy.Bindings = append(newPolicy.Bindings, binding)
 	}
 
-	_, err = r.client.SetSpannerDatabaseIamPolicy(ctx, &pb.SetSpannerDatabaseIamPolicyRequest{
-		Parent:     fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
-		Policy:     newPolicy,
-		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"bindings"}},
-	})
+	_, err = services.SetSpannerDatabaseIamPolicy(ctx,
+		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
+		newPolicy,
+		&fieldmaskpb.FieldMask{Paths: []string{"bindings"}},
+	)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Setting IAM Policy",
@@ -356,12 +355,12 @@ func (r *databaseIamMemberResource) Delete(ctx context.Context, req resource.Del
 	role := state.Role.ValueString()
 	member := state.Member.ValueString()
 
-	policy, err := r.client.GetSpannerDatabaseIamPolicy(ctx, &pb.GetSpannerDatabaseIamPolicyRequest{
-		Parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
-		Options: &pb.GetSpannerDatabaseIamPolicyRequest_GetPolicyOptions{
+	policy, err := services.GetSpannerDatabaseIamPolicy(ctx,
+		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
+		&iampb.GetPolicyOptions{
 			RequestedPolicyVersion: utils.IamPolicyVersion,
 		},
-	})
+	)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Reading IAM Policy",
@@ -412,11 +411,11 @@ func (r *databaseIamMemberResource) Delete(ctx context.Context, req resource.Del
 		newPolicy.Bindings = append(newPolicy.Bindings, binding)
 	}
 
-	_, err = r.client.SetSpannerDatabaseIamPolicy(ctx, &pb.SetSpannerDatabaseIamPolicyRequest{
-		Parent:     fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
-		Policy:     newPolicy,
-		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"bindings"}},
-	})
+	_, err = services.SetSpannerDatabaseIamPolicy(ctx,
+		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
+		newPolicy,
+		&fieldmaskpb.FieldMask{Paths: []string{"bindings"}},
+	)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Setting IAM Policy",
@@ -454,18 +453,6 @@ func (r *databaseIamMemberResource) Configure(_ context.Context, req resource.Co
 	if req.ProviderData == nil {
 		return
 	}
-
-	clients, ok := req.ProviderData.(utils.ProviderClients)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected ProviderClients, got: %T. Please report this issue to the provider developers.", req.ProviderData),
-		)
-
-		return
-	}
-
-	r.client = clients.Spanner
 }
 
 func (r *databaseIamMemberResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {

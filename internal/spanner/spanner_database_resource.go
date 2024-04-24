@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"cloud.google.com/go/spanner/admin/database/apiv1/databasepb"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -18,20 +19,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
-	pb "go.protobuf.mentenova.exchange/mentenova/db/resources/bigtable/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
-	"terraform-provider-alis/internal/utils"
+	"terraform-provider-alis/internal/spanner/services"
 	"terraform-provider-alis/internal/validators"
-)
-
-const (
-	DatabaseDialect_GoogleStandardSQL = "GOOGLE_STANDARD_SQL"
-	DatabaseDialect_PostgreSQL        = "POSTGRESQL"
-
-	DatabaseState_Creating        = "CREATING"
-	DatabaseState_Ready           = "READY"
-	DatabaseState_ReadyOptimizing = "READY_OPTIMIZING"
 )
 
 // Ensure the implementation satisfies the expected interfaces.
@@ -47,13 +37,12 @@ func NewSpannerDatabaseResource() resource.Resource {
 }
 
 type spannerDatabaseResource struct {
-	client pb.SpannerServiceClient
 }
 
 type spannerDatabaseModel struct {
 	Name                   types.String                     `tfsdk:"name"`
 	Project                types.String                     `tfsdk:"project"`
-	InstanceName           types.String                     `tfsdk:"instance_name"`
+	Instance               types.String                     `tfsdk:"instance"`
 	Dialect                types.String                     `tfsdk:"dialect"`
 	EnableDropProtection   types.Bool                       `tfsdk:"enable_drop_protection"`
 	EncryptionConfig       *spannerDatabaseEncryptionConfig `tfsdk:"encryption_config"`
@@ -73,11 +62,14 @@ type spannerDatabaseEncryptionConfig struct {
 }
 
 type spannerDatabaseEncryptionInfo struct {
+	// TODO: Add status
+	Type          types.String `tfsdk:"type"`
 	KmsKeyVersion types.String `tfsdk:"kms_key_version"`
 }
 
 func (o spannerDatabaseEncryptionInfo) attrTypes() map[string]attr.Type {
 	return map[string]attr.Type{
+		"type":            types.StringType,
 		"kms_key_version": types.StringType,
 	}
 }
@@ -97,13 +89,13 @@ func (r *spannerDatabaseResource) Schema(_ context.Context, _ resource.SchemaReq
 			"project": schema.StringAttribute{
 				Required: true,
 			},
-			"instance_name": schema.StringAttribute{
+			"instance": schema.StringAttribute{
 				Required: true,
 			},
 			"dialect": schema.StringAttribute{
 				Optional: true,
 				Validators: []validator.String{
-					stringvalidator.OneOf(DatabaseDialect_GoogleStandardSQL, DatabaseDialect_PostgreSQL),
+					stringvalidator.OneOf(services.DatabaseDialect_GoogleStandardSQL, services.DatabaseDialect_PostgreSQL),
 				},
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
@@ -191,11 +183,11 @@ func (r *spannerDatabaseResource) Create(ctx context.Context, req resource.Creat
 	}
 
 	// Generate database from plan
-	database := &pb.SpannerDatabase{}
+	database := &databasepb.Database{}
 
 	// Get project and instance name
 	project := plan.Project.ValueString()
-	instanceName := plan.InstanceName.ValueString()
+	instanceName := plan.Instance.ValueString()
 	databaseId := plan.Name.ValueString()
 
 	// Populate deletion protection if any
@@ -208,39 +200,31 @@ func (r *spannerDatabaseResource) Create(ctx context.Context, req resource.Creat
 	// Populate dialect if any
 	if !plan.Dialect.IsNull() {
 		switch plan.Dialect.ValueString() {
-		case DatabaseDialect_GoogleStandardSQL:
-			database.Dialect = pb.SpannerDatabaseDialect_GOOGLE_STANDARD_SQL
-		case DatabaseDialect_PostgreSQL:
-			database.Dialect = pb.SpannerDatabaseDialect_POSTGRESQL
+		case services.DatabaseDialect_GoogleStandardSQL:
+			database.DatabaseDialect = databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL
+		case services.DatabaseDialect_PostgreSQL:
+			database.DatabaseDialect = databasepb.DatabaseDialect_POSTGRESQL
 		}
 	}
 
 	// Populate version retention period if any
 	if !plan.VersionRetentionPeriod.IsNull() {
-		duration, err := time.ParseDuration(plan.VersionRetentionPeriod.ValueString())
-		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error Parsing Version Retention Period",
-				"Could not parse Version Retention Period: "+err.Error(),
-			)
-			return
-		}
-		database.VersionRetentionPeriod = durationpb.New(duration)
+		database.VersionRetentionPeriod = plan.VersionRetentionPeriod.ValueString()
 	}
 
 	// Populate encryption config if any
 	if plan.EncryptionConfig != nil && !plan.EncryptionConfig.KmsKeyName.IsNull() {
-		database.EncryptionConfig = &pb.SpannerDatabase_EncryptionConfig{
+		database.EncryptionConfig = &databasepb.EncryptionConfig{
 			KmsKeyName: plan.EncryptionConfig.KmsKeyName.ValueString(),
 		}
 	}
 
 	// Create table
-	_, err := r.client.CreateSpannerDatabase(ctx, &pb.CreateSpannerDatabaseRequest{
-		Parent:     fmt.Sprintf("projects/%s/instances/%s", project, instanceName),
-		DatabaseId: databaseId,
-		Database:   database,
-	})
+	_, err := services.CreateSpannerDatabase(ctx,
+		fmt.Sprintf("projects/%s/instances/%s", project, instanceName),
+		databaseId,
+		database,
+	)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Creating Database",
@@ -251,29 +235,33 @@ func (r *spannerDatabaseResource) Create(ctx context.Context, req resource.Creat
 
 	// Map response body to schema and populate Computed attribute values
 	plan.Name = types.StringValue(databaseId)
+
 	// Populate state
 	switch database.GetState() {
-	case pb.SpannerDatabase_CREATING:
-		plan.State = types.StringValue(DatabaseState_Creating)
-	case pb.SpannerDatabase_READY:
-		plan.State = types.StringValue(DatabaseState_Ready)
-	case pb.SpannerDatabase_READY_OPTIMIZING:
-		plan.State = types.StringValue(DatabaseState_ReadyOptimizing)
+	case databasepb.Database_CREATING:
+		plan.State = types.StringValue(services.DatabaseState_Creating)
+	case databasepb.Database_READY:
+		plan.State = types.StringValue(services.DatabaseState_Ready)
+	case databasepb.Database_READY_OPTIMIZING:
+		plan.State = types.StringValue(services.DatabaseState_ReadyOptimizing)
 	default:
-		plan.State = types.StringValue("")
+		plan.State = types.StringNull()
 	}
+
 	// Populate create time
 	if database.GetCreateTime() != nil {
 		plan.CreateTime = types.StringValue(database.GetCreateTime().AsTime().Format(time.RFC3339))
 	} else {
 		plan.CreateTime = types.StringValue("")
 	}
+
 	// Populate earliest version time
 	if database.GetEarliestVersionTime() != nil {
 		plan.EarliestVersionTime = types.StringValue(database.GetEarliestVersionTime().AsTime().Format(time.RFC3339))
 	} else {
 		plan.EarliestVersionTime = types.StringValue("")
 	}
+
 	// Populate encryption info
 	var encryptionInfoList []spannerDatabaseEncryptionInfo
 	if database.GetEncryptionInfo() != nil && len(database.GetEncryptionInfo()) > 0 {
@@ -282,13 +270,6 @@ func (r *spannerDatabaseResource) Create(ctx context.Context, req resource.Creat
 				KmsKeyVersion: types.StringValue(encryptionInfo.GetKmsKeyVersion()),
 			})
 		}
-
-		generatedList, d := types.ListValueFrom(ctx, types.ObjectType{
-			AttrTypes: spannerDatabaseEncryptionInfo{}.attrTypes(),
-		}, encryptionInfoList)
-		diags.Append(d...)
-
-		plan.EncryptionInfo = generatedList
 	} else {
 		encryptionInfoList = []spannerDatabaseEncryptionInfo{}
 	}
@@ -297,12 +278,14 @@ func (r *spannerDatabaseResource) Create(ctx context.Context, req resource.Creat
 	}, []spannerDatabaseEncryptionInfo{})
 	diags.Append(d...)
 	plan.EncryptionInfo = generatedList
+
 	// Populate default leader
 	if database.GetDefaultLeader() != "" {
 		plan.DefaultLeader = types.StringValue(database.GetDefaultLeader())
 	} else {
 		plan.DefaultLeader = types.StringValue("")
 	}
+
 	// Populate reconciling
 	plan.Reconciling = types.BoolValue(database.GetReconciling())
 
@@ -332,13 +315,13 @@ func (r *spannerDatabaseResource) Read(ctx context.Context, req resource.ReadReq
 
 	// Get project and instance name
 	project := state.Project.ValueString()
-	instanceName := state.InstanceName.ValueString()
+	instanceName := state.Instance.ValueString()
 	databaseId := state.Name.ValueString()
 
 	// Get database from API
-	database, err := r.client.GetSpannerDatabase(ctx, &pb.GetSpannerDatabaseRequest{
-		Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instanceName, databaseId),
-	})
+	database, err := services.GetSpannerDatabase(ctx,
+		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instanceName, databaseId),
+	)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Reading Database",
@@ -351,11 +334,11 @@ func (r *spannerDatabaseResource) Read(ctx context.Context, req resource.ReadReq
 	state.Name = types.StringValue(databaseId)
 
 	// Populate dialect
-	switch database.GetDialect() {
-	case pb.SpannerDatabaseDialect_GOOGLE_STANDARD_SQL:
-		state.Dialect = types.StringValue(DatabaseDialect_GoogleStandardSQL)
-	case pb.SpannerDatabaseDialect_POSTGRESQL:
-		state.Dialect = types.StringValue(DatabaseDialect_PostgreSQL)
+	switch database.GetDatabaseDialect() {
+	case databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL:
+		state.Dialect = types.StringValue(services.DatabaseDialect_GoogleStandardSQL)
+	case databasepb.DatabaseDialect_POSTGRESQL:
+		state.Dialect = types.StringValue(services.DatabaseDialect_PostgreSQL)
 	}
 
 	// Populate drop protection
@@ -369,18 +352,18 @@ func (r *spannerDatabaseResource) Read(ctx context.Context, req resource.ReadReq
 	}
 
 	// Populate version retention period
-	if database.GetVersionRetentionPeriod() != nil {
-		state.VersionRetentionPeriod = types.StringValue(fmt.Sprintf("%vs", database.GetVersionRetentionPeriod().AsDuration().Seconds()))
+	if database.GetVersionRetentionPeriod() != "" {
+		state.VersionRetentionPeriod = types.StringValue(database.GetVersionRetentionPeriod())
 	}
 
 	// Populate state
 	switch database.GetState() {
-	case pb.SpannerDatabase_CREATING:
-		state.State = types.StringValue(DatabaseState_Creating)
-	case pb.SpannerDatabase_READY:
-		state.State = types.StringValue(DatabaseState_Ready)
-	case pb.SpannerDatabase_READY_OPTIMIZING:
-		state.State = types.StringValue(DatabaseState_ReadyOptimizing)
+	case databasepb.Database_CREATING:
+		state.State = types.StringValue(services.DatabaseState_Creating)
+	case databasepb.Database_READY:
+		state.State = types.StringValue(services.DatabaseState_Ready)
+	case databasepb.Database_READY_OPTIMIZING:
+		state.State = types.StringValue(services.DatabaseState_ReadyOptimizing)
 	}
 
 	// Populate create time
@@ -441,11 +424,11 @@ func (r *spannerDatabaseResource) Update(ctx context.Context, req resource.Updat
 
 	// Get project and instance name
 	project := plan.Project.ValueString()
-	instanceName := plan.InstanceName.ValueString()
+	instanceName := plan.Instance.ValueString()
 	databaseId := plan.Name.ValueString()
 
 	// Generate database from plan
-	database := &pb.SpannerDatabase{
+	database := &databasepb.Database{
 		Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instanceName, databaseId),
 	}
 
@@ -457,42 +440,33 @@ func (r *spannerDatabaseResource) Update(ctx context.Context, req resource.Updat
 	// Populate dialect if any
 	if !plan.Dialect.IsNull() {
 		switch plan.Dialect.ValueString() {
-		case DatabaseDialect_GoogleStandardSQL:
-			database.Dialect = pb.SpannerDatabaseDialect_GOOGLE_STANDARD_SQL
-
-		case DatabaseDialect_PostgreSQL:
-			database.Dialect = pb.SpannerDatabaseDialect_POSTGRESQL
+		case services.DatabaseDialect_GoogleStandardSQL:
+			database.DatabaseDialect = databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL
+		case services.DatabaseDialect_PostgreSQL:
+			database.DatabaseDialect = databasepb.DatabaseDialect_POSTGRESQL
 		}
 	}
 
 	// Populate version retention period if any
 	if !plan.VersionRetentionPeriod.IsNull() {
-		duration, err := time.ParseDuration(plan.VersionRetentionPeriod.ValueString())
-		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error Parsing Version Retention Period",
-				"Could not parse Version Retention Period: "+err.Error(),
-			)
-			return
-		}
-		database.VersionRetentionPeriod = durationpb.New(duration)
+		database.VersionRetentionPeriod = plan.VersionRetentionPeriod.ValueString()
 	}
 
 	// Populate encryption config if any
 	if plan.EncryptionConfig != nil && !plan.EncryptionConfig.KmsKeyName.IsNull() {
-		database.EncryptionConfig = &pb.SpannerDatabase_EncryptionConfig{
+		database.EncryptionConfig = &databasepb.EncryptionConfig{
 			KmsKeyName: plan.EncryptionConfig.KmsKeyName.ValueString(),
 		}
 	}
 
 	// Update existing table
-	_, err := r.client.UpdateSpannerDatabase(ctx, &pb.UpdateSpannerDatabaseRequest{
-		Database: database,
-		UpdateMask: &fieldmaskpb.FieldMask{
+	_, err := services.UpdateSpannerDatabase(ctx,
+		database,
+		&fieldmaskpb.FieldMask{
 			Paths: []string{"enable_drop_protection", "dialect", "version_retention_period", "encryption_config"},
 		},
-		AllowMissing: true,
-	})
+		true,
+	)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Updating Database",
@@ -505,14 +479,14 @@ func (r *spannerDatabaseResource) Update(ctx context.Context, req resource.Updat
 	plan.Name = types.StringValue(databaseId)
 	// Populate state
 	switch database.GetState() {
-	case pb.SpannerDatabase_CREATING:
-		plan.State = types.StringValue(DatabaseState_Creating)
-	case pb.SpannerDatabase_READY:
-		plan.State = types.StringValue(DatabaseState_Ready)
-	case pb.SpannerDatabase_READY_OPTIMIZING:
-		plan.State = types.StringValue(DatabaseState_ReadyOptimizing)
+	case databasepb.Database_CREATING:
+		plan.State = types.StringValue(services.DatabaseState_Creating)
+	case databasepb.Database_READY:
+		plan.State = types.StringValue(services.DatabaseState_Ready)
+	case databasepb.Database_READY_OPTIMIZING:
+		plan.State = types.StringValue(services.DatabaseState_ReadyOptimizing)
 	default:
-		plan.State = types.StringValue("")
+		plan.State = types.StringNull()
 	}
 	// Populate create time
 	if database.GetCreateTime() != nil {
@@ -577,13 +551,13 @@ func (r *spannerDatabaseResource) Delete(ctx context.Context, req resource.Delet
 
 	// Get project and instance name
 	project := state.Project.ValueString()
-	instanceName := state.InstanceName.ValueString()
+	instanceName := state.Instance.ValueString()
 	databaseId := state.Name.ValueString()
 
 	// Delete existing database
-	_, err := r.client.DeleteSpannerDatabase(ctx, &pb.DeleteSpannerDatabaseRequest{
-		Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instanceName, databaseId),
-	})
+	_, err := services.DeleteSpannerDatabase(ctx,
+		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instanceName, databaseId),
+	)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Deleting Database",
@@ -608,7 +582,7 @@ func (r *spannerDatabaseResource) ImportState(ctx context.Context, req resource.
 	databaseName := importIDParts[5]
 
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("project"), project)...)
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("instance_name"), instanceName)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("instance"), instanceName)...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("name"), databaseName)...)
 }
 
@@ -617,18 +591,6 @@ func (r *spannerDatabaseResource) Configure(_ context.Context, req resource.Conf
 	if req.ProviderData == nil {
 		return
 	}
-
-	clients, ok := req.ProviderData.(utils.ProviderClients)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected ProviderClients, got: %T. Please report this issue to the provider developers.", req.ProviderData),
-		)
-
-		return
-	}
-
-	r.client = clients.Spanner
 }
 
 func (r *spannerDatabaseResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {

@@ -1,0 +1,2 @@
+variable "ALIS_OS_PROJECT" {}
+variable "ALIS_OS_BIGTABLE_INSTANCE" {}

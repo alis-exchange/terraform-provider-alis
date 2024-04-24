@@ -1,20 +1,20 @@
 terraform {
   required_providers {
-    bigtable = {
+    google = {
       source = "alis.exchange/db/alis"
     }
   }
   required_version = ">= 1.1.0"
 }
 
-provider "alis" {
+provider "google" {
   host = "localhost:8080"
 }
 
 resource "alis_bigtable_gc_policy" "test" {
-  project         = "mentenova-db-prod-woi"
-  instance_name   = "default"
-  table           = "mentenova-db-prod-woi-test"
+  project         = var.ALIS_OS_PROJECT
+  instance   = var.ALIS_OS_BIGTABLE_INSTANCE
+  table           = "tf-test"
   column_family   = "0"
   deletion_policy = "ABANDON"
   gc_rules        = <<EOF

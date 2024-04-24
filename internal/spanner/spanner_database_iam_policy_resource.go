@@ -11,8 +11,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
-	pb "go.protobuf.mentenova.exchange/mentenova/db/resources/bigtable/v1"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	"terraform-provider-alis/internal/spanner/services"
 	"terraform-provider-alis/internal/utils"
 )
 
@@ -29,7 +29,6 @@ func NewIamPolicyResource() resource.Resource {
 }
 
 type databaseIamPolicyResource struct {
-	client pb.SpannerServiceClient
 }
 
 // Metadata returns the resource type name.
@@ -111,11 +110,11 @@ func (r *databaseIamPolicyResource) Create(ctx context.Context, req resource.Cre
 	}
 
 	// Create the IAM policy
-	updatedPolicy, err := r.client.SetSpannerDatabaseIamPolicy(ctx, &pb.SetSpannerDatabaseIamPolicyRequest{
-		Parent:     fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
-		Policy:     policy,
-		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"bindings"}},
-	})
+	updatedPolicy, err := services.SetSpannerDatabaseIamPolicy(ctx,
+		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
+		policy,
+		&fieldmaskpb.FieldMask{Paths: []string{"bindings"}},
+	)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Creating IAM Policy",
@@ -172,12 +171,12 @@ func (r *databaseIamPolicyResource) Read(ctx context.Context, req resource.ReadR
 	instance := state.Instance.ValueString()
 	database := state.Database.ValueString()
 
-	policy, err := r.client.GetSpannerDatabaseIamPolicy(ctx, &pb.GetSpannerDatabaseIamPolicyRequest{
-		Parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
-		Options: &pb.GetSpannerDatabaseIamPolicyRequest_GetPolicyOptions{
+	policy, err := services.GetSpannerDatabaseIamPolicy(ctx,
+		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
+		&iampb.GetPolicyOptions{
 			RequestedPolicyVersion: utils.IamPolicyVersion,
 		},
-	})
+	)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to get Spanner Database IAM Policy", err.Error())
 		return
@@ -250,11 +249,11 @@ func (r *databaseIamPolicyResource) Update(ctx context.Context, req resource.Upd
 	}
 
 	// Create the IAM policy
-	updatedPolicy, err := r.client.SetSpannerDatabaseIamPolicy(ctx, &pb.SetSpannerDatabaseIamPolicyRequest{
-		Parent:     fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
-		Policy:     policy,
-		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"bindings"}},
-	})
+	updatedPolicy, err := services.SetSpannerDatabaseIamPolicy(ctx,
+		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
+		policy,
+		&fieldmaskpb.FieldMask{Paths: []string{"bindings"}},
+	)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Updating IAM Policy",
@@ -318,11 +317,11 @@ func (r *databaseIamPolicyResource) Delete(ctx context.Context, req resource.Del
 	}
 
 	// Create the IAM policy
-	_, err := r.client.SetSpannerDatabaseIamPolicy(ctx, &pb.SetSpannerDatabaseIamPolicyRequest{
-		Parent:     fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
-		Policy:     policy,
-		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"bindings"}},
-	})
+	_, err := services.SetSpannerDatabaseIamPolicy(ctx,
+		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
+		policy,
+		&fieldmaskpb.FieldMask{Paths: []string{"bindings"}},
+	)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Deleting IAM Policy",
@@ -356,18 +355,6 @@ func (r *databaseIamPolicyResource) Configure(_ context.Context, req resource.Co
 	if req.ProviderData == nil {
 		return
 	}
-
-	clients, ok := req.ProviderData.(utils.ProviderClients)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected ProviderClients, got: %T. Please report this issue to the provider developers.", req.ProviderData),
-		)
-
-		return
-	}
-
-	r.client = clients.Spanner
 }
 
 func (r *databaseIamPolicyResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {

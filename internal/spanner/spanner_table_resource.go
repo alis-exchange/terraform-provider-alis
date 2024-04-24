@@ -13,10 +13,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
-	pb "go.protobuf.mentenova.exchange/mentenova/db/resources/bigtable/v1"
-	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
-	"terraform-provider-alis/internal/utils"
+	"terraform-provider-alis/internal/spanner/services"
 )
 
 // Ensure the implementation satisfies the expected interfaces.
@@ -32,15 +30,14 @@ func NewSpannerTableResource() resource.Resource {
 }
 
 type spannerTableResource struct {
-	client pb.SpannerServiceClient
 }
 
 type spannerTableModel struct {
-	Name         types.String        `tfsdk:"name"`
-	Project      types.String        `tfsdk:"project"`
-	InstanceName types.String        `tfsdk:"instance_name"`
-	DatabaseName types.String        `tfsdk:"database_name"`
-	Schema       *spannerTableSchema `tfsdk:"schema"`
+	Name     types.String        `tfsdk:"name"`
+	Project  types.String        `tfsdk:"project"`
+	Instance types.String        `tfsdk:"instance"`
+	Database types.String        `tfsdk:"database"`
+	Schema   *spannerTableSchema `tfsdk:"schema"`
 }
 
 type spannerTableSchema struct {
@@ -107,10 +104,10 @@ func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaReques
 			"project": schema.StringAttribute{
 				Required: true,
 			},
-			"instance_name": schema.StringAttribute{
+			"instance": schema.StringAttribute{
 				Required: true,
 			},
-			"database_name": schema.StringAttribute{
+			"database": schema.StringAttribute{
 				Required: true,
 			},
 			"schema": schema.SingleNestedAttribute{
@@ -140,7 +137,7 @@ func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaReques
 								"type": schema.StringAttribute{
 									Required: true,
 									Validators: []validator.String{
-										stringvalidator.OneOf(utils.SpannerTableDataTypes...),
+										stringvalidator.OneOf(services.SpannerTableDataTypes...),
 									},
 								},
 								"size": schema.Int64Attribute{
@@ -203,27 +200,25 @@ func (r *spannerTableResource) Create(ctx context.Context, req resource.CreateRe
 	}
 
 	// Generate table from plan
-	table := &pb.SpannerTable{
+	table := &services.SpannerTable{
 		Name: "",
-		Schema: &pb.SpannerTable_Schema{
-			Columns:    nil,
-			Indices:    nil,
-			Interleave: nil,
+		Schema: &services.SpannerTableSchema{
+			Columns: nil,
+			Indices: nil,
 		},
 	}
 
 	// Get project and instance name
 	project := plan.Project.ValueString()
-	instanceName := plan.InstanceName.ValueString()
-	databaseId := plan.DatabaseName.ValueString()
+	instanceName := plan.Instance.ValueString()
+	databaseId := plan.Database.ValueString()
 	tableId := plan.Name.ValueString()
 
 	// Populate schema if any
 	if plan.Schema != nil {
-		tableSchema := &pb.SpannerTable_Schema{
-			Columns:    nil,
-			Indices:    nil,
-			Interleave: nil,
+		tableSchema := &services.SpannerTableSchema{
+			Columns: nil,
+			Indices: nil,
 		}
 
 		if !plan.Schema.Columns.IsNull() {
@@ -236,7 +231,7 @@ func (r *spannerTableResource) Create(ctx context.Context, req resource.CreateRe
 			diags.Append(d...)
 
 			for _, column := range columns {
-				col := &pb.SpannerTable_Schema_Column{}
+				col := &services.SpannerTableColumn{}
 
 				// Populate column name
 				if !column.Name.IsNull() {
@@ -260,26 +255,7 @@ func (r *spannerTableResource) Create(ctx context.Context, req resource.CreateRe
 
 				// Populate type
 				if !column.Type.IsNull() {
-					switch column.Type.ValueString() {
-					case utils.SpannerTableDataType_BOOL.String():
-						col.Type = pb.SpannerTable_Schema_Column_BOOL
-					case utils.SpannerTableDataType_INT64.String():
-						col.Type = pb.SpannerTable_Schema_Column_INT64
-					case utils.SpannerTableDataType_FLOAT64.String():
-						col.Type = pb.SpannerTable_Schema_Column_FLOAT64
-					case utils.SpannerTableDataType_STRING.String():
-						col.Type = pb.SpannerTable_Schema_Column_STRING
-					case utils.SpannerTableDataType_BYTES.String():
-						col.Type = pb.SpannerTable_Schema_Column_BYTES
-					case utils.SpannerTableDataType_DATE.String():
-						col.Type = pb.SpannerTable_Schema_Column_DATE
-					case utils.SpannerTableDataType_TIMESTAMP.String():
-						col.Type = pb.SpannerTable_Schema_Column_TIMESTAMP
-					case utils.SpannerTableDataType_NUMERIC.String():
-						col.Type = pb.SpannerTable_Schema_Column_NUMERIC
-					case utils.SpannerTableDataType_JSON.String():
-						col.Type = pb.SpannerTable_Schema_Column_JSON
-					}
+					col.Type = column.Type.ValueString()
 				}
 
 				// Populate size
@@ -307,7 +283,7 @@ func (r *spannerTableResource) Create(ctx context.Context, req resource.CreateRe
 					col.DefaultValue = wrapperspb.String(column.DefaultValue.ValueString())
 				}
 
-				tableSchema.Columns = append(tableSchema.GetColumns(), col)
+				tableSchema.Columns = append(tableSchema.Columns, col)
 			}
 		}
 
@@ -321,7 +297,7 @@ func (r *spannerTableResource) Create(ctx context.Context, req resource.CreateRe
 			diags.Append(d...)
 
 			for _, index := range indices {
-				idx := &pb.SpannerTable_Schema_Index{}
+				idx := &services.SpannerTableIndex{}
 
 				// Populate index name
 				if !index.Name.IsNull() {
@@ -346,7 +322,7 @@ func (r *spannerTableResource) Create(ctx context.Context, req resource.CreateRe
 					idx.Columns = columns
 				}
 
-				tableSchema.Indices = append(tableSchema.GetIndices(), idx)
+				tableSchema.Indices = append(tableSchema.Indices, idx)
 			}
 		}
 
@@ -354,11 +330,11 @@ func (r *spannerTableResource) Create(ctx context.Context, req resource.CreateRe
 	}
 
 	// Create table
-	_, err := r.client.CreateSpannerTable(ctx, &pb.CreateSpannerTableRequest{
-		Parent:  fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instanceName, databaseId),
-		TableId: tableId,
-		Table:   table,
-	})
+	_, err := services.CreateSpannerTable(ctx,
+		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instanceName, databaseId),
+		tableId,
+		table,
+	)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Creating Table",
@@ -396,14 +372,14 @@ func (r *spannerTableResource) Read(ctx context.Context, req resource.ReadReques
 
 	// Get project and instance name
 	project := state.Project.ValueString()
-	instanceName := state.InstanceName.ValueString()
-	databaseId := state.DatabaseName.ValueString()
+	instanceName := state.Instance.ValueString()
+	databaseId := state.Database.ValueString()
 	tableId := state.Name.ValueString()
 
 	// Get table from API
-	table, err := r.client.GetSpannerTable(ctx, &pb.GetSpannerTableRequest{
-		Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", project, instanceName, databaseId, tableId),
-	})
+	table, err := services.GetSpannerTable(ctx,
+		fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", project, instanceName, databaseId, tableId),
+	)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Reading Table",
@@ -416,75 +392,58 @@ func (r *spannerTableResource) Read(ctx context.Context, req resource.ReadReques
 	state.Name = types.StringValue(tableId)
 
 	// Populate schema
-	if table.GetSchema() != nil {
+	if table.Schema != nil {
 		s := &spannerTableSchema{}
-		if table.GetSchema().GetColumns() != nil {
+		if table.Schema.Columns != nil {
 			columns := make([]*spannerTableColumn, 0)
-			for _, column := range table.GetSchema().GetColumns() {
+			for _, column := range table.Schema.Columns {
 				col := &spannerTableColumn{
-					Name: types.StringValue(column.GetName()),
+					Name: types.StringValue(column.Name),
 				}
 
 				// Get primary key
-				if column.GetIsPrimaryKey() != nil {
-					col.IsPrimaryKey = types.BoolValue(column.GetIsPrimaryKey().GetValue())
+				if column.IsPrimaryKey != nil {
+					col.IsPrimaryKey = types.BoolValue(column.IsPrimaryKey.GetValue())
 				}
 
 				// Get auto increment
-				if column.GetAutoIncrement() != nil {
-					col.AutoIncrement = types.BoolValue(column.GetAutoIncrement().GetValue())
+				if column.AutoIncrement != nil {
+					col.AutoIncrement = types.BoolValue(column.AutoIncrement.GetValue())
 				}
 
 				// Get unique
-				if column.GetUnique() != nil {
-					col.Unique = types.BoolValue(column.GetUnique().GetValue())
+				if column.Unique != nil {
+					col.Unique = types.BoolValue(column.Unique.GetValue())
 				}
 
 				// Get type
-				switch column.GetType() {
-				case pb.SpannerTable_Schema_Column_BOOL:
-					col.Type = types.StringValue(utils.SpannerTableDataType_BOOL.String())
-				case pb.SpannerTable_Schema_Column_INT64:
-					col.Type = types.StringValue(utils.SpannerTableDataType_INT64.String())
-				case pb.SpannerTable_Schema_Column_FLOAT64:
-					col.Type = types.StringValue(utils.SpannerTableDataType_FLOAT64.String())
-				case pb.SpannerTable_Schema_Column_STRING:
-					col.Type = types.StringValue(utils.SpannerTableDataType_STRING.String())
-				case pb.SpannerTable_Schema_Column_BYTES:
-					col.Type = types.StringValue(utils.SpannerTableDataType_BYTES.String())
-				case pb.SpannerTable_Schema_Column_DATE:
-					col.Type = types.StringValue(utils.SpannerTableDataType_DATE.String())
-				case pb.SpannerTable_Schema_Column_TIMESTAMP:
-					col.Type = types.StringValue(utils.SpannerTableDataType_TIMESTAMP.String())
-				case pb.SpannerTable_Schema_Column_NUMERIC:
-					col.Type = types.StringValue(utils.SpannerTableDataType_NUMERIC.String())
-				case pb.SpannerTable_Schema_Column_JSON:
-					col.Type = types.StringValue(utils.SpannerTableDataType_JSON.String())
+				if column.Type != "" {
+					col.Type = types.StringValue(column.Type)
 				}
 
 				// Get size
-				if column.GetSize() != nil {
-					col.Size = types.Int64Value(column.GetSize().GetValue())
+				if column.Size != nil {
+					col.Size = types.Int64Value(column.Size.GetValue())
 				}
 
 				// Get precision
-				if column.GetPrecision() != nil {
-					col.Precision = types.Int64Value(column.GetPrecision().GetValue())
+				if column.Precision != nil {
+					col.Precision = types.Int64Value(column.Precision.GetValue())
 				}
 
 				// Get scale
-				if column.GetScale() != nil {
-					col.Scale = types.Int64Value(column.GetScale().GetValue())
+				if column.Scale != nil {
+					col.Scale = types.Int64Value(column.Scale.GetValue())
 				}
 
 				// Get required
-				if column.GetRequired() != nil {
-					col.Required = types.BoolValue(column.GetRequired().GetValue())
+				if column.Required != nil {
+					col.Required = types.BoolValue(column.Required.GetValue())
 				}
 
 				// Get default value
-				if column.GetDefaultValue() != nil {
-					col.DefaultValue = types.StringValue(column.GetDefaultValue().GetValue())
+				if column.DefaultValue != nil {
+					col.DefaultValue = types.StringValue(column.DefaultValue.GetValue())
 				}
 
 				columns = append(columns, col)
@@ -497,22 +456,22 @@ func (r *spannerTableResource) Read(ctx context.Context, req resource.ReadReques
 
 			s.Columns = generatedList
 		}
-		if table.GetSchema().GetIndices() != nil {
-			indices := make([]*spannerTableIndex, 0, len(table.GetSchema().GetIndices()))
-			for _, index := range table.GetSchema().GetIndices() {
+		if table.Schema.Indices != nil {
+			indices := make([]*spannerTableIndex, 0, len(table.Schema.Indices))
+			for _, index := range table.Schema.Indices {
 				idx := &spannerTableIndex{
-					Name:    types.StringValue(index.GetName()),
+					Name:    types.StringValue(index.Name),
 					Columns: types.Set{},
 				}
 
 				// Get unique
-				if index.GetUnique() != nil {
-					idx.Unique = types.BoolValue(index.GetUnique().GetValue())
+				if index.Unique != nil {
+					idx.Unique = types.BoolValue(index.Unique.GetValue())
 				}
 
 				// Get columns
-				columns := make([]string, 0, len(index.GetColumns()))
-				for _, column := range index.GetColumns() {
+				columns := make([]string, 0, len(index.Columns))
+				for _, column := range index.Columns {
 					columns = append(columns, column)
 				}
 				generatedSet, d := types.SetValueFrom(ctx, types.StringType, columns)
@@ -556,26 +515,24 @@ func (r *spannerTableResource) Update(ctx context.Context, req resource.UpdateRe
 
 	// Get project and instance name
 	project := plan.Project.ValueString()
-	instanceName := plan.InstanceName.ValueString()
-	databaseId := plan.DatabaseName.ValueString()
+	instanceName := plan.Instance.ValueString()
+	databaseId := plan.Database.ValueString()
 	tableId := plan.Name.ValueString()
 
 	// Generate table from plan
-	table := &pb.SpannerTable{
+	table := &services.SpannerTable{
 		Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", project, instanceName, databaseId, tableId),
-		Schema: &pb.SpannerTable_Schema{
-			Columns:    nil,
-			Indices:    nil,
-			Interleave: nil,
+		Schema: &services.SpannerTableSchema{
+			Columns: nil,
+			Indices: nil,
 		},
 	}
 
 	// Populate schema if any
 	if plan.Schema != nil {
-		tableSchema := &pb.SpannerTable_Schema{
-			Columns:    nil,
-			Indices:    nil,
-			Interleave: nil,
+		tableSchema := &services.SpannerTableSchema{
+			Columns: nil,
+			Indices: nil,
 		}
 
 		if !plan.Schema.Columns.IsNull() {
@@ -588,7 +545,7 @@ func (r *spannerTableResource) Update(ctx context.Context, req resource.UpdateRe
 			diags.Append(d...)
 
 			for _, column := range columns {
-				col := &pb.SpannerTable_Schema_Column{}
+				col := &services.SpannerTableColumn{}
 
 				// Populate column name
 				if !column.Name.IsNull() {
@@ -612,26 +569,7 @@ func (r *spannerTableResource) Update(ctx context.Context, req resource.UpdateRe
 
 				// Populate type
 				if !column.Type.IsNull() {
-					switch column.Type.ValueString() {
-					case utils.SpannerTableDataType_BOOL.String():
-						col.Type = pb.SpannerTable_Schema_Column_BOOL
-					case utils.SpannerTableDataType_INT64.String():
-						col.Type = pb.SpannerTable_Schema_Column_INT64
-					case utils.SpannerTableDataType_FLOAT64.String():
-						col.Type = pb.SpannerTable_Schema_Column_FLOAT64
-					case utils.SpannerTableDataType_STRING.String():
-						col.Type = pb.SpannerTable_Schema_Column_STRING
-					case utils.SpannerTableDataType_BYTES.String():
-						col.Type = pb.SpannerTable_Schema_Column_BYTES
-					case utils.SpannerTableDataType_DATE.String():
-						col.Type = pb.SpannerTable_Schema_Column_DATE
-					case utils.SpannerTableDataType_TIMESTAMP.String():
-						col.Type = pb.SpannerTable_Schema_Column_TIMESTAMP
-					case utils.SpannerTableDataType_NUMERIC.String():
-						col.Type = pb.SpannerTable_Schema_Column_NUMERIC
-					case utils.SpannerTableDataType_JSON.String():
-						col.Type = pb.SpannerTable_Schema_Column_JSON
-					}
+					col.Type = column.Type.ValueString()
 				}
 
 				// Populate size
@@ -659,7 +597,7 @@ func (r *spannerTableResource) Update(ctx context.Context, req resource.UpdateRe
 					col.DefaultValue = wrapperspb.String(column.DefaultValue.ValueString())
 				}
 
-				tableSchema.Columns = append(tableSchema.GetColumns(), col)
+				tableSchema.Columns = append(tableSchema.Columns, col)
 			}
 		}
 
@@ -673,7 +611,7 @@ func (r *spannerTableResource) Update(ctx context.Context, req resource.UpdateRe
 			diags.Append(d...)
 
 			for _, index := range indices {
-				idx := &pb.SpannerTable_Schema_Index{}
+				idx := &services.SpannerTableIndex{}
 
 				// Populate index name
 				if !index.Name.IsNull() {
@@ -698,7 +636,7 @@ func (r *spannerTableResource) Update(ctx context.Context, req resource.UpdateRe
 					idx.Columns = columns
 				}
 
-				tableSchema.Indices = append(tableSchema.GetIndices(), idx)
+				tableSchema.Indices = append(tableSchema.Indices, idx)
 			}
 		}
 
@@ -706,17 +644,7 @@ func (r *spannerTableResource) Update(ctx context.Context, req resource.UpdateRe
 	}
 
 	// Update table
-	_, err := r.client.UpdateSpannerTable(ctx, &pb.UpdateSpannerTableRequest{
-		Table: table,
-		UpdateMask: &fieldmaskpb.FieldMask{
-			Paths: []string{
-				"schema.columns",
-				"schema.indices",
-				"schema.interleave",
-			},
-		},
-		AllowMissing: true,
-	})
+	_, err := services.UpdateSpannerTable(ctx, table, true)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Creating Table",
@@ -748,14 +676,12 @@ func (r *spannerTableResource) Delete(ctx context.Context, req resource.DeleteRe
 
 	// Get project and instance name
 	project := state.Project.ValueString()
-	instanceName := state.InstanceName.ValueString()
-	databaseId := state.DatabaseName.ValueString()
+	instanceName := state.Instance.ValueString()
+	databaseId := state.Database.ValueString()
 	tableId := state.Name.ValueString()
 
 	// Delete existing database
-	_, err := r.client.DeleteSpannerTable(ctx, &pb.DeleteSpannerTableRequest{
-		Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", project, instanceName, databaseId, tableId),
-	})
+	_, err := services.DeleteSpannerTable(ctx, fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", project, instanceName, databaseId, tableId))
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Deleting Table",
@@ -780,7 +706,7 @@ func (r *spannerTableResource) ImportState(ctx context.Context, req resource.Imp
 	databaseName := importIDParts[5]
 
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("project"), project)...)
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("instance_name"), instanceName)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("instance"), instanceName)...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("name"), databaseName)...)
 }
 
@@ -789,18 +715,6 @@ func (r *spannerTableResource) Configure(_ context.Context, req resource.Configu
 	if req.ProviderData == nil {
 		return
 	}
-
-	clients, ok := req.ProviderData.(utils.ProviderClients)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected ProviderClients, got: %T. Please report this issue to the provider developers.", req.ProviderData),
-		)
-
-		return
-	}
-
-	r.client = clients.Spanner
 }
 
 func (r *spannerTableResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {

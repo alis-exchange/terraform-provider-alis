@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
+	"cloud.google.com/go/bigtable"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -15,15 +15,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	pb "go.protobuf.mentenova.exchange/mentenova/db/resources/bigtable/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/fieldmaskpb"
-	"terraform-provider-alis/internal/utils"
-)
-
-const (
-	GCPolicyModeIntersection = "INTERSECTION"
-	GCPolicyModeUnion        = "UNION"
+	"terraform-provider-alis/internal/bigtable/services"
 )
 
 // Ensure the implementation satisfies the expected interfaces.
@@ -39,12 +31,11 @@ func NewGarbageCollectionPolicyResource() resource.Resource {
 }
 
 type garbageCollectionPolicyResource struct {
-	client pb.BigtableServiceClient
 }
 
 type bigtableGarbageCollectionPolicyModel struct {
 	Project        types.String `tfsdk:"project"`
-	InstanceName   types.String `tfsdk:"instance_name"`
+	Instance       types.String `tfsdk:"instance"`
 	Table          types.String `tfsdk:"table"`
 	ColumFamily    types.String `tfsdk:"column_family"`
 	DeletionPolicy types.String `tfsdk:"deletion_policy"`
@@ -63,7 +54,7 @@ func (r *garbageCollectionPolicyResource) Schema(_ context.Context, _ resource.S
 			"project": schema.StringAttribute{
 				Required: true,
 			},
-			"instance_name": schema.StringAttribute{
+			"instance": schema.StringAttribute{
 				Required: true,
 			},
 			"table": schema.StringAttribute{
@@ -99,16 +90,7 @@ func (r *garbageCollectionPolicyResource) Create(ctx context.Context, req resour
 	}
 
 	// Generate table from plan
-	gcPolicy := &pb.BigtableTable_ColumnFamily_GarbageCollectionPolicy{
-		GcRule: &pb.BigtableTable_ColumnFamily_GarbageCollectionPolicy_GcRule{},
-	}
-
-	// Set deletion policy
-	if !plan.DeletionPolicy.IsNull() {
-		if plan.DeletionPolicy.ValueString() == "ABANDON" {
-			gcPolicy.DeletionPolicy = pb.BigtableTable_ColumnFamily_GarbageCollectionPolicy_ABANDON
-		}
-	}
+	gcPolicy := bigtable.NoGcPolicy()
 
 	// If gc_rules is set, set gc rules
 	if !plan.GcRules.IsNull() {
@@ -122,7 +104,7 @@ func (r *garbageCollectionPolicyResource) Create(ctx context.Context, req resour
 			return
 		}
 
-		gcRule, err := GetGCPolicyFromJSON(gcRuleMap, true)
+		policy, err := services.GetGcPolicyFromJSON(gcRuleMap, true)
 		if err != nil {
 			resp.Diagnostics.AddError(
 				"Invalid GC Rules",
@@ -131,25 +113,21 @@ func (r *garbageCollectionPolicyResource) Create(ctx context.Context, req resour
 			return
 		}
 
-		gcPolicy.GcRule = gcRule
+		gcPolicy = policy
 	}
 
 	// Get project and instance name
 	project := plan.Project.ValueString()
-	instanceName := plan.InstanceName.ValueString()
+	instanceName := plan.Instance.ValueString()
 	tableId := plan.Table.ValueString()
 	columnFamilyId := plan.ColumFamily.ValueString()
 
 	// Create table
-	_, err := r.client.UpdateBigtableGarbageCollectionPolicy(ctx, &pb.UpdateBigtableGarbageCollectionPolicyRequest{
-		Parent:         fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instanceName, tableId),
-		ColumnFamilyId: columnFamilyId,
-		GcPolicy:       gcPolicy,
-	})
+	_, err := services.UpdateBigtableGarbageCollectionPolicy(ctx, fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instanceName, tableId), columnFamilyId, &gcPolicy)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Creating GC Policy",
-			"Could not create GC Policy for ("+columnFamilyId+"): "+err.Error(),
+			"Could not create GC Policy for Table ("+tableId+") and Column Family ("+columnFamilyId+"): "+err.Error(),
 		)
 		return
 	}
@@ -206,36 +184,33 @@ func (r *garbageCollectionPolicyResource) Read(ctx context.Context, req resource
 
 	// Get project and instance name
 	project := state.Project.ValueString()
-	instanceName := state.InstanceName.ValueString()
+	instanceName := state.Instance.ValueString()
 	tableId := state.Table.ValueString()
 	columnFamilyId := state.ColumFamily.ValueString()
 
 	// Read garbage collection policy
-	gcPolicy, err := r.client.GetBigtableGarbageCollectionPolicy(ctx, &pb.GetBigtableGarbageCollectionPolicyRequest{
-		Parent:         fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instanceName, tableId),
-		ColumnFamilyId: columnFamilyId,
-	})
+	gcPolicy, err := services.GetBigtableGarbageCollectionPolicy(ctx,
+		fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instanceName, tableId),
+		columnFamilyId,
+	)
 	if err != nil {
 		resp.Diagnostics.AddError(
-			"Unable to Read DB Tables",
-			err.Error(),
+			"Error Reading GC Policy",
+			"Could not read GC Policy for Table ("+tableId+") and Column Family ("+columnFamilyId+"): "+err.Error(),
 		)
 		return
 	}
 
 	// Populate deletion policy
-	switch gcPolicy.GetDeletionPolicy() {
-	case pb.BigtableTable_ColumnFamily_GarbageCollectionPolicy_ABANDON:
-		state.DeletionPolicy = types.StringValue("ABANDON")
-	}
+	state.DeletionPolicy = types.StringValue("ABANDON")
 
 	// Populate rules
-	if gcPolicy.GetGcRule() != nil {
-		gcRuleMap, err := GcPolicyToGCRuleMap(gcPolicy.GetGcRule(), true)
+	if gcPolicy != nil {
+		gcRuleMap, err := services.GcPolicyToGcRuleMap(*gcPolicy, true)
 		if err != nil {
 			resp.Diagnostics.AddError(
-				"Unable to Parse GC Policy to GC Rule String",
-				err.Error(),
+				"Error Parsing GC Policy",
+				"Unable to Parse GC Policy to GC Rule String: "+err.Error(),
 			)
 			return
 		}
@@ -243,8 +218,8 @@ func (r *garbageCollectionPolicyResource) Read(ctx context.Context, req resource
 		gcRuleBytes, err := json.Marshal(gcRuleMap)
 		if err != nil {
 			resp.Diagnostics.AddError(
-				"Unable to Marshal GC Rule Map to JSON",
-				err.Error(),
+				"Error Marshalling GC Rule Map to JSON",
+				"Unable to Marshal GC Rule Map to JSON: "+err.Error(),
 			)
 			return
 		}
@@ -271,21 +246,12 @@ func (r *garbageCollectionPolicyResource) Update(ctx context.Context, req resour
 
 	// Get project and instance name
 	project := plan.Project.ValueString()
-	instanceName := plan.InstanceName.ValueString()
+	instanceName := plan.Instance.ValueString()
 	tableId := plan.Table.ValueString()
 	columnFamilyId := plan.ColumFamily.ValueString()
 
 	// Generate GC Policy from plan
-	gcPolicy := &pb.BigtableTable_ColumnFamily_GarbageCollectionPolicy{
-		GcRule: &pb.BigtableTable_ColumnFamily_GarbageCollectionPolicy_GcRule{},
-	}
-
-	// Set deletion policy
-	if !plan.DeletionPolicy.IsNull() {
-		if plan.DeletionPolicy.ValueString() == "ABANDON" {
-			gcPolicy.DeletionPolicy = pb.BigtableTable_ColumnFamily_GarbageCollectionPolicy_ABANDON
-		}
-	}
+	gcPolicy := bigtable.NoGcPolicy()
 
 	// If gc_rules is set, set gc rules
 	if !plan.GcRules.IsNull() {
@@ -299,28 +265,24 @@ func (r *garbageCollectionPolicyResource) Update(ctx context.Context, req resour
 			return
 		}
 
-		gcRule, err := GetGCPolicyFromJSON(gcRuleMap, true)
+		policy, err := services.GetGcPolicyFromJSON(gcRuleMap, true)
 		if err != nil {
 			resp.Diagnostics.AddError(
-				"Invalid GC Rules",
+				"Erorr Parsing GC Rules",
 				"Could not parse GC Rules: "+err.Error(),
 			)
 			return
 		}
 
-		gcPolicy.GcRule = gcRule
+		gcPolicy = policy
 	}
 
 	// Update GC Policy
-	_, err := r.client.UpdateBigtableGarbageCollectionPolicy(ctx, &pb.UpdateBigtableGarbageCollectionPolicyRequest{
-		Parent:         fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instanceName, tableId),
-		ColumnFamilyId: columnFamilyId,
-		GcPolicy:       gcPolicy,
-		UpdateMask: &fieldmaskpb.FieldMask{
-			Paths: []string{"gc_rule", "deletion_policy"},
-		},
-		AllowMissing: true,
-	})
+	_, err := services.UpdateBigtableGarbageCollectionPolicy(ctx,
+		fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instanceName, tableId),
+		columnFamilyId,
+		&gcPolicy,
+	)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Updating GC Policy",
@@ -382,15 +344,15 @@ func (r *garbageCollectionPolicyResource) Delete(ctx context.Context, req resour
 
 	// Get project and instance name
 	project := state.Project.ValueString()
-	instanceName := state.InstanceName.ValueString()
+	instanceName := state.Instance.ValueString()
 	tableName := state.Table.ValueString()
 	columnFamilyId := state.ColumFamily.ValueString()
 
 	// Delete existing table
-	_, err := r.client.DeleteBigtableGarbageCollectionPolicy(ctx, &pb.DeleteBigtableGarbageCollectionPolicyRequest{
-		Parent:         fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instanceName, tableName),
-		ColumnFamilyId: columnFamilyId,
-	})
+	_, err := services.DeleteBigtableGarbageCollectionPolicy(ctx,
+		fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instanceName, tableName),
+		columnFamilyId,
+	)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Deleting GC Policy",
@@ -416,7 +378,7 @@ func (r *garbageCollectionPolicyResource) ImportState(ctx context.Context, req r
 	tableName := importIDParts[5]
 
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("project"), project)...)
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("instance_name"), instanceName)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("instance"), instanceName)...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("name"), tableName)...)
 }
 
@@ -425,201 +387,4 @@ func (r *garbageCollectionPolicyResource) Configure(_ context.Context, req resou
 	if req.ProviderData == nil {
 		return
 	}
-
-	clients, ok := req.ProviderData.(utils.ProviderClients)
-
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected ProviderClients, got: %T. Please report this issue to the provider developers.", req.ProviderData),
-		)
-
-		return
-	}
-
-	r.client = clients.Bigtable
-}
-
-// Recursively convert Bigtable GC policy to JSON format in a map.
-func GcPolicyToGCRuleMap(gcRule *pb.BigtableTable_ColumnFamily_GarbageCollectionPolicy_GcRule, topLevel bool) (map[string]interface{}, error) {
-	result := make(map[string]interface{})
-
-	switch gcRule.GetRule().(type) {
-	case *pb.BigtableTable_ColumnFamily_GarbageCollectionPolicy_GcRule_MaxNumVersions:
-		// bigtable.MaxVersionsGCPolicy is an int.
-		// Not sure why max_version is a float64.
-		// TODO: Maybe change max_version to an int.
-		version := float64(gcRule.GetMaxNumVersions())
-		if topLevel {
-			rule := make(map[string]interface{})
-			rule["max_version"] = version
-			rules := []interface{}{}
-			rules = append(rules, rule)
-			result["rules"] = rules
-		} else {
-			result["max_version"] = version
-		}
-		break
-	case *pb.BigtableTable_ColumnFamily_GarbageCollectionPolicy_GcRule_MaxAge:
-		if gcRule.GetMaxAge() != nil {
-			age := gcRule.GetMaxAge().AsDuration().String()
-			if topLevel {
-				rule := make(map[string]interface{})
-				rule["max_age"] = age
-				rules := []interface{}{}
-				rules = append(rules, rule)
-				result["rules"] = rules
-			} else {
-				result["max_age"] = age
-			}
-			break
-		}
-	case *pb.BigtableTable_ColumnFamily_GarbageCollectionPolicy_GcRule_Union_:
-		result["mode"] = "union"
-		rules := []interface{}{}
-		for _, r := range gcRule.GetUnion().GetRules() {
-			gcRuleString, err := GcPolicyToGCRuleMap(r, false)
-			if err != nil {
-				return nil, err
-			}
-			rules = append(rules, gcRuleString)
-		}
-		result["rules"] = rules
-		break
-	case *pb.BigtableTable_ColumnFamily_GarbageCollectionPolicy_GcRule_Intersection_:
-		result["mode"] = "intersection"
-		rules := []interface{}{}
-		for _, r := range gcRule.GetIntersection().GetRules() {
-			gcRuleString, err := GcPolicyToGCRuleMap(r, false)
-			if err != nil {
-				return nil, err
-			}
-			rules = append(rules, gcRuleString)
-		}
-		result["rules"] = rules
-	default:
-		break
-	}
-
-	if err := validateNestedPolicy(result, topLevel); err != nil {
-		return nil, err
-	}
-
-	return result, nil
-}
-
-func GetGCPolicyFromJSON(inputPolicy map[string]interface{}, isTopLevel bool) (*pb.BigtableTable_ColumnFamily_GarbageCollectionPolicy_GcRule, error) {
-	policy := make([]*pb.BigtableTable_ColumnFamily_GarbageCollectionPolicy_GcRule, 0)
-
-	if err := validateNestedPolicy(inputPolicy, isTopLevel); err != nil {
-		return nil, err
-	}
-
-	for _, p := range inputPolicy["rules"].([]interface{}) {
-		childPolicy := p.(map[string]interface{})
-		if err := validateNestedPolicy(childPolicy /*isTopLevel=*/, false); err != nil {
-			return nil, err
-		}
-
-		if childPolicy["max_age"] != nil {
-			maxAge := childPolicy["max_age"].(string)
-			duration, err := time.ParseDuration(maxAge)
-			if err != nil {
-				return nil, fmt.Errorf("invalid duration string: %v", maxAge)
-			}
-
-			policy = append(policy, &pb.BigtableTable_ColumnFamily_GarbageCollectionPolicy_GcRule{
-				Rule: &pb.BigtableTable_ColumnFamily_GarbageCollectionPolicy_GcRule_MaxAge{
-					MaxAge: durationpb.New(duration),
-				},
-			})
-		}
-
-		if childPolicy["max_version"] != nil {
-			version := childPolicy["max_version"].(float64)
-
-			policy = append(policy, &pb.BigtableTable_ColumnFamily_GarbageCollectionPolicy_GcRule{
-				Rule: &pb.BigtableTable_ColumnFamily_GarbageCollectionPolicy_GcRule_MaxNumVersions{
-					MaxNumVersions: int32(version),
-				},
-			})
-		}
-
-		if childPolicy["mode"] != nil {
-			n, err := GetGCPolicyFromJSON(childPolicy /*isTopLevel=*/, false)
-			if err != nil {
-				return nil, err
-			}
-			policy = append(policy, n)
-		}
-	}
-
-	switch inputPolicy["mode"] {
-	case strings.ToLower(GCPolicyModeUnion):
-		return &pb.BigtableTable_ColumnFamily_GarbageCollectionPolicy_GcRule{
-			Rule: &pb.BigtableTable_ColumnFamily_GarbageCollectionPolicy_GcRule_Union_{
-				Union: &pb.BigtableTable_ColumnFamily_GarbageCollectionPolicy_GcRule_Union{
-					Rules: policy,
-				},
-			},
-		}, nil
-	case strings.ToLower(GCPolicyModeIntersection):
-		return &pb.BigtableTable_ColumnFamily_GarbageCollectionPolicy_GcRule{
-			Rule: &pb.BigtableTable_ColumnFamily_GarbageCollectionPolicy_GcRule_Intersection_{
-				Intersection: &pb.BigtableTable_ColumnFamily_GarbageCollectionPolicy_GcRule_Intersection{
-					Rules: policy,
-				},
-			},
-		}, nil
-	default:
-		return policy[0], nil
-	}
-}
-
-func validateNestedPolicy(p map[string]interface{}, isTopLevel bool) error {
-	if len(p) > 2 {
-		return fmt.Errorf("rules has more than 2 fields")
-	}
-	maxVersion, maxVersionOk := p["max_version"]
-	maxAge, maxAgeOk := p["max_age"]
-	rulesObj, rulesOk := p["rules"]
-
-	_, modeOk := p["mode"]
-	rules, arrOk := rulesObj.([]interface{})
-	_, vCastOk := maxVersion.(float64)
-	_, aCastOk := maxAge.(string)
-
-	if rulesOk && !arrOk {
-		return fmt.Errorf("`rules` must be array")
-	}
-
-	if modeOk && len(rules) < 2 {
-		return fmt.Errorf("`rules` need at least 2 GC rule when mode is specified")
-	}
-
-	if isTopLevel && !rulesOk {
-		return fmt.Errorf("invalid nested policy, need `rules`")
-	}
-
-	if isTopLevel && !modeOk && len(rules) != 1 {
-		return fmt.Errorf("when `mode` is not specified, `rules` can only have 1 child rule")
-	}
-
-	if !isTopLevel && len(p) == 2 && (!modeOk || !rulesOk) {
-		return fmt.Errorf("need `mode` and `rules` for child nested policies")
-	}
-
-	if !isTopLevel && len(p) == 1 && !maxVersionOk && !maxAgeOk {
-		return fmt.Errorf("need `max_version` or `max_age` for the rule")
-	}
-
-	if maxVersionOk && !vCastOk {
-		return fmt.Errorf("`max_version` must be a number")
-	}
-
-	if maxAgeOk && !aCastOk {
-		return fmt.Errorf("`max_age must be a string")
-	}
-
-	return nil
 }

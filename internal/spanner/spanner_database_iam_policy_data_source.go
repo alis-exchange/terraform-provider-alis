@@ -4,11 +4,12 @@ import (
 	"context"
 	"fmt"
 
+	"cloud.google.com/go/iam/apiv1/iampb"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	pb "go.protobuf.mentenova.exchange/mentenova/db/resources/bigtable/v1"
+	"terraform-provider-alis/internal/spanner/services"
 	"terraform-provider-alis/internal/utils"
 )
 
@@ -24,7 +25,6 @@ func NewIamPolicyDataSource() datasource.DataSource {
 }
 
 type databaseIamPolicyDataSource struct {
-	client pb.SpannerServiceClient
 }
 
 type databaseIamPolicyModel struct {
@@ -104,9 +104,12 @@ func (d *databaseIamPolicyDataSource) Read(ctx context.Context, req datasource.R
 	instance := state.Instance.ValueString()
 	database := state.Database.ValueString()
 
-	policy, err := d.client.GetSpannerDatabaseIamPolicy(ctx, &pb.GetSpannerDatabaseIamPolicyRequest{
-		Parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
-	})
+	policy, err := services.GetSpannerDatabaseIamPolicy(ctx,
+		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
+		&iampb.GetPolicyOptions{
+			RequestedPolicyVersion: utils.IamPolicyVersion,
+		},
+	)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to get Spanner Database IAM Policy", err.Error())
 		return
@@ -150,18 +153,6 @@ func (d *databaseIamPolicyDataSource) Configure(_ context.Context, req datasourc
 	if req.ProviderData == nil {
 		return
 	}
-
-	clients, ok := req.ProviderData.(utils.ProviderClients)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected ProviderClients, got: %T. Please report this issue to the provider developers.", req.ProviderData),
-		)
-
-		return
-	}
-
-	d.client = clients.Spanner
 }
 
 func (d *databaseIamPolicyDataSource) ConfigValidators(ctx context.Context) []datasource.ConfigValidator {

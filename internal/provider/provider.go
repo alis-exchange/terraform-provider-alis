@@ -4,58 +4,83 @@ import (
 	"context"
 	"os"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
-	"go.alis.build/client"
-	pb "go.protobuf.mentenova.exchange/mentenova/db/resources/bigtable/v1"
 	"terraform-provider-alis/internal/bigtable"
 	"terraform-provider-alis/internal/spanner"
-	"terraform-provider-alis/internal/utils"
+	"terraform-provider-alis/internal/validators"
 )
 
 // Ensure the implementation satisfies the expected interfaces.
 var (
-	_ provider.Provider = &bigtableProvider{}
+	_ provider.Provider = &googleProvider{}
 )
 
 // New is a helper function to simplify provider server and testing implementation.
 func New(version string) func() provider.Provider {
 	return func() provider.Provider {
-		return &bigtableProvider{
+		return &googleProvider{
 			version: version,
 		}
 	}
 }
 
-// bigtableProvider is the provider implementation.
-type bigtableProvider struct {
+// googleProvider is the provider implementation.
+type googleProvider struct {
 	// version is set to the provider version on release, "dev" when the
 	// provider is built and ran locally, and "test" when running acceptance
 	// testing.
 	version string
 }
 
-// bigtableProviderModel maps provider schema data to a Go type.
-type bigtableProviderModel struct {
-	Host types.String `tfsdk:"host"`
+// googleProviderModel maps provider schema data to a Go type.
+type googleProviderModel struct {
+	Host        types.String `tfsdk:"host"`
+	Credentials types.String `tfsdk:"credentials"`
+	AccessToken types.String `tfsdk:"access_token"`
+	Project     types.String `tfsdk:"project"`
 }
 
 // Metadata returns the provider type name.
-func (p *bigtableProvider) Metadata(_ context.Context, _ provider.MetadataRequest, resp *provider.MetadataResponse) {
+func (p *googleProvider) Metadata(_ context.Context, _ provider.MetadataRequest, resp *provider.MetadataResponse) {
 	resp.TypeName = "alis"
 	resp.Version = p.version
 }
 
 // Schema defines the provider-level schema for configuration data.
-func (p *bigtableProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
+func (p *googleProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"host": schema.StringAttribute{
+				Optional: true,
+			},
+			"credentials": schema.StringAttribute{
+				Optional: true,
+				Validators: []validator.String{
+					stringvalidator.ConflictsWith(path.Expressions{
+						path.MatchRoot("access_token"),
+					}...),
+					validators.GoogleCredentialsValidator(),
+					validators.StringNotEmpty(),
+				},
+			},
+			"access_token": schema.StringAttribute{
+				Optional: true,
+				Validators: []validator.String{
+					stringvalidator.ConflictsWith(path.Expressions{
+						path.MatchRoot("credentials"),
+					}...),
+					validators.StringNotEmpty(),
+				},
+			},
+			"project": schema.StringAttribute{
 				Optional: true,
 			},
 		},
@@ -63,11 +88,11 @@ func (p *bigtableProvider) Schema(_ context.Context, _ provider.SchemaRequest, r
 }
 
 // Configure prepares a HashiCups API client for data sources and resources.
-func (p *bigtableProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
+func (p *googleProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
 	tflog.Info(ctx, "Configuring DB client")
 
 	// Retrieve provider data from configuration
-	var config bigtableProviderModel
+	var config googleProviderModel
 	diags := req.Config.Get(ctx, &config)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -115,39 +140,11 @@ func (p *bigtableProvider) Configure(ctx context.Context, req provider.Configure
 
 	tflog.Debug(ctx, "Creating DB client")
 
-	var bigtableServiceClient pb.BigtableServiceClient
-	var spannerServiceClient pb.SpannerServiceClient
-
-	// GOOGLE_APPLICATION_CREDENTIALS="/Users/newtonnthiga/Projects/Terraform/terraform-provider-alis-build/key-mentenova-db-prod-woi.json" terraform plan
-	if conn, err := client.NewConn(ctx, host, true); err != nil {
-		resp.Diagnostics.AddError(
-			"Unable to Create DB API Client",
-			"An unexpected error occurred when creating the DB API client. "+
-				"If the error is not clear, please contact the provider developers.\n\n"+
-				"HashiCups Client Error: "+err.Error(),
-		)
-		return
-	} else {
-		bigtableServiceClient = pb.NewBigtableServiceClient(conn)
-		spannerServiceClient = pb.NewSpannerServiceClient(conn)
-	}
-
-	// Make the DB client available during DataSource and Resource
-	// type Configure methods.
-	resp.DataSourceData = utils.ProviderClients{
-		Bigtable: bigtableServiceClient,
-		Spanner:  spannerServiceClient,
-	}
-	resp.ResourceData = utils.ProviderClients{
-		Bigtable: bigtableServiceClient,
-		Spanner:  spannerServiceClient,
-	}
-
 	tflog.Info(ctx, "Configured DB client", map[string]any{"success": true})
 }
 
 // DataSources defines the data sources implemented in the provider.
-func (p *bigtableProvider) DataSources(_ context.Context) []func() datasource.DataSource {
+func (p *googleProvider) DataSources(_ context.Context) []func() datasource.DataSource {
 	return []func() datasource.DataSource{
 		bigtable.NewIamPolicyDataSource,
 		spanner.NewIamPolicyDataSource,
@@ -155,7 +152,7 @@ func (p *bigtableProvider) DataSources(_ context.Context) []func() datasource.Da
 }
 
 // Resources defines the resources implemented in the provider.
-func (p *bigtableProvider) Resources(_ context.Context) []func() resource.Resource {
+func (p *googleProvider) Resources(_ context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		bigtable.NewTableResource,
 		bigtable.NewGarbageCollectionPolicyResource,

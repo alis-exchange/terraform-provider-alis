@@ -4,11 +4,12 @@ import (
 	"context"
 	"fmt"
 
+	"cloud.google.com/go/iam/apiv1/iampb"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	pb "go.protobuf.mentenova.exchange/mentenova/db/resources/bigtable/v1"
+	"terraform-provider-alis/internal/bigtable/services"
 	"terraform-provider-alis/internal/utils"
 )
 
@@ -24,7 +25,6 @@ func NewIamPolicyDataSource() datasource.DataSource {
 }
 
 type tableIamPolicyDataSource struct {
-	client pb.BigtableServiceClient
 }
 
 type tableIamPolicyModel struct {
@@ -104,8 +104,8 @@ func (d *tableIamPolicyDataSource) Read(ctx context.Context, req datasource.Read
 	instance := state.Instance.ValueString()
 	table := state.Table.ValueString()
 
-	policy, err := d.client.GetBigtableTableIamPolicy(ctx, &pb.GetBigtableTableIamPolicyRequest{
-		Parent: fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instance, table),
+	policy, err := services.GetBigtableTableIamPolicy(ctx, fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instance, table), &iampb.GetPolicyOptions{
+		RequestedPolicyVersion: utils.IamPolicyVersion,
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to get Bigtable Table IAM Policy", err.Error())
@@ -151,17 +151,17 @@ func (d *tableIamPolicyDataSource) Configure(_ context.Context, req datasource.C
 		return
 	}
 
-	clients, ok := req.ProviderData.(utils.ProviderClients)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected ProviderClients, got: %T. Please report this issue to the provider developers.", req.ProviderData),
-		)
-
-		return
-	}
-
-	d.client = clients.Bigtable
+	//clients, ok := req.ProviderData.(utils.ProviderClients)
+	//if !ok {
+	//	resp.Diagnostics.AddError(
+	//		"Unexpected Data Source Configure Type",
+	//		fmt.Sprintf("Expected ProviderClients, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+	//	)
+	//
+	//	return
+	//}
+	//
+	//d.client = clients.Bigtable
 }
 
 func (d *tableIamPolicyDataSource) ConfigValidators(ctx context.Context) []datasource.ConfigValidator {

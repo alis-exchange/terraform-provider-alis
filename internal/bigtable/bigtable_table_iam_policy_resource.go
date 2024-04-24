@@ -11,8 +11,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
-	pb "go.protobuf.mentenova.exchange/mentenova/db/resources/bigtable/v1"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	"terraform-provider-alis/internal/bigtable/services"
 	"terraform-provider-alis/internal/utils"
 )
 
@@ -29,7 +29,6 @@ func NewIamPolicyResource() resource.Resource {
 }
 
 type tableIamPolicyResource struct {
-	client pb.BigtableServiceClient
 }
 
 // Metadata returns the resource type name.
@@ -111,11 +110,7 @@ func (r *tableIamPolicyResource) Create(ctx context.Context, req resource.Create
 	}
 
 	// Create the IAM policy
-	updatedPolicy, err := r.client.SetBigtableTableIamPolicy(ctx, &pb.SetBigtableTableIamPolicyRequest{
-		Parent:     fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instance, table),
-		Policy:     policy,
-		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"bindings"}},
-	})
+	updatedPolicy, err := services.SetBigtableTableIamPolicy(ctx, fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instance, table), policy, &fieldmaskpb.FieldMask{Paths: []string{"bindings"}})
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Creating IAM Policy",
@@ -172,11 +167,8 @@ func (r *tableIamPolicyResource) Read(ctx context.Context, req resource.ReadRequ
 	instance := state.Instance.ValueString()
 	table := state.Table.ValueString()
 
-	policy, err := r.client.GetBigtableTableIamPolicy(ctx, &pb.GetBigtableTableIamPolicyRequest{
-		Parent: fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instance, table),
-		Options: &pb.GetBigtableTableIamPolicyRequest_GetPolicyOptions{
-			RequestedPolicyVersion: utils.IamPolicyVersion,
-		},
+	policy, err := services.GetBigtableTableIamPolicy(ctx, fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instance, table), &iampb.GetPolicyOptions{
+		RequestedPolicyVersion: utils.IamPolicyVersion,
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to get Bigtable Table IAM Policy", err.Error())
@@ -250,11 +242,7 @@ func (r *tableIamPolicyResource) Update(ctx context.Context, req resource.Update
 	}
 
 	// Create the IAM policy
-	updatedPolicy, err := r.client.SetBigtableTableIamPolicy(ctx, &pb.SetBigtableTableIamPolicyRequest{
-		Parent:     fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instance, table),
-		Policy:     policy,
-		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"bindings"}},
-	})
+	updatedPolicy, err := services.SetBigtableTableIamPolicy(ctx, fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instance, table), policy, &fieldmaskpb.FieldMask{Paths: []string{"bindings"}})
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Updating IAM Policy",
@@ -318,11 +306,7 @@ func (r *tableIamPolicyResource) Delete(ctx context.Context, req resource.Delete
 	}
 
 	// Create the IAM policy
-	_, err := r.client.SetBigtableTableIamPolicy(ctx, &pb.SetBigtableTableIamPolicyRequest{
-		Parent:     fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instance, table),
-		Policy:     policy,
-		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"bindings"}},
-	})
+	_, err := services.SetBigtableTableIamPolicy(ctx, fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instance, table), policy, &fieldmaskpb.FieldMask{Paths: []string{"bindings"}})
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Deleting IAM Policy",
@@ -357,17 +341,17 @@ func (r *tableIamPolicyResource) Configure(_ context.Context, req resource.Confi
 		return
 	}
 
-	clients, ok := req.ProviderData.(utils.ProviderClients)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected ProviderClients, got: %T. Please report this issue to the provider developers.", req.ProviderData),
-		)
-
-		return
-	}
-
-	r.client = clients.Bigtable
+	//clients, ok := req.ProviderData.(utils.ProviderClients)
+	//if !ok {
+	//	resp.Diagnostics.AddError(
+	//		"Unexpected Data Source Configure Type",
+	//		fmt.Sprintf("Expected ProviderClients, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+	//	)
+	//
+	//	return
+	//}
+	//
+	//r.client = clients.Bigtable
 }
 
 func (r *tableIamPolicyResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {

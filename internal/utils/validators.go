@@ -1,74 +1,35 @@
 package utils
 
 import (
-	"context"
-	"fmt"
-	"strconv"
-	"strings"
-
-	"github.com/hashicorp/terraform-plugin-framework-validators/helpers/validatordiag"
-	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
+	"regexp"
 )
 
-var _ validator.String = durationStringAtLeastSecondsValidator{}
+var (
+	ProjectIdRegex              = `^[a-z](?:[-a-z0-9]{4,28}[a-z0-9])?$`
+	InstanceIdRegex             = `^[a-z0-9-]{6,33}$`
+	InstanceNameRegex           = `^projects\/[a-z](?:[-a-z0-9]{4,28}[a-z0-9])?\/instances\/[a-z0-9-]{6,33}$`
+	BigtableTableIdRegex        = `^[a-zA-Z0-9_.-]{1,50}$`
+	BigtableTableNameRegex      = `^projects\/[a-z](?:[-a-z0-9]{4,28}[a-z0-9])?\/instances\/[a-z0-9-]{6,33}\/tables\/[a-zA-Z0-9_.-]{1,50}$`
+	BigtableColumnFamilyIdRegex = `^[-_.a-zA-Z0-9]{1,50}$`
+	BigtableClusterIdRegex      = `^[a-z0-9-]{6,30}$`
+	BigtableClusterNameRegex    = `^projects\/[a-z](?:[-a-z0-9]{4,28}[a-z0-9])?\/instances\/[a-z0-9-]{6,33}\/clusters\/[a-z0-9-]{6,30}$`
+	BigtableBackupIdRegex       = `^[a-zA-Z0-9_.-]{1,50}$`
+	BigtableBackupNameRegex     = `^projects\/[a-z](?:[-a-z0-9]{4,28}[a-z0-9])?\/instances\/[a-z0-9-]{6,33}\/clusters\/[a-z0-9-]{6,30}\/backups\/[a-zA-Z0-9_.-]{1,50}$`
 
-// durationStringAtLeastSecondsValidator validates that duration string is at least a certain number of seconds.
-type durationStringAtLeastSecondsValidator struct {
-	minDuration int
-}
+	SpannerDatabaseIdRegex   = `^[a-z][a-z0-9_\-]*[a-z0-9]{2,60}$`
+	SpannerDatabaseNameRegex = `^projects\/[a-z](?:[-a-z0-9]{4,28}[a-z0-9])?\/instances\/[a-z0-9-]{6,33}\/databases\/[a-z][a-z0-9_\-]*[a-z0-9]{2,60}$`
+	SpannerTableIdRegex      = `^[a-zA-Z0-9_-]{1,50}$`
+	SpannerTableNameRegex    = `^projects\/[a-z](?:[-a-z0-9]{4,28}[a-z0-9])?\/instances\/[a-z0-9-]{6,33}\/databases\/[a-z][a-z0-9_\-]*[a-z0-9]{2,60}\/tables\/[a-zA-Z0-9_-]{1,50}$`
+	SpannerBackupIdRegex     = `^[a-z][a-z0-9_\-]*[a-z0-9]{2,60}$`
+	SpannerBackupNameRegex   = `^projects\/[a-z](?:[-a-z0-9]{4,28}[a-z0-9])?\/instances\/[a-z0-9-]{6,33}\/backups\/[a-z][a-z0-9_\-]*[a-z0-9]{2,60}$`
+	SpannerColumnIdRegex     = `^[a-zA-Z0-9_-]{1,50}$`
+)
 
-// Description describes the validation in plain text formatting.
-func (validator durationStringAtLeastSecondsValidator) Description(_ context.Context) string {
-	return fmt.Sprintf("duration must be at least %ds", validator.minDuration)
-}
+// ValidateArgument validates an argument against the provided regex and returns either true or false
+func ValidateArgument(value string, regex string) bool {
+	// Validate the value field using regex
+	validateName := regexp.MustCompile(regex)
+	validatedName := validateName.MatchString(value)
 
-// MarkdownDescription describes the validation in Markdown formatting.
-func (validator durationStringAtLeastSecondsValidator) MarkdownDescription(ctx context.Context) string {
-	return validator.Description(ctx)
-}
-
-// ValidateString performs the validation.
-func (v durationStringAtLeastSecondsValidator) ValidateString(ctx context.Context, request validator.StringRequest, response *validator.StringResponse) {
-	if request.ConfigValue.IsNull() || request.ConfigValue.IsUnknown() {
-		return
-	}
-
-	// Get the value
-	value := request.ConfigValue.ValueString()
-	// Split the value
-	valueParts := strings.Split(value, "")
-
-	// Parse the duration to int
-	duration, err := strconv.Atoi(valueParts[0])
-	if err != nil {
-		response.Diagnostics.Append(validatordiag.InvalidAttributeValueDiagnostic(
-			request.Path,
-			v.Description(ctx),
-			value,
-		))
-
-		return
-	}
-
-	if duration < v.minDuration {
-		response.Diagnostics.Append(validatordiag.InvalidAttributeValueDiagnostic(
-			request.Path,
-			v.Description(ctx),
-			value,
-		))
-
-		return
-	}
-}
-
-// DurationStringAtLeastSeconds returns a validator which ensures that any configured
-// attribute value is a duration string greater than or equal to the given minimum.
-func DurationStringAtLeastSeconds(minDuration int) validator.String {
-	if minDuration < 0 {
-		return nil
-	}
-
-	return durationStringAtLeastSecondsValidator{
-		minDuration: minDuration,
-	}
+	return validatedName
 }

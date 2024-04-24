@@ -37,3 +37,4 @@ website/vendor
 
 local.env
 key-**.json
+**.tfvars
