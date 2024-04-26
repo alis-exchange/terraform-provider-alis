@@ -21,7 +21,7 @@ resource "alis_google_bigtable_table" "test" {
     },
   ]
   deletion_protection = false
-#  change_stream_retention = "86400s"
+  #  change_stream_retention = "86400s"
 }
 
 output "test_table" {

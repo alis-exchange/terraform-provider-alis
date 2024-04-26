@@ -16,7 +16,7 @@ resource "alis_google_bigtable_table_iam_binding" "editor" {
   instance = var.ALIS_OS_BIGTABLE_INSTANCE
   table    = "tf-test"
   role     = "roles/bigtable.user"
-  members  = [
+  members = [
     "serviceAccount:${var.ALIS_OS_SERVICE_ACCOUNT}"
   ]
 }

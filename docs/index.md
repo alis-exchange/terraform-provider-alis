@@ -15,15 +15,14 @@ description: |-
 ```terraform
 terraform {
   required_providers {
-    google = {
+    alis = {
       source = "alis.exchange/db/alis"
     }
   }
   required_version = ">= 1.1.0"
 }
 
-provider "google" {
-  host = "localhost:8080"
+provider "alis" {
 }
 ```
 
@@ -33,6 +32,6 @@ provider "google" {
 ### Optional
 
 - `access_token` (String)
-- `credentials` (String)
+- `credentials` (String) A JSON string of Google Cloud credentials.
 - `host` (String)
-- `project` (String)
+- `project` (String) The Google Cloud project ID.

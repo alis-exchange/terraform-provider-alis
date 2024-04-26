@@ -16,7 +16,7 @@ resource "alis_google_spanner_table" "test" {
   instance = var.ALIS_OS_SPANNER_INSTANCE
   database = "tf-test"
   name     = "tftest"
-  schema   = {
+  schema = {
     columns = [
       {
         name           = "id",
