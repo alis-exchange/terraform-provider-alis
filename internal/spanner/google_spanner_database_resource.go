@@ -88,16 +88,16 @@ func (r *spannerDatabaseResource) Schema(_ context.Context, _ resource.SchemaReq
 				Validators: []validator.String{
 					stringvalidator.RegexMatches(regexp.MustCompile(`^[a-z][a-z0-9_\-]*[a-z0-9]$`), "Name must be a valid Spanner Database ID"),
 				},
-				Description: `A unique identifier for the database, which cannot be changed after
-				the instance is created. Values are of the form [a-z][-a-z0-9]*[a-z0-9].`,
+				Description: "A unique identifier for the database, which cannot be changed after\n" +
+					"the instance is created. Values are of the form `[a-z][-a-z0-9]*[a-z0-9]`.",
 			},
 			"project": schema.StringAttribute{
 				Required:    true,
-				Description: `The Google Cloud project ID.`,
+				Description: "The Google Cloud project ID.",
 			},
 			"instance": schema.StringAttribute{
 				Required:    true,
-				Description: `The Spanner instance ID.`,
+				Description: "The Spanner instance ID.",
 			},
 			"dialect": schema.StringAttribute{
 				Optional: true,
@@ -108,23 +108,23 @@ func (r *spannerDatabaseResource) Schema(_ context.Context, _ resource.SchemaReq
 					stringplanmodifier.RequiresReplace(),
 					stringplanmodifier.UseStateForUnknown(),
 				},
-				Description: `The dialect of the Cloud Spanner Database.
-				If it is not provided, "GOOGLE_STANDARD_SQL" will be used. Possible values: ["GOOGLE_STANDARD_SQL", "POSTGRESQL"]`,
+				Description: "The dialect of the Cloud Spanner Database.\n" +
+					"If it is not provided, `GOOGLE_STANDARD_SQL` will be used. Possible values: [`GOOGLE_STANDARD_SQL`, `POSTGRESQL`]",
 			},
 			"enable_drop_protection": schema.BoolAttribute{
 				Optional:    true,
-				Description: `Whether drop protection is enabled for this database. Defaults to false.`,
+				Description: "Whether drop protection is enabled for this database. Defaults to false.",
 			},
 			"encryption_config": schema.SingleNestedAttribute{
 				Optional: true,
 				Attributes: map[string]schema.Attribute{
 					"kms_key_name": schema.StringAttribute{
 						Required: true,
-						Description: `Fully qualified name of the KMS key to use to encrypt this database. This key must exist
-						in the same location as the Spanner Database.`,
+						Description: "Fully qualified name of the KMS key to use to encrypt this database. This key must exist\n" +
+							"in the same location as the Spanner Database.",
 					},
 				},
-				Description: `Encryption configuration for the database`,
+				Description: "Encryption configuration for the database",
 			},
 			"version_retention_period": schema.StringAttribute{
 				Optional: true,
@@ -136,22 +136,19 @@ func (r *spannerDatabaseResource) Schema(_ context.Context, _ resource.SchemaReq
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
-				Description: `The retention period for the database. The retention period must be between 1 hour
-				and 7 days, and can be specified in days, hours, minutes, or seconds. For example,
-				the values 1d, 24h, 1440m, and 86400s are equivalent. Default value is 1h.
-				If this property is used, you must avoid adding new DDL statements to 'ddl' that
-				update the database's version_retention_period.`,
+				Description: "The retention period for the database. The retention period must be between 1 hour\n" +
+					"and 7 days, and must be specified in seconds. For example, 86400s is equivalent to 1 day.",
 			},
 			"state": schema.StringAttribute{
 				Computed:    true,
-				Description: `An explanation of the status of the database.`,
+				Description: "An explanation of the status of the database.",
 			},
 			"create_time": schema.StringAttribute{
 				Computed: true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
-				Description: `The time at which the database was created.`,
+				Description: "The time at which the database was created.",
 			},
 			"earliest_version_time": schema.StringAttribute{
 				Computed: true,

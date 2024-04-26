@@ -77,8 +77,10 @@ func (r *tableResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				Description: "The name of the Bigtable instance.",
 			},
 			"deletion_protection": schema.BoolAttribute{
-				Required:    true,
-				Description: "A field to make the table protected against data loss i.e. when set to PROTECTED, deleting the table, the column families in the table, and the instance containing the table would be prohibited. If not provided, currently deletion protection will be set to UNPROTECTED as it is the API default value.",
+				Required: true,
+				Description: "A field to make the table protected against data loss i.e. when set to `PROTECTED`, deleting the table,\n" +
+					"the column families in the table, and the instance containing the table would be prohibited.\n" +
+					"If not provided, currently deletion protection will be set to `UNPROTECTED` as it is the API default value.",
 			},
 			"change_stream_retention": schema.StringAttribute{
 				Optional: true,

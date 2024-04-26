@@ -101,12 +101,12 @@ func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaReques
 		Attributes: map[string]schema.Attribute{
 			"name": schema.StringAttribute{
 				Required: true,
-				Description: `The name of the table.
-				The name must satisfy the expression ^[a-zA-Z0-9_-]{1,50}$`,
+				Description: "The name of the table.\n" +
+					"The name must satisfy the expression `^[a-zA-Z0-9_-]{1,50}$`",
 			},
 			"project": schema.StringAttribute{
 				Required:    true,
-				Description: `The Google Cloud project ID in which the table belongs.`,
+				Description: "The Google Cloud project ID in which the table belongs.",
 			},
 			"instance": schema.StringAttribute{
 				Required:    true,
@@ -114,7 +114,7 @@ func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaReques
 			},
 			"database": schema.StringAttribute{
 				Required:    true,
-				Description: `The name of the parent database.`,
+				Description: "The name of the parent database.",
 			},
 			"schema": schema.SingleNestedAttribute{
 				Required: true,
@@ -130,61 +130,61 @@ func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaReques
 							Attributes: map[string]schema.Attribute{
 								"name": schema.StringAttribute{
 									Required: true,
-									Description: `The name of the column. 
-									The name must contain only letters (a-z, A-Z), numbers (0-9), or underscores (_), and must start with a letter and not end in an underscore. 
-									The maximum length is 128 characters.`,
+									Description: "The name of the column.\n" +
+										"The name must contain only letters (a-z, A-Z), numbers (0-9), or underscores (_), and must start with a letter and not end in an underscore.\n" +
+										"The maximum length is 128 characters.",
 								},
 								"is_primary_key": schema.BoolAttribute{
 									Optional: true,
-									Description: `Indicates if the column is part of the primary key. 
-									Multiple columns can be specified as primary keys to create a composite primary key. 
-									Primary key columns must be non-null.`,
+									Description: "Indicates if the column is part of the primary key.\n" +
+										"Multiple columns can be specified as primary keys to create a composite primary key.\n" +
+										"Primary key columns must be non-null.",
 								},
 								"auto_increment": schema.BoolAttribute{
 									Optional: true,
-									Description: `Indicates if the column is auto-incrementing. 
-									The column must be of type INT64 or FLOAT64.`,
+									Description: "Indicates if the column is auto-incrementing.\n" +
+										"The column must be of type `INT64` or `FLOAT64`.",
 								},
 								"unique": schema.BoolAttribute{
 									Optional:    true,
-									Description: `Indicates if the column is unique.`,
+									Description: "Indicates if the column is unique.",
 								},
 								"type": schema.StringAttribute{
 									Required: true,
 									Validators: []validator.String{
 										stringvalidator.OneOf(services.SpannerTableDataTypes...),
 									},
-									Description: `The data type of the column.
-									Valid types are: BOOL, INT64, FLOAT64, STRING, BYTES, DATE, TIMESTAMP, JSON.`,
+									Description: "The data type of the column.\n" +
+										"Valid types are: `BOOL`, `INT64`, `FLOAT64`, `STRING`, `BYTES`, `DATE`, `TIMESTAMP`, `JSON`.",
 								},
 								"size": schema.Int64Attribute{
 									Optional:    true,
-									Description: `The maximum size of the column.`,
+									Description: "The maximum size of the column.",
 								},
 								"precision": schema.Int64Attribute{
 									Optional: true,
-									Description: `The maximum number of digits in the column.
-									This is only applicable to columns of type FLOAT64.
-									The maximum is 17`,
+									Description: "The maximum number of digits in the column.\n" +
+										"This is only applicable to columns of type `FLOAT64`.\n" +
+										"The maximum is 17",
 								},
 								"scale": schema.Int64Attribute{
 									Optional: true,
-									Description: `The maximum number of digits after the decimal point in the column.
-									This is only applicable to columns of type FLOAT64.`,
+									Description: "The maximum number of digits after the decimal point in the column.\n" +
+										"This is only applicable to columns of type `FLOAT64`.",
 								},
 								"required": schema.BoolAttribute{
 									Optional:    true,
-									Description: `Indicates if the column is required.`,
+									Description: "Indicates if the column is required.",
 								},
 								"default_value": schema.StringAttribute{
 									Optional: true,
-									Description: `The default value of the column.
-									The default value must be compatible with the column type.
-									For example, a default value of "true" is valid for a BOOL or STRING column, but not for an INT64 column.`,
+									Description: "The default value of the column.\n" +
+										"The default value must be compatible with the column type.\n" +
+										"For example, a default value of \"true\" is valid for a `BOOL` or `STRING` column, but not for an `INT64` column.",
 								},
 							},
 						},
-						Description: `The columns of the table.`,
+						Description: "The columns of the table.",
 					},
 					"indices": schema.ListNestedAttribute{
 						Optional: true,
@@ -197,25 +197,25 @@ func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaReques
 							Attributes: map[string]schema.Attribute{
 								"name": schema.StringAttribute{
 									Required: true,
-									Description: `The name of the index.
-									The name must contain only letters (a-z, A-Z), numbers (0-9), or hyphens (-), and must start with a letter and not end in a hyphen.`,
+									Description: "The name of the index.\n" +
+										"The name must contain only letters (a-z, A-Z), numbers (0-9), or hyphens (-), and must start with a letter and not end in a hyphen.",
 								},
 								"columns": schema.SetAttribute{
 									Required:    true,
 									ElementType: types.StringType,
-									Description: `The columns that make up the index.
-									The order of the columns is significant.`,
+									Description: "The columns that make up the index.\n" +
+										"The order of the columns is significant.",
 								},
 								"unique": schema.BoolAttribute{
 									Optional:    true,
-									Description: `Indicates if the index is unique.`,
+									Description: "Indicates if the index is unique.",
 								},
 							},
 						},
-						Description: `The indices/indexes of the table.`,
+						Description: "The indices/indexes of the table.",
 					},
 				},
-				Description: `The schema of the table.`,
+				Description: "The schema of the table.",
 			},
 		},
 	}
