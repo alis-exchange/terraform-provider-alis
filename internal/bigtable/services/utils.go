@@ -38,7 +38,7 @@ func GetGcPolicyFromJSON(inputPolicy map[string]interface{}, isTopLevel bool) (b
 		}
 
 		if childPolicy["max_version"] != nil {
-			version := childPolicy["max_version"].(int32)
+			version := childPolicy["max_version"].(float64)
 
 			policies = append(policies, bigtable.MaxVersionsPolicy(int(version)))
 		}
@@ -52,6 +52,9 @@ func GetGcPolicyFromJSON(inputPolicy map[string]interface{}, isTopLevel bool) (b
 		}
 	}
 
+	if inputPolicy["mode"] == nil {
+		return policies[0], nil
+	}
 	switch strings.ToLower(inputPolicy["mode"].(string)) {
 	case strings.ToLower(GCPolicyModeUnion):
 		return bigtable.UnionPolicy(policies...), nil
@@ -81,8 +84,8 @@ func GcPolicyToGcRuleMap(gcPolicy bigtable.GCPolicy, topLevel bool) (map[string]
 		}
 		break
 	case bigtable.PolicyMaxVersion:
-		// Assert the type to get int32
-		version := int32(gcPolicy.(bigtable.MaxVersionsGCPolicy))
+		// Assert the type to get float64
+		version := float64(gcPolicy.(bigtable.MaxVersionsGCPolicy))
 		if topLevel {
 			rule := make(map[string]interface{})
 			rule["max_version"] = version
@@ -144,7 +147,7 @@ func validateNestedPolicy(p map[string]interface{}, isTopLevel bool) error {
 
 	mode, modeOk := p["mode"]
 	rules, arrOk := rulesObj.([]interface{})
-	_, vCastOk := maxVersion.(int32)
+	_, vCastOk := maxVersion.(float64)
 	_, aCastOk := maxAge.(string)
 
 	if rulesOk && !arrOk {

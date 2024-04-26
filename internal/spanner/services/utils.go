@@ -26,12 +26,11 @@ const (
 	SpannerTableDataType_BYTES
 	SpannerTableDataType_DATE
 	SpannerTableDataType_TIMESTAMP
-	SpannerTableDataType_NUMERIC
 	SpannerTableDataType_JSON
 )
 
 func (t SpannerTableDataType) String() string {
-	return [...]string{"BOOL", "INT64", "FLOAT64", "STRING", "BYTES", "DATE", "TIMESTAMP", "NUMERIC", "JSON"}[t-1]
+	return [...]string{"BOOL", "INT64", "FLOAT64", "STRING", "BYTES", "DATE", "TIMESTAMP", "JSON"}[t-1]
 }
 
 // SpannerTableDataTypes is a list of all Spanner table column data types.
@@ -43,7 +42,6 @@ var SpannerTableDataTypes = []string{
 	SpannerTableDataType_BYTES.String(),
 	SpannerTableDataType_DATE.String(),
 	SpannerTableDataType_TIMESTAMP.String(),
-	SpannerTableDataType_NUMERIC.String(),
 	SpannerTableDataType_JSON.String(),
 }
 
@@ -248,8 +246,6 @@ func ParseSchemaToStruct(schema *SpannerTableSchema) (interface{}, error) {
 			instance.AddField(pascalCaseColumnName, datatypes.Date{}, fmt.Sprintf("gorm:\"%s\"", tags))
 		case SpannerTableDataType_TIMESTAMP.String():
 			instance.AddField(pascalCaseColumnName, time.Time{}, fmt.Sprintf("gorm:\"%s\"", tags))
-		case SpannerTableDataType_NUMERIC.String():
-			instance.AddField(pascalCaseColumnName, float64(0), fmt.Sprintf("gorm:\"%s\"", tags))
 		case SpannerTableDataType_JSON.String():
 			instance.AddField(pascalCaseColumnName, datatypes.JSON{}, fmt.Sprintf("gorm:\"%s\"", tags))
 		default:

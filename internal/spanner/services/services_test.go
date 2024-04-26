@@ -2,14 +2,40 @@ package services
 
 import (
 	"context"
+	"fmt"
+	"log"
+	"os"
 	"reflect"
 	"testing"
+	"time"
 
 	"cloud.google.com/go/iam/apiv1/iampb"
 	"cloud.google.com/go/spanner/admin/database/apiv1/databasepb"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
+
+var (
+	// TestProject is the project used for testing.
+	TestProject string
+	// TestInstance is the instance used for testing.
+	TestInstance string
+)
+
+func init() {
+	TestProject = os.Getenv("ALIS_OS_PROJECT")
+	TestInstance = os.Getenv("ALIS_OS_INSTANCE")
+
+	if TestProject == "" {
+		log.Fatalf("ALIS_OS_PROJECT must be set for integration tests")
+	}
+
+	if TestInstance == "" {
+		log.Fatalf("ALIS_OS_INSTANCE must be set for integration tests")
+	}
+}
 
 func TestCreateSpannerDatabase(t *testing.T) {
 	type args struct {
@@ -24,7 +50,19 @@ func TestCreateSpannerDatabase(t *testing.T) {
 		want    *databasepb.Database
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "Test_CreateSpannerDatabase",
+			args: args{
+				ctx:        context.Background(),
+				parent:     fmt.Sprintf("projects/%s/instances/%s", TestProject, TestInstance),
+				databaseId: "tf-test",
+				database: &databasepb.Database{
+					VersionRetentionPeriod: "4h",
+					DatabaseDialect:        databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL,
+					EnableDropProtection:   false,
+				},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -33,7 +71,15 @@ func TestCreateSpannerDatabase(t *testing.T) {
 				t.Errorf("CreateSpannerDatabase() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if !reflect.DeepEqual(got, tt.want) {
+
+			database, err := got.Operation.Wait(tt.args.ctx)
+			if err != nil {
+				t.Errorf("CreateSpannerDatabase() error = %v", err)
+				return
+			}
+			got.CloseClientConn()
+
+			if !reflect.DeepEqual(database, tt.want) {
 				t.Errorf("CreateSpannerDatabase() got = %v, want %v", got, tt.want)
 			}
 		})
@@ -50,7 +96,15 @@ func TestGetSpannerDatabase(t *testing.T) {
 		want    *databasepb.Database
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "Test_GetSpannerDatabase",
+			args: args{
+				ctx:  context.Background(),
+				name: fmt.Sprintf("projects/%s/instances/%s/databases/%s", TestProject, TestInstance, "tf-test"),
+			},
+			want:    &databasepb.Database{},
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -78,11 +132,27 @@ func TestUpdateSpannerDatabase(t *testing.T) {
 		want    *databasepb.Database
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "Test_UpdateSpannerDatabase",
+			args: args{
+				ctx: context.Background(),
+				database: &databasepb.Database{
+					Name:                   fmt.Sprintf("projects/%s/instances/%s/databases/%s", TestProject, TestInstance, "tf-test"),
+					EnableDropProtection:   false,
+					VersionRetentionPeriod: "1h",
+				},
+				updateMask: &fieldmaskpb.FieldMask{
+					Paths: []string{"enable_drop_protection", "version_retention_period"},
+				},
+				allowMissing: false,
+			},
+			want:    &databasepb.Database{},
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := UpdateSpannerDatabase(tt.args.ctx, tt.args.database, tt.args.updateMask, tt.args.allowMissing)
+			got, err := UpdateSpannerDatabase(tt.args.ctx, tt.args.database, tt.args.updateMask)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("UpdateSpannerDatabase() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -107,7 +177,18 @@ func TestListSpannerDatabases(t *testing.T) {
 		want1   string
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "Test_ListSpannerDatabases",
+			args: args{
+				ctx:       context.Background(),
+				parent:    fmt.Sprintf("projects/%s/instances/%s", TestProject, TestInstance),
+				pageSize:  1,
+				pageToken: "",
+			},
+			want:    []*databasepb.Database{},
+			want1:   "",
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -136,7 +217,15 @@ func TestDeleteSpannerDatabase(t *testing.T) {
 		want    *emptypb.Empty
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "DeleteSpannerDatabase",
+			args: args{
+				ctx:  context.Background(),
+				name: fmt.Sprintf("projects/%s/instances/%s/databases/%s", TestProject, TestInstance, "tf-test"),
+			},
+			want:    &emptypb.Empty{},
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -165,7 +254,73 @@ func TestCreateSpannerTable(t *testing.T) {
 		want    *SpannerTable
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "Test_CreateSpannerTable",
+			args: args{
+				ctx:     context.Background(),
+				parent:  fmt.Sprintf("projects/%s/instances/%s/databases/%s", TestProject, TestInstance, "tf-test"),
+				tableId: "tftest",
+				table: &SpannerTable{
+					Name: "tftest",
+					Schema: &SpannerTableSchema{
+						Columns: []*SpannerTableColumn{
+							{
+								Name:         "id",
+								IsPrimaryKey: wrapperspb.Bool(false),
+								Unique:       wrapperspb.Bool(false),
+								Type:         "INT64",
+								Size:         wrapperspb.Int64(255),
+								Required:     wrapperspb.Bool(true),
+							},
+							{
+								Name:         "display_name",
+								IsPrimaryKey: wrapperspb.Bool(false),
+								Unique:       wrapperspb.Bool(false),
+								Type:         "STRING",
+								Size:         wrapperspb.Int64(255),
+							},
+							{
+								Name:         "is_active",
+								IsPrimaryKey: wrapperspb.Bool(false),
+								Unique:       wrapperspb.Bool(false),
+								Type:         "BOOL",
+							},
+							{
+								Name:         "latest_return",
+								IsPrimaryKey: wrapperspb.Bool(false),
+								Unique:       wrapperspb.Bool(false),
+								Type:         "FLOAT64",
+								DefaultValue: wrapperspb.String("0.0"),
+							},
+							{
+								Name:         "inception_date",
+								IsPrimaryKey: wrapperspb.Bool(false),
+								Unique:       wrapperspb.Bool(false),
+								Type:         "DATE",
+							},
+							{
+								Name:         "last_refreshed_at",
+								IsPrimaryKey: wrapperspb.Bool(false),
+								Unique:       wrapperspb.Bool(false),
+								Type:         "TIMESTAMP",
+							},
+							{
+								Name:         "metadata",
+								IsPrimaryKey: wrapperspb.Bool(false),
+								Unique:       wrapperspb.Bool(false),
+								Type:         "JSON",
+							},
+							{
+								Name:         "data",
+								IsPrimaryKey: wrapperspb.Bool(false),
+								Unique:       wrapperspb.Bool(false),
+								Type:         "BYTES",
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -191,7 +346,15 @@ func TestGetSpannerTable(t *testing.T) {
 		want    *SpannerTable
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "Test_GetSpannerTable",
+			args: args{
+				ctx:  context.Background(),
+				name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "tf-test", "tftest"),
+			},
+			want:    &SpannerTable{},
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -210,6 +373,7 @@ func TestUpdateSpannerTable(t *testing.T) {
 	type args struct {
 		ctx          context.Context
 		table        *SpannerTable
+		updateMask   *fieldmaskpb.FieldMask
 		allowMissing bool
 	}
 	tests := []struct {
@@ -218,11 +382,88 @@ func TestUpdateSpannerTable(t *testing.T) {
 		want    *SpannerTable
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "Test_UpdateSpannerTable",
+			args: args{
+				ctx: context.Background(),
+				table: &SpannerTable{
+					Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "tf-test", "tftest"),
+					Schema: &SpannerTableSchema{
+						Columns: []*SpannerTableColumn{
+							{
+								Name:         "id",
+								IsPrimaryKey: wrapperspb.Bool(false),
+								Unique:       wrapperspb.Bool(false),
+								Type:         "INT64",
+								Size:         wrapperspb.Int64(255),
+								Required:     wrapperspb.Bool(true),
+							},
+							{
+								Name:         "display_name",
+								IsPrimaryKey: wrapperspb.Bool(false),
+								Unique:       wrapperspb.Bool(false),
+								Type:         "STRING",
+								Size:         wrapperspb.Int64(255),
+							},
+							{
+								Name:         "is_active",
+								IsPrimaryKey: wrapperspb.Bool(false),
+								Unique:       wrapperspb.Bool(false),
+								Type:         "BOOL",
+							},
+							{
+								Name:         "latest_return",
+								IsPrimaryKey: wrapperspb.Bool(false),
+								Unique:       wrapperspb.Bool(false),
+								Type:         "FLOAT64",
+								DefaultValue: wrapperspb.String("0.0"),
+							},
+							{
+								Name:         "inception_date",
+								IsPrimaryKey: wrapperspb.Bool(false),
+								Unique:       wrapperspb.Bool(false),
+								Type:         "DATE",
+							},
+							{
+								Name:         "last_refreshed_at",
+								IsPrimaryKey: wrapperspb.Bool(false),
+								Unique:       wrapperspb.Bool(false),
+								Type:         "TIMESTAMP",
+							},
+							{
+								Name:         "metadata",
+								IsPrimaryKey: wrapperspb.Bool(false),
+								Unique:       wrapperspb.Bool(false),
+								Type:         "JSON",
+							},
+							{
+								Name:         "data",
+								IsPrimaryKey: wrapperspb.Bool(false),
+								Unique:       wrapperspb.Bool(false),
+								Type:         "BYTES",
+							},
+						},
+						//Indices: []*SpannerTableIndex{
+						//	{
+						//		Name:    "display_name_index",
+						//		Columns: []string{"display_name"},
+						//		Unique:  wrapperspb.Bool(false),
+						//	},
+						//},
+					},
+				},
+				updateMask: &fieldmaskpb.FieldMask{
+					Paths: []string{"schema.indices"},
+				},
+				allowMissing: false,
+			},
+			want:    &SpannerTable{},
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := UpdateSpannerTable(tt.args.ctx, tt.args.table, tt.args.allowMissing)
+			got, err := UpdateSpannerTable(tt.args.ctx, tt.args.table, tt.args.updateMask, tt.args.allowMissing)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("UpdateSpannerTable() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -244,7 +485,15 @@ func TestListSpannerTables(t *testing.T) {
 		want    []*SpannerTable
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "Test_ListSpannerTables",
+			args: args{
+				ctx:    context.Background(),
+				parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s", TestProject, TestInstance, "tf-test"),
+			},
+			want:    []*SpannerTable{},
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -270,7 +519,13 @@ func TestDeleteSpannerTable(t *testing.T) {
 		want    *emptypb.Empty
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "Test_DeleteSpannerTable",
+			args: args{
+				ctx:  context.Background(),
+				name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "tf-test", "tftest"),
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -300,7 +555,19 @@ func TestCreateSpannerBackup(t *testing.T) {
 		want    *databasepb.Backup
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "Test_CreateSpannerBackup",
+			args: args{
+				ctx:      context.Background(),
+				parent:   fmt.Sprintf("projects/%s/instances/%s", TestProject, TestInstance),
+				backupId: "tf-test-default",
+				backup: &databasepb.Backup{
+					Database:    fmt.Sprintf("projects/%s/instances/%s/databases/%s", TestProject, TestInstance, "tf-test"),
+					VersionTime: nil,
+					ExpireTime:  timestamppb.New(time.Now().Add(24 * time.Hour)),
+				},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -309,7 +576,15 @@ func TestCreateSpannerBackup(t *testing.T) {
 				t.Errorf("CreateSpannerBackup() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if !reflect.DeepEqual(got, tt.want) {
+
+			backup, err := got.Operation.Wait(tt.args.ctx)
+			if err != nil {
+				t.Errorf("CreateSpannerBackup() error = %v", err)
+				return
+			}
+			got.CloseClientConn()
+
+			if !reflect.DeepEqual(backup, tt.want) {
 				t.Errorf("CreateSpannerBackup() got = %v, want %v", got, tt.want)
 			}
 		})
@@ -327,7 +602,15 @@ func TestGetSpannerBackup(t *testing.T) {
 		want    *databasepb.Backup
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "Test_GetSpannerBackup",
+			args: args{
+				ctx:  context.Background(),
+				name: fmt.Sprintf("projects/%s/instances/%s/backups/%s", TestProject, TestInstance, "tf-test-default"),
+			},
+			want:    &databasepb.Backup{},
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -355,15 +638,31 @@ func TestUpdateSpannerBackup(t *testing.T) {
 		want    *databasepb.Backup
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "Test_UpdateSpannerBackup",
+			args: args{
+				ctx: context.Background(),
+				backup: &databasepb.Backup{
+					Name:       fmt.Sprintf("projects/%s/instances/%s/backups/%s", TestProject, TestInstance, "tf-test-default"),
+					ExpireTime: timestamppb.New(time.Now().Add(6 * time.Hour)),
+				},
+				updateMask: &fieldmaskpb.FieldMask{
+					Paths: []string{"expire_time"},
+				},
+				allowMissing: false,
+			},
+			want:    &databasepb.Backup{},
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := UpdateSpannerBackup(tt.args.ctx, tt.args.backup, tt.args.updateMask, tt.args.allowMissing)
+			got, err := UpdateSpannerBackup(tt.args.ctx, tt.args.backup, tt.args.updateMask)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("UpdateSpannerBackup() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
+
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("UpdateSpannerBackup() got = %v, want %v", got, tt.want)
 			}
@@ -385,7 +684,19 @@ func TestListSpannerBackups(t *testing.T) {
 		want1   string
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "Test_ListSpannerBackups",
+			args: args{
+				ctx:       context.Background(),
+				parent:    fmt.Sprintf("projects/%s/instances/%s", TestProject, TestInstance),
+				filter:    "",
+				pageSize:  1,
+				pageToken: "",
+			},
+			want:    []*databasepb.Backup{},
+			want1:   "",
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -414,7 +725,15 @@ func TestDeleteSpannerBackup(t *testing.T) {
 		want    *emptypb.Empty
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "Test_DeleteSpannerBackup",
+			args: args{
+				ctx:  context.Background(),
+				name: fmt.Sprintf("projects/%s/instances/%s/backups/%s", TestProject, TestInstance, "tf-test-default"),
+			},
+			want:    &emptypb.Empty{},
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -443,7 +762,27 @@ func TestSetSpannerDatabaseIamPolicy(t *testing.T) {
 		want    *iampb.Policy
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "Test_SetSpannerDatabaseIamPolicy",
+			args: args{
+				ctx:    context.Background(),
+				parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s", TestProject, TestInstance, "tf-test"),
+				policy: &iampb.Policy{
+					Version: 1,
+					Bindings: []*iampb.Binding{
+						{
+							Role:    "roles/editor",
+							Members: []string{"serviceAccount:alis-exchange@alis-px-dev-0s6.iam.gserviceaccount.com"},
+						},
+					},
+				},
+				updateMask: &fieldmaskpb.FieldMask{
+					Paths: []string{"bindings"},
+				},
+			},
+			want:    &iampb.Policy{},
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -470,7 +809,18 @@ func TestGetSpannerDatabaseIamPolicy(t *testing.T) {
 		want    *iampb.Policy
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "Test_GetSpannerDatabaseIamPolicy",
+			args: args{
+				ctx:    context.Background(),
+				parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s", TestProject, TestInstance, "tf-test"),
+				options: &iampb.GetPolicyOptions{
+					RequestedPolicyVersion: 1,
+				},
+			},
+			want:    &iampb.Policy{},
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -497,7 +847,16 @@ func TestTestSpannerDatabaseIamPermissions(t *testing.T) {
 		want    []string
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "Test_TestSpannerDatabaseIamPermissions",
+			args: args{
+				ctx:         context.Background(),
+				parent:      fmt.Sprintf("projects/%s/instances/%s/databases/%s", TestProject, TestInstance, "tf-test"),
+				permissions: []string{"spanner.databases.get"},
+			},
+			want:    []string{"spanner.databases.get"},
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

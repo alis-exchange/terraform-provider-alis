@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"cloud.google.com/go/iam/apiv1/iampb"
+	databaseApiV1 "cloud.google.com/go/spanner/admin/database/apiv1"
 	spanner "cloud.google.com/go/spanner/admin/database/apiv1"
 	"cloud.google.com/go/spanner/admin/database/apiv1/databasepb"
 	spannergorm "github.com/googleapis/go-gorm-spanner"
@@ -43,7 +44,7 @@ type SpannerTableColumn struct {
 	IsPrimaryKey *wrapperspb.BoolValue
 	// Whether the column is auto-incrementing
 	// This is typically paired with is_primary_key=true
-	// This is only valid for numeric columns i.e. INT64, FLOAT64, NUMERIC
+	// This is only valid for numeric columns i.e. INT64, FLOAT64
 	AutoIncrement *wrapperspb.BoolValue
 	// Whether the values in the column are unique
 	Unique *wrapperspb.BoolValue
@@ -55,10 +56,10 @@ type SpannerTableColumn struct {
 	// For BYTES columns, this is the maximum length of the column in bytes.
 	Size *wrapperspb.Int64Value
 	// The precision of the column.
-	// This is typically paired with numeric columns i.e. INT64, FLOAT64, NUMERIC
+	// This is typically paired with numeric columns i.e. INT64, FLOAT64
 	Precision *wrapperspb.Int64Value
 	// The scale of the column.
-	// This is typically paired with numeric columns i.e. INT64, FLOAT64, NUMERIC
+	// This is typically paired with numeric columns i.e. INT64, FLOAT64
 	Scale *wrapperspb.Int64Value
 	// Whether the column is nullable
 	Required *wrapperspb.BoolValue
@@ -95,6 +96,12 @@ type SpannerTable struct {
 	Schema *SpannerTableSchema
 }
 
+// DatabaseOperationResponse represents a database operation response.
+type DatabaseOperationResponse[T interface{}] struct {
+	Operation       *T
+	CloseClientConn func() error
+}
+
 // CreateSpannerDatabase creates a new Spanner database.
 //
 // Params:
@@ -104,7 +111,7 @@ type SpannerTable struct {
 //   - database: *databasepb.Database - Required. The database to create.
 //
 // Returns: *databasepb.Database
-func CreateSpannerDatabase(ctx context.Context, parent string, databaseId string, database *databasepb.Database) (*databasepb.Database, error) {
+func CreateSpannerDatabase(ctx context.Context, parent string, databaseId string, database *databasepb.Database) (*DatabaseOperationResponse[databaseApiV1.CreateDatabaseOperation], error) {
 	// Validate arguments
 	// Validate database id
 	if valid := utils.ValidateArgument(databaseId, utils.SpannerDatabaseIdRegex); !valid {
@@ -124,16 +131,19 @@ func CreateSpannerDatabase(ctx context.Context, parent string, databaseId string
 	if err != nil {
 		return nil, err
 	}
-	defer client.Close()
 
 	// Construct create statement
 	createStatement := fmt.Sprintf("CREATE DATABASE `%s`", databaseId)
+	var extraStatements []string
+	if database.GetVersionRetentionPeriod() != "" {
+		extraStatements = append(extraStatements, fmt.Sprintf("ALTER DATABASE `%s` SET OPTIONS(version_retention_period='%s')", databaseId, database.GetVersionRetentionPeriod()))
+	}
 
 	// Create database
-	_, err = client.CreateDatabase(ctx, &databasepb.CreateDatabaseRequest{
+	createDatabaseOperation, err := client.CreateDatabase(ctx, &databasepb.CreateDatabaseRequest{
 		Parent:           parent,
 		CreateStatement:  createStatement,
-		ExtraStatements:  nil,
+		ExtraStatements:  extraStatements,
 		EncryptionConfig: database.GetEncryptionConfig(),
 		DatabaseDialect:  database.GetDatabaseDialect(),
 		ProtoDescriptors: nil,
@@ -142,13 +152,12 @@ func CreateSpannerDatabase(ctx context.Context, parent string, databaseId string
 		return nil, err
 	}
 
-	// Get database state
-	updatedDatabase, err := GetSpannerDatabase(ctx, fmt.Sprintf("%s/databases/%s", parent, databaseId))
-	if err != nil {
-		return nil, err
-	}
-
-	return updatedDatabase, nil
+	return &DatabaseOperationResponse[databaseApiV1.CreateDatabaseOperation]{
+		Operation: createDatabaseOperation,
+		CloseClientConn: func() error {
+			return client.Close()
+		},
+	}, nil
 }
 
 // GetSpannerDatabase gets a Spanner database.
@@ -243,7 +252,7 @@ func ListSpannerDatabases(ctx context.Context, parent string, pageSize int32, pa
 //   - allowMissing: bool - If true and the database does not exist, a new database will be created. Default is false.
 //
 // Returns: *databasepb.Database
-func UpdateSpannerDatabase(ctx context.Context, database *databasepb.Database, updateMask *fieldmaskpb.FieldMask, allowMissing bool) (*databasepb.Database, error) {
+func UpdateSpannerDatabase(ctx context.Context, database *databasepb.Database, updateMask *fieldmaskpb.FieldMask) (*databasepb.Database, error) {
 	// Validate arguments
 	// Ensure database is provided
 	if database == nil {
@@ -260,10 +269,20 @@ func UpdateSpannerDatabase(ctx context.Context, database *databasepb.Database, u
 		if valid := updateMask.IsValid(&databasepb.Database{}); !valid {
 			return nil, status.Error(codes.InvalidArgument, "invalid update mask")
 		}
+
+		// Ensure only valid fields are updated i.e. enable_drop_protection, version_retention_period
+		for _, path := range updateMask.GetPaths() {
+			switch path {
+			case "enable_drop_protection":
+			case "version_retention_period":
+			default:
+				return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("Invalid argument update_mask, only fields `enable_drop_protection` and `version_retention_period` are allowed, got `%s`", path))
+			}
+		}
 	}
-	// If update mask is not provided, ensure allow missing is set
-	if updateMask == nil && !allowMissing {
-		return nil, status.Error(codes.InvalidArgument, "Invalid argument allow_missing, must be true if update_mask is not provided")
+	// If update mask is not provided, return error
+	if updateMask == nil {
+		return nil, status.Error(codes.InvalidArgument, "Invalid argument update_mask, field is required but not provided")
 	}
 
 	// "projects/my-project/instances/my-instance/database/my-db"
@@ -274,44 +293,52 @@ func UpdateSpannerDatabase(ctx context.Context, database *databasepb.Database, u
 	defer client.Close()
 
 	// Get database state
-	db, err := client.GetDatabase(ctx, &databasepb.GetDatabaseRequest{
+	_, err = client.GetDatabase(ctx, &databasepb.GetDatabaseRequest{
 		Name: database.GetName(),
 	})
 	if err != nil {
-		if status.Code(err) != codes.NotFound {
-			return nil, err
-		}
-	}
-	// If backup does not exist, return error
-	if db == nil && !allowMissing {
-		return nil, status.Errorf(codes.NotFound, "Database %s not found, set allow_missing to true to create a new database", database.GetName())
-	}
-	// If backup exists, ensure update mask is provided
-	if db != nil && updateMask == nil {
-		return nil, status.Error(codes.InvalidArgument, "Invalid argument update_mask, field is required but not provided")
+		return nil, err
 	}
 
 	// Deconstruct backup name to get project, instance, cluster and backup id
 	backupNameParts := strings.Split(database.GetName(), "/")
-	project := backupNameParts[1]
-	instance := backupNameParts[3]
 	databaseId := backupNameParts[5]
 
-	// If database is not found and allow missing is set, create the database
-	if db == nil {
-		// Create database
-		return CreateSpannerDatabase(ctx, fmt.Sprintf("projects/%s/instances/%s", project, instance), databaseId, database)
-	}
-
 	// Update database
-	_, err = client.UpdateDatabase(ctx, &databasepb.UpdateDatabaseRequest{
-		Database: database,
-		UpdateMask: &fieldmaskpb.FieldMask{
-			Paths: []string{"enable_drop_protection"},
-		},
-	})
-	if err != nil {
-		return nil, err
+	for _, path := range updateMask.GetPaths() {
+		switch path {
+		case "enable_drop_protection":
+			updateDatabaseOperation, err := client.UpdateDatabase(ctx, &databasepb.UpdateDatabaseRequest{
+				Database:   database,
+				UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"enable_drop_protection"}},
+			})
+			if err != nil {
+				return nil, err
+			}
+
+			// Wait for LRO to complete
+			_, err = updateDatabaseOperation.Wait(ctx)
+			if err != nil {
+				return nil, err
+			}
+
+		case "version_retention_period":
+			updateDatabaseDdlOperation, err := client.UpdateDatabaseDdl(ctx, &databasepb.UpdateDatabaseDdlRequest{
+				Database: database.GetName(),
+				Statements: []string{
+					fmt.Sprintf("ALTER DATABASE `%s` SET OPTIONS(version_retention_period='%s')", databaseId, database.GetVersionRetentionPeriod()),
+				},
+			})
+			if err != nil {
+				return nil, err
+			}
+
+			// Wait for LRO to complete
+			err = updateDatabaseDdlOperation.Wait(ctx)
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	// Get database state
@@ -471,7 +498,7 @@ func TestSpannerDatabaseIamPermissions(ctx context.Context, parent string, permi
 //   - encryptionConfig: *databasepb.CreateBackupEncryptionConfig - Optional. The encryption configuration for the backup.
 //
 // Returns: *databasepb.Backup
-func CreateSpannerBackup(ctx context.Context, parent string, backupId string, backup *databasepb.Backup, encryptionConfig *databasepb.CreateBackupEncryptionConfig) (*databasepb.Backup, error) {
+func CreateSpannerBackup(ctx context.Context, parent string, backupId string, backup *databasepb.Backup, encryptionConfig *databasepb.CreateBackupEncryptionConfig) (*DatabaseOperationResponse[databaseApiV1.CreateBackupOperation], error) {
 	// Validate arguments
 	// Validate parent name
 	if valid := utils.ValidateArgument(parent, utils.InstanceNameRegex); !valid {
@@ -520,18 +547,12 @@ func CreateSpannerBackup(ctx context.Context, parent string, backupId string, ba
 		return nil, err
 	}
 
-	_, err = createBackupOperation.Wait(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	// Get backup state
-	backup, err = GetSpannerBackup(ctx, backup.GetName(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return backup, nil
+	return &DatabaseOperationResponse[databaseApiV1.CreateBackupOperation]{
+		Operation: createBackupOperation,
+		CloseClientConn: func() error {
+			return client.Close()
+		},
+	}, nil
 }
 
 // GetSpannerBackup gets a Spanner database backup.
@@ -629,7 +650,7 @@ func ListSpannerBackups(ctx context.Context, parent string, filter string, pageS
 //   - allowMissing: bool - If true and the backup does not exist, a new backup will be created. Default is false.
 //
 // Returns: *databasepb.Backup
-func UpdateSpannerBackup(ctx context.Context, backup *databasepb.Backup, updateMask *fieldmaskpb.FieldMask, allowMissing bool) (*databasepb.Backup, error) {
+func UpdateSpannerBackup(ctx context.Context, backup *databasepb.Backup, updateMask *fieldmaskpb.FieldMask) (*databasepb.Backup, error) {
 	// Validate arguments
 	// Ensure backup is provided
 	if backup == nil {
@@ -646,17 +667,21 @@ func UpdateSpannerBackup(ctx context.Context, backup *databasepb.Backup, updateM
 		if valid := updateMask.IsValid(&databasepb.Backup{}); !valid {
 			return nil, status.Error(codes.InvalidArgument, "invalid update mask")
 		}
-	}
-	// If update mask is not provided, ensure allow missing is set
-	if updateMask == nil && !allowMissing {
-		return nil, status.Error(codes.InvalidArgument, "Invalid argument allow_missing, must be true if update_mask is not provided")
-	}
 
-	// Deconstruct backup name to get project, instance and backup id
-	backupNameParts := strings.Split(backup.GetName(), "/")
-	project := backupNameParts[1]
-	instance := backupNameParts[3]
-	backupId := backupNameParts[5]
+		// Ensure only valid fields are updated i.e. expire_time, version_time
+		for _, path := range updateMask.GetPaths() {
+			switch path {
+			case "expire_time":
+			case "version_time":
+			default:
+				return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("Invalid argument update_mask, only fields `expire_time` and `version_time` is allowed, got `%s`", path))
+			}
+		}
+	}
+	// If update mask is not provided, return error
+	if updateMask == nil {
+		return nil, status.Error(codes.InvalidArgument, "Invalid argument update_mask, field is required but not provided")
+	}
 
 	// "projects/my-project/instances/my-instance/backups/my-backup"
 	client, err := spanner.NewDatabaseAdminClient(ctx)
@@ -666,7 +691,7 @@ func UpdateSpannerBackup(ctx context.Context, backup *databasepb.Backup, updateM
 	defer client.Close()
 
 	// Get backup state
-	b, err := client.GetBackup(ctx, &databasepb.GetBackupRequest{
+	_, err = client.GetBackup(ctx, &databasepb.GetBackupRequest{
 		Name: backup.GetName(),
 	})
 	if err != nil {
@@ -674,30 +699,12 @@ func UpdateSpannerBackup(ctx context.Context, backup *databasepb.Backup, updateM
 			return nil, err
 		}
 	}
-	// If backup does not exist and allow missing is not set, return error
-	if b == nil && !allowMissing {
-		return nil, status.Errorf(codes.NotFound, "Backup %s not found, set allow_missing to true to create a new backup", backup.GetName())
-	}
-	// If backup exists, ensure update mask is provided
-	if b != nil && updateMask == nil {
-		return nil, status.Error(codes.InvalidArgument, "Invalid argument update_mask, field is required but not provided")
-	}
-
-	// If backup is not found and allow missing is set, create the backup
-	if b == nil {
-		// Create backup
-		// TODO: Encryption config?
-		return CreateSpannerBackup(ctx, fmt.Sprintf("projects/%s/instances/%s", project, instance), backupId, backup, nil)
-	}
 
 	// Update backup
-	_, err = client.UpdateBackup(ctx, &databasepb.UpdateBackupRequest{
+	updatedBackup, err := client.UpdateBackup(ctx, &databasepb.UpdateBackupRequest{
 		Backup:     backup,
 		UpdateMask: updateMask,
 	})
-
-	// Get backup state
-	updatedBackup, err := GetSpannerBackup(ctx, backup.GetName(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -928,7 +935,6 @@ func GetSpannerTable(ctx context.Context, name string) (*SpannerTable, error) {
 		idx := &SpannerTableIndex{
 			Name:    index.Name(),
 			Columns: index.Columns(),
-			Unique:  wrapperspb.Bool(false),
 		}
 		if unique, ok := index.Unique(); ok {
 			idx.Unique = wrapperspb.Bool(unique)
@@ -1010,7 +1016,7 @@ func ListSpannerTables(ctx context.Context, parent string) ([]*SpannerTable, err
 //   - allowMissing: bool - If true and the table does not exist, a new table will be created. Default is false.
 //
 // Returns: *SpannerTable
-func UpdateSpannerTable(ctx context.Context, table *SpannerTable, allowMissing bool) (*SpannerTable, error) {
+func UpdateSpannerTable(ctx context.Context, table *SpannerTable, updateMask *fieldmaskpb.FieldMask, allowMissing bool) (*SpannerTable, error) {
 	// Validate arguments
 	// Ensure table is provided
 	if table == nil {
@@ -1027,6 +1033,25 @@ func UpdateSpannerTable(ctx context.Context, table *SpannerTable, allowMissing b
 	// Ensure columns are provided and not empty
 	if table.Schema.Columns == nil || len(table.Schema.Columns) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "Invalid argument table.schema.columns, field is required but not provided")
+	}
+	// Validate update_mask if provided
+	if updateMask != nil && len(updateMask.GetPaths()) > 0 {
+		// Normalize the update mask
+		updateMask.Normalize()
+
+		// Ensure only valid fields are updated i.e. schema.columns, schema.indices
+		for _, path := range updateMask.GetPaths() {
+			switch path {
+			case "schema.columns":
+			case "schema.indices":
+			default:
+				return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("Invalid argument update_mask, only fields `schema.columns` and `schema.indices` are allowed, got `%s`", path))
+			}
+		}
+	}
+	// If update mask is not provided, ensure allow missing is set
+	if updateMask == nil && !allowMissing {
+		return nil, status.Error(codes.InvalidArgument, "Invalid argument allow_missing, must be true if update_mask is not provided")
 	}
 
 	// Decompose name to get project, instance, database and table
@@ -1046,6 +1071,15 @@ func UpdateSpannerTable(ctx context.Context, table *SpannerTable, allowMissing b
 	// If table does not exist and allow missing is set to false, return error
 	if existingTable == nil && !allowMissing {
 		return nil, status.Errorf(codes.NotFound, "Table %s not found, set allow_missing to true to create a new table", table.Name)
+	}
+	// If backup exists, ensure update mask is provided
+	if existingTable != nil && updateMask == nil {
+		return nil, status.Error(codes.InvalidArgument, "Invalid argument update_mask, field is required but not provided")
+	}
+
+	// If table does not exist and allow missing is set, create the table
+	if existingTable == nil {
+		return CreateSpannerTable(ctx, fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId), tableId, table)
 	}
 
 	db, err := gorm.Open(
@@ -1067,6 +1101,86 @@ func UpdateSpannerTable(ctx context.Context, table *SpannerTable, allowMissing b
 	structInstance, err := ParseSchemaToStruct(table.Schema)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "Error converting table.schema to struct: %v", err)
+	}
+
+	// Iterate over update mask and update columns
+	for _, path := range updateMask.GetPaths() {
+		switch path {
+		case "schema.columns":
+			var removedColumns []*SpannerTableColumn
+
+			// Get existing columns
+			existingColumns := existingTable.Schema.Columns
+			newColumns := map[string]*SpannerTableColumn{}
+			for _, column := range table.Schema.Columns {
+				newColumns[column.Name] = column
+			}
+
+			// If there are existing columns, but no new columns are provided, remove all existing columns
+			if (existingColumns != nil && len(existingColumns) > 0) && (newColumns == nil || len(newColumns) == 0) {
+				for _, column := range existingColumns {
+					removedColumns = append(removedColumns, column)
+				}
+			}
+
+			// If there are existing columns and new columns are provided, compare and update
+			if (existingColumns != nil && len(existingColumns) > 0) && (newColumns != nil && len(newColumns) > 0) {
+				// Iterate over the existing column families and compare with the new column families
+				for _, existingColumn := range existingColumns {
+					if _, exists := newColumns[existingColumn.Name]; !exists {
+						// Column family does not exist in new column families, remove it
+						removedColumns = append(removedColumns, existingColumn)
+					}
+				}
+			}
+
+			// If there are removed columns, drop them
+			if len(removedColumns) > 0 {
+				for _, column := range removedColumns {
+					err = db.Table(tableId).Migrator().DropColumn(&structInstance, column.Name)
+					if err != nil {
+						return nil, status.Errorf(codes.Internal, "Error dropping column: %v", err)
+					}
+				}
+			}
+		case "schema.indices":
+			var removedIndices []*SpannerTableIndex
+
+			// Get existing indices
+			existingIndices := existingTable.Schema.Indices
+			newIndices := map[string]*SpannerTableIndex{}
+			for _, index := range table.Schema.Indices {
+				newIndices[index.Name] = index
+			}
+
+			// If there are existing indices, but no new indices are provided, remove all existing indices
+			if (existingIndices != nil && len(existingIndices) > 0) && (newIndices == nil || len(newIndices) == 0) {
+				for _, index := range existingIndices {
+					removedIndices = append(removedIndices, index)
+				}
+			}
+
+			// If there are existing indices and new indices are provided, compare and update
+			if (existingIndices != nil && len(existingIndices) > 0) && (newIndices != nil && len(newIndices) > 0) {
+				// Iterate over the existing indices and compare with the new indices
+				for _, existingIndex := range existingIndices {
+					if _, exists := newIndices[existingIndex.Name]; !exists {
+						// Index does not exist in new indices, remove it
+						removedIndices = append(removedIndices, existingIndex)
+					}
+				}
+			}
+
+			// If there are removed indices, drop them
+			if len(removedIndices) > 0 {
+				for _, index := range removedIndices {
+					err = db.Migrator().DropIndex(tableId, index.Name)
+					if err != nil {
+						return nil, status.Errorf(codes.Internal, "Error dropping index: %v", err)
+					}
+				}
+			}
+		}
 	}
 
 	// Migrate table
@@ -1139,6 +1253,264 @@ func DeleteSpannerTable(ctx context.Context, name string) (*emptypb.Empty, error
 	err = db.Migrator().DropTable(tableId)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "Error dropping table: %v", err)
+	}
+
+	return &emptypb.Empty{}, nil
+}
+
+// CreateSpannerTableIndex creates a new Spanner table index.
+//
+// Params:
+//   - ctx: context.Context - The context to use for RPCs.
+//   - parent: string - Required. The name of the table that will serve the new index.
+//   - index: *SpannerTableIndex - Required. The index to create.
+//
+// Returns: *SpannerTableIndex
+func CreateSpannerTableIndex(ctx context.Context, parent string, index *SpannerTableIndex) (*SpannerTableIndex, error) {
+	// Validate parent
+	if valid := utils.ValidateArgument(parent, utils.SpannerTableNameRegex); !valid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s`", parent, utils.SpannerDatabaseNameRegex)
+	}
+	// Ensure index is provided and has a name and columns
+	if index == nil {
+		return nil, status.Error(codes.InvalidArgument, "Invalid argument index, field is required but not provided")
+	}
+	if valid := utils.ValidateArgument(index.Name, utils.SpannerIndexIdRegex); !valid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument index.name (%s), must match `%s`", index.Name, utils.SpannerIndexIdRegex)
+	}
+	if index.Columns == nil || len(index.Columns) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "Invalid argument index.columns, field is required but not provided")
+	}
+	for i, column := range index.Columns {
+		if valid := utils.ValidateArgument(column, utils.SpannerColumnIdRegex); !valid {
+			return nil, status.Errorf(codes.InvalidArgument, "Invalid argument index.columns[%d] (%s), must match `%s`", i, column, utils.SpannerColumnIdRegex)
+		}
+	}
+
+	// Deconstruct parent name to get project, instance and database id
+	parentNameParts := strings.Split(parent, "/")
+	project := parentNameParts[1]
+	instance := parentNameParts[3]
+	databaseId := parentNameParts[5]
+	tableId := parentNameParts[7]
+
+	db, err := gorm.Open(
+		spannergorm.New(
+			spannergorm.Config{
+				DriverName: "spanner",
+				DSN:        fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId),
+			},
+		),
+		&gorm.Config{
+			PrepareStmt: true,
+		},
+	)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "Error connecting to database: %v", err)
+	}
+
+	// Get parent table
+	table, err := GetSpannerTable(ctx, parent)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert schema to struct
+	structInstance, err := ParseSchemaToStruct(table.Schema)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "Error converting table.schema to struct: %v", err)
+	}
+
+	// Check if index already exists
+	indexExists := db.Table(tableId).Migrator().HasIndex(&structInstance, index.Name)
+	if indexExists {
+		return nil, status.Errorf(codes.AlreadyExists, "Index %s already exists", index.Name)
+	}
+
+	table.Schema.Indices = append(table.Schema.Indices, index)
+
+	// Construct a new dynamic struct with the updated schema
+	structInstance, err = ParseSchemaToStruct(table.Schema)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "Error converting table.schema to struct: %v", err)
+	}
+
+	// Create index
+	err = db.Table("").Migrator().CreateIndex(&structInstance, index.Name)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "Error creating index: %v", err)
+	}
+
+	return index, nil
+}
+
+// GetSpannerTableIndex gets a Spanner table index.
+//
+// Params:
+//   - ctx: context.Context - The context to use for RPCs.
+//   - parent: string - Required. The name of the table that serves the index.
+//   - name: string - Required. The name of the index to get.
+//
+// Returns: *SpannerTableIndex
+func GetSpannerTableIndex(ctx context.Context, parent string, name string) (*SpannerTableIndex, error) {
+	// Validate parent
+	if valid := utils.ValidateArgument(parent, utils.SpannerTableNameRegex); !valid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s`", parent, utils.SpannerDatabaseNameRegex)
+	}
+	// Validate name
+	if valid := utils.ValidateArgument(name, utils.SpannerIndexIdRegex); !valid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s`", name, utils.SpannerIndexIdRegex)
+	}
+
+	// Deconstruct parent name to get project, instance and database id
+	parentNameParts := strings.Split(parent, "/")
+	project := parentNameParts[1]
+	instance := parentNameParts[3]
+	databaseId := parentNameParts[5]
+	tableId := parentNameParts[7]
+
+	db, err := gorm.Open(
+		spannergorm.New(
+			spannergorm.Config{
+				DriverName: "spanner",
+				DSN:        fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId),
+			},
+		),
+		&gorm.Config{
+			PrepareStmt: true,
+		},
+	)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "Error connecting to database: %v", err)
+	}
+
+	indexes, err := GetIndexes(db, tableId)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "Error getting table indices: %v", err)
+	}
+
+	for _, index := range indexes {
+		if index.Name() == name {
+			columns := index.Columns()
+
+			idx := &SpannerTableIndex{
+				Name:    name,
+				Columns: columns,
+			}
+			if unique, ok := index.Unique(); ok {
+				idx.Unique = wrapperspb.Bool(unique)
+			}
+
+			return idx, nil
+		}
+	}
+
+	return nil, status.Errorf(codes.NotFound, "Index %s not found", name)
+}
+
+// ListSpannerTableIndices lists Spanner table indices.
+//
+// Params:
+//   - ctx: context.Context - The context to use for RPCs.
+//   - parent: string - Required. The name of the table whose indices should be listed.
+//
+// Returns: []*SpannerTableIndex
+func ListSpannerTableIndices(ctx context.Context, parent string) ([]*SpannerTableIndex, error) {
+	// Validate parent
+	if valid := utils.ValidateArgument(parent, utils.SpannerTableNameRegex); !valid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s`", parent, utils.SpannerDatabaseNameRegex)
+	}
+
+	// Deconstruct parent name to get project, instance and database id
+	parentNameParts := strings.Split(parent, "/")
+	project := parentNameParts[1]
+	instance := parentNameParts[3]
+	databaseId := parentNameParts[5]
+	tableId := parentNameParts[7]
+
+	db, err := gorm.Open(
+		spannergorm.New(
+			spannergorm.Config{
+				DriverName: "spanner",
+				DSN:        fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId),
+			},
+		),
+		&gorm.Config{
+			PrepareStmt: true,
+		},
+	)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "Error connecting to database: %v", err)
+	}
+
+	indexes, err := GetIndexes(db, tableId)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "Error getting table indices: %v", err)
+	}
+
+	res := make([]*SpannerTableIndex, len(indexes))
+
+	for i, index := range indexes {
+		columns := index.Columns()
+
+		idx := &SpannerTableIndex{
+			Name:    index.Name(),
+			Columns: columns,
+		}
+		if unique, ok := index.Unique(); ok {
+			idx.Unique = wrapperspb.Bool(unique)
+		}
+
+		res[i] = idx
+	}
+
+	return res, nil
+}
+
+// DeleteIndex deletes a Spanner table index.
+//
+// Params:
+//   - ctx: context.Context - The context to use for RPCs.
+//   - parent: string - Required. The name of the table that serves the index.
+//   - indexName: string - Required. The name of the index to delete.
+//
+// Returns: *emptypb.Empty
+func DeleteIndex(ctx context.Context, parent string, indexName string) (*emptypb.Empty, error) {
+	// Validate arguments
+	// Validate parent
+	if valid := utils.ValidateArgument(parent, utils.SpannerTableNameRegex); !valid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s`", parent, utils.SpannerTableNameRegex)
+	}
+	// Validate index name
+	if valid := utils.ValidateArgument(indexName, utils.SpannerIndexIdRegex); !valid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument index_name (%s), must match `%s`", indexName, utils.SpannerIndexIdRegex)
+	}
+
+	// Deconstruct parent name to get project, instance, database and table
+	parentNameParts := strings.Split(parent, "/")
+	project := parentNameParts[1]
+	instance := parentNameParts[3]
+	databaseId := parentNameParts[5]
+	tableId := parentNameParts[7]
+
+	db, err := gorm.Open(
+		spannergorm.New(
+			spannergorm.Config{
+				DriverName: "spanner",
+				DSN:        fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId),
+			},
+		),
+		&gorm.Config{
+			PrepareStmt: true,
+		},
+	)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "Error connecting to database: %v", err)
+	}
+
+	err = db.Migrator().DropIndex(tableId, indexName)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "Error dropping index: %v", err)
 	}
 
 	return &emptypb.Empty{}, nil

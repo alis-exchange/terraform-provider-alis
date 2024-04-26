@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -20,11 +21,13 @@ var (
 	TestProject string
 	// TestInstance is the instance used for testing.
 	TestInstance string
+	TestCluster  string
 )
 
 func init() {
 	TestProject = os.Getenv("ALIS_OS_PROJECT")
 	TestInstance = os.Getenv("ALIS_OS_INSTANCE")
+	TestCluster = os.Getenv("ALIS_OS_BIGTABLE_CLUSTER")
 
 	if TestProject == "" {
 		log.Fatalf("ALIS_OS_PROJECT must be set for integration tests")
@@ -32,6 +35,10 @@ func init() {
 
 	if TestInstance == "" {
 		log.Fatalf("ALIS_OS_INSTANCE must be set for integration tests")
+	}
+
+	if TestCluster == "" {
+		log.Fatalf("ALIS_OS_BIGTABLE_CLUSTER must be set for integration tests")
 	}
 }
 
@@ -60,7 +67,7 @@ func TestCreateBigtableTable(t *testing.T) {
 						"0": bigtable.Family{},
 					},
 					DeletionProtection:    bigtable.None,
-					ChangeStreamRetention: 2 * time.Hour,
+					ChangeStreamRetention: 24 * time.Hour,
 				},
 			},
 			want: &BigtableTable{
@@ -151,10 +158,10 @@ func TestUpdateBigtableTable(t *testing.T) {
 						"0": bigtable.Family{},
 					},
 					DeletionProtection:    bigtable.None,
-					ChangeStreamRetention: 2 * time.Hour,
+					ChangeStreamRetention: 0 * time.Hour,
 				},
 				updateMask: &fieldmaskpb.FieldMask{
-					Paths: []string{"deletion_protection"},
+					Paths: []string{"change_stream_retention"},
 				},
 				allowMissing: false,
 			},
@@ -239,147 +246,6 @@ func TestDeleteBigtableTable(t *testing.T) {
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("DeleteBigtableTable() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestCreateBigtableBackup(t *testing.T) {
-	type args struct {
-		ctx      context.Context
-		parent   string
-		backupId string
-		backup   *BigtableBackup
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    *BigtableBackup
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := CreateBigtableBackup(tt.args.ctx, tt.args.parent, tt.args.backupId, tt.args.backup)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("CreateBigtableBackup() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("CreateBigtableBackup() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-func TestGetBigtableBackup(t *testing.T) {
-	type args struct {
-		ctx  context.Context
-		name string
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    *BigtableBackup
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := GetBigtableBackup(tt.args.ctx, tt.args.name)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("GetBigtableBackup() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("GetBigtableBackup() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-func TestDeleteBigtableBackup(t *testing.T) {
-	type args struct {
-		ctx  context.Context
-		name string
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    *emptypb.Empty
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := DeleteBigtableBackup(tt.args.ctx, tt.args.name)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("DeleteBigtableBackup() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("DeleteBigtableBackup() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-func TestUpdateBigtableBackup(t *testing.T) {
-	type args struct {
-		ctx          context.Context
-		backup       *BigtableBackup
-		updateMask   *fieldmaskpb.FieldMask
-		allowMissing bool
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    *BigtableBackup
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := UpdateBigtableBackup(tt.args.ctx, tt.args.backup, tt.args.updateMask, tt.args.allowMissing)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("UpdateBigtableBackup() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("UpdateBigtableBackup() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-func TestListBigtableBackups(t *testing.T) {
-	type args struct {
-		ctx       context.Context
-		parent    string
-		pageSize  int32
-		pageToken string
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    []*BigtableBackup
-		want1   string
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, got1, err := ListBigtableBackups(tt.args.ctx, tt.args.parent, tt.args.pageSize, tt.args.pageToken)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ListBigtableBackups() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("ListBigtableBackups() got = %v, want %v", got, tt.want)
-			}
-			if got1 != tt.want1 {
-				t.Errorf("ListBigtableBackups() got1 = %v, want %v", got1, tt.want1)
 			}
 		})
 	}
@@ -529,9 +395,16 @@ func TestGetBigtableGarbageCollectionPolicy(t *testing.T) {
 	}
 }
 func TestUpdateBigtableGarbageCollectionPolicy(t *testing.T) {
-	rulesMap := map[string]interface{}{
-		"max_versions": "2",
+	rulesString := `{"mode":"intersection","rules":[{"max_version":2},{"max_age":"4h"}]}`
+
+	rulesMap := map[string]interface{}{}
+
+	err := json.Unmarshal([]byte(rulesString), &rulesMap)
+	if err != nil {
+		t.Errorf("json.Unmarshal() error = %v", err)
+		return
 	}
+
 	gcPolicy, err := GetGcPolicyFromJSON(rulesMap, true)
 	if err != nil {
 		t.Errorf("GetGcPolicyFromJSON() error = %v", err)
@@ -705,7 +578,7 @@ func TestSetBigtableTableIamPolicy(t *testing.T) {
 					Bindings: []*iampb.Binding{
 						{
 							Role:    "roles/bigtable.user",
-							Members: []string{"user:jane@example.com"},
+							Members: []string{"serviceAccount:alis-exchange@alis-px-dev-0s6.iam.gserviceaccount.com"},
 						},
 					},
 				},
@@ -726,6 +599,197 @@ func TestSetBigtableTableIamPolicy(t *testing.T) {
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("SetBigtableTableIamPolicy() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCreateBigtableBackup(t *testing.T) {
+	type args struct {
+		ctx      context.Context
+		parent   string
+		backupId string
+		backup   *BigtableBackup
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    *BigtableBackup
+		wantErr bool
+	}{
+		{
+			name: "Test_CreateBigtableBackup",
+			args: args{
+				ctx:      context.Background(),
+				parent:   fmt.Sprintf("projects/%s/instances/%s/clusters/%s", TestProject, TestInstance, TestCluster),
+				backupId: "tf-test-default",
+				backup: &BigtableBackup{
+					SourceTable: "tf-test",
+					ExpireTime:  time.Now().Add(6 * time.Hour),
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := CreateBigtableBackup(tt.args.ctx, tt.args.parent, tt.args.backupId, tt.args.backup)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("CreateBigtableBackup() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("CreateBigtableBackup() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+func TestGetBigtableBackup(t *testing.T) {
+	type args struct {
+		ctx  context.Context
+		name string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    *BigtableBackup
+		wantErr bool
+	}{
+		{
+			name: "Test_GetBigtableBackup",
+			args: args{
+				ctx:  context.Background(),
+				name: fmt.Sprintf("projects/%s/instances/%s/clusters/%s/backups/%s", TestProject, TestInstance, TestCluster, "tf-test-default"),
+			},
+			want:    &BigtableBackup{},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := GetBigtableBackup(tt.args.ctx, tt.args.name)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("GetBigtableBackup() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("GetBigtableBackup() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+func TestUpdateBigtableBackup(t *testing.T) {
+	type args struct {
+		ctx          context.Context
+		backup       *BigtableBackup
+		updateMask   *fieldmaskpb.FieldMask
+		allowMissing bool
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    *BigtableBackup
+		wantErr bool
+	}{
+		{
+			name: "Test_UpdateBigtableBackup",
+			args: args{
+				ctx: context.Background(),
+				backup: &BigtableBackup{
+					Name:       fmt.Sprintf("projects/%s/instances/%s/clusters/%s/backups/%s", TestProject, TestInstance, TestCluster, "tf-test-default"),
+					ExpireTime: time.Now().Add(12 * time.Hour),
+				},
+				updateMask: &fieldmaskpb.FieldMask{
+					Paths: []string{"expire_time"},
+				},
+			},
+			want:    &BigtableBackup{},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := UpdateBigtableBackup(tt.args.ctx, tt.args.backup, tt.args.updateMask, tt.args.allowMissing)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("UpdateBigtableBackup() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("UpdateBigtableBackup() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+func TestListBigtableBackups(t *testing.T) {
+	type args struct {
+		ctx       context.Context
+		parent    string
+		pageSize  int32
+		pageToken string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    []*BigtableBackup
+		want1   string
+		wantErr bool
+	}{
+		{
+			name: "Test_ListBigtableBackups",
+			args: args{
+				ctx:    context.Background(),
+				parent: fmt.Sprintf("projects/%s/instances/%s/clusters/%s", TestProject, TestInstance, TestCluster),
+			},
+			want:    []*BigtableBackup{},
+			want1:   "",
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, got1, err := ListBigtableBackups(tt.args.ctx, tt.args.parent, tt.args.pageSize, tt.args.pageToken)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ListBigtableBackups() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("ListBigtableBackups() got = %v, want %v", got, tt.want)
+			}
+			if got1 != tt.want1 {
+				t.Errorf("ListBigtableBackups() got1 = %v, want %v", got1, tt.want1)
+			}
+		})
+	}
+}
+func TestDeleteBigtableBackup(t *testing.T) {
+	type args struct {
+		ctx  context.Context
+		name string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    *emptypb.Empty
+		wantErr bool
+	}{
+		{
+			name: "Test_DeleteBigtableBackup",
+			args: args{
+				ctx:  context.Background(),
+				name: fmt.Sprintf("projects/%s/instances/%s/clusters/%s/backups/%s", TestProject, TestInstance, TestCluster, "tf-test-default"),
+			},
+			want:    &emptypb.Empty{},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := DeleteBigtableBackup(tt.args.ctx, tt.args.name)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("DeleteBigtableBackup() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("DeleteBigtableBackup() got = %v, want %v", got, tt.want)
 			}
 		})
 	}

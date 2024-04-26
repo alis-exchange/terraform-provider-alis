@@ -23,6 +23,7 @@ var (
 	SpannerBackupIdRegex     = `^[a-z][a-z0-9_\-]*[a-z0-9]{2,60}$`
 	SpannerBackupNameRegex   = `^projects\/[a-z](?:[-a-z0-9]{4,28}[a-z0-9])?\/instances\/[a-z0-9-]{6,33}\/backups\/[a-z][a-z0-9_\-]*[a-z0-9]{2,60}$`
 	SpannerColumnIdRegex     = `^[a-zA-Z0-9_-]{1,50}$`
+	SpannerIndexIdRegex      = `^[a-zA-Z0-9_-]{1,50}$`
 )
 
 // ValidateArgument validates an argument against the provided regex and returns either true or false

@@ -15,6 +15,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"terraform-provider-alis/internal/bigtable"
 	"terraform-provider-alis/internal/spanner"
+	"terraform-provider-alis/internal/utils"
 	"terraform-provider-alis/internal/validators"
 )
 
@@ -23,8 +24,8 @@ var (
 	_ provider.Provider = &googleProvider{}
 )
 
-// New is a helper function to simplify provider server and testing implementation.
-func New(version string) func() provider.Provider {
+// NewProvider is a helper function to simplify provider server and testing implementation.
+func NewProvider(version string) func() provider.Provider {
 	return func() provider.Provider {
 		return &googleProvider{
 			version: version,
@@ -70,6 +71,7 @@ func (p *googleProvider) Schema(_ context.Context, _ provider.SchemaRequest, res
 					validators.GoogleCredentialsValidator(),
 					validators.StringNotEmpty(),
 				},
+				Description: "A JSON string of Google Cloud credentials.",
 			},
 			"access_token": schema.StringAttribute{
 				Optional: true,
@@ -81,7 +83,8 @@ func (p *googleProvider) Schema(_ context.Context, _ provider.SchemaRequest, res
 				},
 			},
 			"project": schema.StringAttribute{
-				Optional: true,
+				Optional:    true,
+				Description: "The Google Cloud project ID.",
 			},
 		},
 	}
@@ -99,48 +102,51 @@ func (p *googleProvider) Configure(ctx context.Context, req provider.ConfigureRe
 		return
 	}
 
-	// Perform validation of provider configuration
-	if config.Host.IsUnknown() {
-		resp.Diagnostics.AddAttributeError(
-			path.Root("host"),
-			"Unknown DB API Host",
-			"The provider cannot create the DB API client as there is an unknown configuration value for the DB API host. "+
-				"Either target apply the source of the value first, set the value statically in the configuration, or use the ALIS_OS_DB_HOST environment variable.",
-		)
-	}
+	tflog.Debug(ctx, "Initializing alis provider")
 
-	if resp.Diagnostics.HasError() {
-		return
-	}
+	// Perform validation of provider configuration
+	//if config.Host.IsUnknown() {
+	//	resp.Diagnostics.AddAttributeError(
+	//		path.Root("host"),
+	//		"Unknown DB API Host",
+	//		"The provider cannot create the DB API client as there is an unknown configuration value for the DB API host. "+
+	//			"Either target apply the source of the value first, set the value statically in the configuration, or use the ALIS_OS_DB_HOST environment variable.",
+	//	)
+	//}
+	//
+	//if resp.Diagnostics.HasError() {
+	//	return
+	//}
 
 	// Default values to environment variables, but override
 	// with Terraform configuration value if set.
-
-	host := os.Getenv("ALIS_OS_DB_HOST")
-
-	if !config.Host.IsNull() {
-		host = config.Host.ValueString()
+	credentials := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
+	if !config.Credentials.IsNull() {
+		credentials = config.Credentials.ValueString()
 	}
 
-	if host == "" {
-		resp.Diagnostics.AddAttributeError(
-			path.Root("host"),
-			"Missing DB API Host",
-			"The provider cannot create the DB API client as there is a missing or empty value for the DB API host. "+
-				"Set the host value in the configuration or use the ALIS_OS_DB_HOST environment variable. "+
-				"If either is already set, ensure the value is not empty.",
-		)
+	accessToken := config.AccessToken.ValueString()
+
+	if credentials == "" && accessToken == "" {
+		googleDefaultCreds, err := utils.GetCredentials(ctx)
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to get Default Google Cloud credentials",
+				"Ensure that either credentials or access_token is specified or that the plugin is running in an ADC environment: "+err.Error())
+			return
+		}
+
+		if googleDefaultCreds == nil {
+			resp.Diagnostics.AddError("Failed to get Default Google Cloud credentials",
+				"Ensure that either credentials or access_token is specified or that the plugin is running in an ADC environment.")
+			return
+		}
 	}
 
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	ctx = tflog.SetField(ctx, "db_host", host)
-
-	tflog.Debug(ctx, "Creating DB client")
-
-	tflog.Info(ctx, "Configured DB client", map[string]any{"success": true})
+	tflog.Info(ctx, "Done initializing alis provider", map[string]any{"success": true})
 }
 
 // DataSources defines the data sources implemented in the provider.

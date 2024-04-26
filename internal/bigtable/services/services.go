@@ -38,12 +38,10 @@ type BigtableBackup struct {
 	// Format: projects/{project}/instances/{instance}/clusters/{cluster}/backups/{backup}
 	// [_a-zA-Z0-9][-_.a-zA-Z0-9]*{1,50}
 	Name string
-	// SourceTable is the full name of the table the backup was created from.
-	// Format: projects/{project}/instances/{instance}/tables/{table}
+	// SourceTable is the ID of the table the backup was created from.
 	SourceTable string
-	// SourceBackup is the full name of the backup from which this backup was copied. If a
+	// SourceBackup is the ID of the backup from which this backup was copied. If a
 	// backup is not created by copying a backup, this field will be empty.
-	// Format: projects/{project}/instances/{instance}/backups/{backup}
 	SourceBackup string
 	// The size of the backup in bytes
 	SizeBytes int64
@@ -919,8 +917,12 @@ func CreateBigtableBackup(ctx context.Context, parent string, backupId string, b
 		return nil, status.Errorf(codes.AlreadyExists, "Backup %s already exists", backup.Name)
 	}
 
+	// Deconstruct source table name to get table id
+	sourceTableNameParts := strings.Split(backup.SourceTable, "/")
+	sourceTableID := sourceTableNameParts[5]
+
 	// Create the backup
-	err = client.CreateBackup(ctx, backup.SourceTable, cluster, backupId, backup.ExpireTime)
+	err = client.CreateBackup(ctx, sourceTableID, cluster, backupId, backup.ExpireTime)
 	if err != nil {
 		return nil, err
 	}

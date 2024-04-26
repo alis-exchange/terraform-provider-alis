@@ -38,3 +38,4 @@ website/vendor
 local.env
 key-**.json
 **.tfvars
+internal/bigtable/templates/**.tf
