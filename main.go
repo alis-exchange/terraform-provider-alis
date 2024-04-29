@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
@@ -26,6 +27,8 @@ var (
 	// these will be set by the goreleaser configuration
 	// to appropriate values for the compiled binary.
 	version string = "dev"
+	commit  string = "none"
+	date    string = "unknown"
 
 	// goreleaser can pass other information to the main package, such as the specific commit
 	// https://goreleaser.com/cookbooks/using-main.version/
@@ -43,13 +46,14 @@ func main() {
 		// provider address is used in these tutorials in conjunction with a
 		// specific Terraform CLI configuration for manual development testing
 		// of this provider.
-		Address: "registry.terraform.io/hashicorp/alis",
+		Address: "registry.terraform.io/alis-exchange/alis",
 		Debug:   debug,
 	}
 
 	err := providerserver.Serve(context.Background(), provider.NewProvider(version), opts)
-
 	if err != nil {
 		log.Fatal(err.Error())
 	}
+
+	fmt.Printf("alis provider v%s, commit %s, built at %s running", version, commit, date)
 }

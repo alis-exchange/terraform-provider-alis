@@ -109,6 +109,8 @@ func (r *tableResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				Description: "A group of columns within a table which share a common configuration. This can be specified multiple times.",
 			},
 		},
+		Description: "A Google Bigtable resource.\n" +
+			"This resource provisions and manages tables in a Bigtable instance.",
 	}
 }
 

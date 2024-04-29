@@ -2,12 +2,14 @@
 page_title: "alis_google_bigtable_table Resource - alis"
 subcategory: ""
 description: |-
-  
+  A Google Bigtable resource.
+  This resource provisions and manages tables in a Bigtable instance.
 ---
 
 # alis_google_bigtable_table (Resource)
 
-
+A Google Bigtable resource.
+This resource provisions and manages tables in a Bigtable instance.
 
 ## Example Usage
 
@@ -48,7 +50,9 @@ output "test_table" {
 
 ### Required
 
-- `deletion_protection` (Boolean) A field to make the table protected against data loss i.e. when set to PROTECTED, deleting the table, the column families in the table, and the instance containing the table would be prohibited. If not provided, currently deletion protection will be set to UNPROTECTED as it is the API default value.
+- `deletion_protection` (Boolean) A field to make the table protected against data loss i.e. when set to `PROTECTED`, deleting the table,
+the column families in the table, and the instance containing the table would be prohibited.
+If not provided, currently deletion protection will be set to `UNPROTECTED` as it is the API default value.
 - `instance` (String) The name of the Bigtable instance.
 - `name` (String) The name of the table. Must be 1-50 characters and must only contain hyphens, underscores, periods, letters and numbers.
 - `project` (String) The Google Cloud project ID in which the table belongs.

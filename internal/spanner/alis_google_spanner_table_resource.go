@@ -218,6 +218,8 @@ func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaReques
 				Description: "The schema of the table.",
 			},
 		},
+		Description: "A Google Cloud Spanner table resource.\n" +
+			"This resource manages the schema of a table in a Google Cloud Spanner database.",
 	}
 }
 

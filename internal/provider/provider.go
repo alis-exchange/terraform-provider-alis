@@ -87,6 +87,7 @@ func (p *googleProvider) Schema(_ context.Context, _ provider.SchemaRequest, res
 				Description: "The Google Cloud project ID.",
 			},
 		},
+		Description: "Custom terraform provider for managing various google resources used in ALIS.",
 	}
 }
 

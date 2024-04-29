@@ -2,12 +2,14 @@
 page_title: "alis_google_spanner_database Resource - alis"
 subcategory: ""
 description: |-
-  
+  A Cloud Spanner Database resource.
+  This resource provisions and manages Cloud Spanner Databases.
 ---
 
 # alis_google_spanner_database (Resource)
 
-
+A Cloud Spanner Database resource.
+This resource provisions and manages Cloud Spanner Databases.
 
 ## Example Usage
 
@@ -46,21 +48,18 @@ output "test_table" {
 
 - `instance` (String) The Spanner instance ID.
 - `name` (String) A unique identifier for the database, which cannot be changed after
-				the instance is created. Values are of the form [a-z][-a-z0-9]*[a-z0-9].
+the instance is created. Values are of the form `[a-z][-a-z0-9]*[a-z0-9]`.
 - `project` (String) The Google Cloud project ID.
 
 ### Optional
 
 - `dialect` (String) The dialect of the Cloud Spanner Database.
-				If it is not provided, "GOOGLE_STANDARD_SQL" will be used. Possible values: ["GOOGLE_STANDARD_SQL", "POSTGRESQL"]
+If it is not provided, `GOOGLE_STANDARD_SQL` will be used. Possible values: [`GOOGLE_STANDARD_SQL`, `POSTGRESQL`]
 - `enable_drop_protection` (Boolean) Whether drop protection is enabled for this database. Defaults to false.
 - `encryption_config` (Attributes) Encryption configuration for the database (see [below for nested schema](#nestedatt--encryption_config))
 - `encryption_info` (Attributes List) (see [below for nested schema](#nestedatt--encryption_info))
 - `version_retention_period` (String) The retention period for the database. The retention period must be between 1 hour
-				and 7 days, and can be specified in days, hours, minutes, or seconds. For example,
-				the values 1d, 24h, 1440m, and 86400s are equivalent. Default value is 1h.
-				If this property is used, you must avoid adding new DDL statements to 'ddl' that
-				update the database's version_retention_period.
+and 7 days, and must be specified in seconds. For example, 86400s is equivalent to 1 day.
 
 ### Read-Only
 
@@ -76,7 +75,7 @@ output "test_table" {
 Required:
 
 - `kms_key_name` (String) Fully qualified name of the KMS key to use to encrypt this database. This key must exist
-						in the same location as the Spanner Database.
+in the same location as the Spanner Database.
 
 
 <a id="nestedatt--encryption_info"></a>

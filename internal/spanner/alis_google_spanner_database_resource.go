@@ -129,7 +129,7 @@ func (r *spannerDatabaseResource) Schema(_ context.Context, _ resource.SchemaReq
 			"version_retention_period": schema.StringAttribute{
 				Optional: true,
 				Validators: []validator.String{
-					stringvalidator.RegexMatches(regexp.MustCompile(`^[1-9][0-9]*s$`), "Version Retention Period must be a valid duration specified in seconds in the format `{seconds}s` e.g. 60s"),
+					stringvalidator.RegexMatches(regexp.MustCompile(`^[1-9][0-9]*s$`), "Version Retention Period must be a valid duration specified in seconds in the format `{seconds}s` e.g. `60s`"),
 					validators.DurationStringMinSeconds(60 * 60),
 					validators.DurationStringMaxSeconds(60 * 60 * 24 * 7),
 				},
@@ -189,6 +189,8 @@ func (r *spannerDatabaseResource) Schema(_ context.Context, _ resource.SchemaReq
 				Computed: true,
 			},
 		},
+		Description: "A Cloud Spanner Database resource.\n" +
+			"This resource provisions and manages Cloud Spanner Databases.",
 	}
 }
 
