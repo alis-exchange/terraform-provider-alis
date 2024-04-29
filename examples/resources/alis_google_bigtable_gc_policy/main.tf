@@ -8,10 +8,9 @@ terraform {
 }
 
 provider "alis" {
-
 }
 
-resource "alis_google_bigtable_gc_policy" "test" {
+resource "alis_google_bigtable_gc_policy" "simple" {
   project       = var.ALIS_OS_PROJECT
   instance      = var.ALIS_OS_BIGTABLE_INSTANCE
   table         = "tf-test"
@@ -27,6 +26,42 @@ resource "alis_google_bigtable_gc_policy" "test" {
   EOF
 }
 
-output "test_table" {
-  value = alis_google_bigtable_gc_policy.test
+resource "alis_google_bigtable_gc_policy" "complex_union" {
+  project       = var.ALIS_OS_PROJECT
+  instance      = var.ALIS_OS_BIGTABLE_INSTANCE
+  table         = "tf-test"
+  column_family = "1"
+  gc_rules      = <<EOF
+  {
+    "mode": "union",
+    "rules": [
+      {
+        "max_age": "168h"
+      },
+      {
+        "max_version": 10
+      }
+    ]
+  }
+  EOF
+}
+
+resource "alis_google_bigtable_gc_policy" "complex_intersection" {
+  project       = var.ALIS_OS_PROJECT
+  instance      = var.ALIS_OS_BIGTABLE_INSTANCE
+  table         = "tf-test"
+  column_family = "2"
+  gc_rules      = <<EOF
+  {
+    "mode": "intersection",
+    "rules": [
+      {
+        "max_age": "168h"
+      },
+      {
+        "max_version": 10
+      }
+    ]
+  }
+  EOF
 }

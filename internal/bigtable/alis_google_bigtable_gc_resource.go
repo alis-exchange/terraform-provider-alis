@@ -85,9 +85,14 @@ func (r *garbageCollectionPolicyResource) Schema(_ context.Context, _ resource.S
 					"Possible values are: `ABANDON`.",
 			},
 			"gc_rules": schema.StringAttribute{
-				CustomType:  custom_types.JsonStringType{},
-				Required:    true,
-				Description: "Serialized JSON string for garbage collection policy.",
+				CustomType: custom_types.JsonStringType{},
+				Required:   true,
+				Description: "Serialized JSON string for garbage collection policy.\n" +
+					"Allowed fields:\n" +
+					"	- `mode` which can only be `union` or `intersection`.\n" +
+					"If not specified then `rules` can only have one JSON object, otherwise must have multiple JSON objects.\n" +
+					"	- `rules` which is an array of JSON objects. Each object can only have `max_age` or `max_version`.\n" +
+					"Alternatively, you can have nested JSON objects with the same structure as the parent JSON object(`gc_rules`).",
 			},
 		},
 	}
