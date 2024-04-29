@@ -2,12 +2,14 @@
 page_title: "alis_google_spanner_table Resource - alis"
 subcategory: ""
 description: |-
-  
+  A Google Cloud Spanner table resource.
+  This resource manages the schema of a table in a Google Cloud Spanner database.
 ---
 
 # alis_google_spanner_table (Resource)
 
-
+A Google Cloud Spanner table resource.
+This resource manages the schema of a table in a Google Cloud Spanner database.
 
 ## Example Usage
 
@@ -98,7 +100,7 @@ output "test_table" {
 - `database` (String) The name of the parent database.
 - `instance` (String) The name of the Spanner instance.
 - `name` (String) The name of the table.
-				The name must satisfy the expression ^[a-zA-Z0-9_-]{1,50}$
+The name must satisfy the expression `^[a-zA-Z0-9_-]{1,50}$`
 - `project` (String) The Google Cloud project ID in which the table belongs.
 - `schema` (Attributes) The schema of the table. (see [below for nested schema](#nestedatt--schema))
 
@@ -118,28 +120,28 @@ Optional:
 
 Required:
 
-- `name` (String) The name of the column. 
-									The name must contain only letters (a-z, A-Z), numbers (0-9), or underscores (_), and must start with a letter and not end in an underscore. 
-									The maximum length is 128 characters.
+- `name` (String) The name of the column.
+The name must contain only letters (a-z, A-Z), numbers (0-9), or underscores (_), and must start with a letter and not end in an underscore.
+The maximum length is 128 characters.
 - `type` (String) The data type of the column.
-									Valid types are: BOOL, INT64, FLOAT64, STRING, BYTES, DATE, TIMESTAMP, JSON.
+Valid types are: `BOOL`, `INT64`, `FLOAT64`, `STRING`, `BYTES`, `DATE`, `TIMESTAMP`, `JSON`.
 
 Optional:
 
-- `auto_increment` (Boolean) Indicates if the column is auto-incrementing. 
-									The column must be of type INT64 or FLOAT64.
+- `auto_increment` (Boolean) Indicates if the column is auto-incrementing.
+The column must be of type `INT64` or `FLOAT64`.
 - `default_value` (String) The default value of the column.
-									The default value must be compatible with the column type.
-									For example, a default value of "true" is valid for a BOOL or STRING column, but not for an INT64 column.
-- `is_primary_key` (Boolean) Indicates if the column is part of the primary key. 
-									Multiple columns can be specified as primary keys to create a composite primary key. 
-									Primary key columns must be non-null.
+The default value must be compatible with the column type.
+For example, a default value of "true" is valid for a `BOOL` or `STRING` column, but not for an `INT64` column.
+- `is_primary_key` (Boolean) Indicates if the column is part of the primary key.
+Multiple columns can be specified as primary keys to create a composite primary key.
+Primary key columns must be non-null.
 - `precision` (Number) The maximum number of digits in the column.
-									This is only applicable to columns of type FLOAT64.
-									The maximum is 17
+This is only applicable to columns of type `FLOAT64`.
+The maximum is 17
 - `required` (Boolean) Indicates if the column is required.
 - `scale` (Number) The maximum number of digits after the decimal point in the column.
-									This is only applicable to columns of type FLOAT64.
+This is only applicable to columns of type `FLOAT64`.
 - `size` (Number) The maximum size of the column.
 - `unique` (Boolean) Indicates if the column is unique.
 
@@ -150,9 +152,9 @@ Optional:
 Required:
 
 - `columns` (Set of String) The columns that make up the index.
-									The order of the columns is significant.
+The order of the columns is significant.
 - `name` (String) The name of the index.
-									The name must contain only letters (a-z, A-Z), numbers (0-9), or hyphens (-), and must start with a letter and not end in a hyphen.
+The name must contain only letters (a-z, A-Z), numbers (0-9), or hyphens (-), and must start with a letter and not end in a hyphen.
 
 Optional:
 
