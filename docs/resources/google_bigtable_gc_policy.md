@@ -22,10 +22,9 @@ terraform {
 }
 
 provider "alis" {
-
 }
 
-resource "alis_google_bigtable_gc_policy" "test" {
+resource "alis_google_bigtable_gc_policy" "simple" {
   project       = var.ALIS_OS_PROJECT
   instance      = var.ALIS_OS_BIGTABLE_INSTANCE
   table         = "tf-test"
@@ -41,8 +40,44 @@ resource "alis_google_bigtable_gc_policy" "test" {
   EOF
 }
 
-output "test_table" {
-  value = alis_google_bigtable_gc_policy.test
+resource "alis_google_bigtable_gc_policy" "complex_union" {
+  project       = var.ALIS_OS_PROJECT
+  instance      = var.ALIS_OS_BIGTABLE_INSTANCE
+  table         = "tf-test"
+  column_family = "1"
+  gc_rules      = <<EOF
+  {
+    "mode": "union",
+    "rules": [
+      {
+        "max_age": "168h"
+      },
+      {
+        "max_version": 10
+      }
+    ]
+  }
+  EOF
+}
+
+resource "alis_google_bigtable_gc_policy" "complex_intersection" {
+  project       = var.ALIS_OS_PROJECT
+  instance      = var.ALIS_OS_BIGTABLE_INSTANCE
+  table         = "tf-test"
+  column_family = "2"
+  gc_rules      = <<EOF
+  {
+    "mode": "intersection",
+    "rules": [
+      {
+        "max_age": "168h"
+      },
+      {
+        "max_version": 10
+      }
+    ]
+  }
+  EOF
 }
 ```
 
@@ -53,6 +88,11 @@ output "test_table" {
 
 - `column_family` (String) The name of the column family.
 - `gc_rules` (String) Serialized JSON string for garbage collection policy.
+Allowed fields:
+	- `mode` which can only be `union` or `intersection`.
+If not specified then `rules` can only have one JSON object, otherwise must have multiple JSON objects.
+	- `rules` which is an array of JSON objects. Each object can only have `max_age` or `max_version`.
+Alternatively, you can have nested JSON objects with the same structure as the parent JSON object(`gc_rules`).
 - `instance` (String) The Bigtable instance ID.
 - `project` (String) The Google Cloud project ID.
 - `table` (String) The Bigtable table ID.
