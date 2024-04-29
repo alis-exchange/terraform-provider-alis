@@ -15,7 +15,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"terraform-provider-alis/internal/bigtable/services"
+	custom_types "terraform-provider-alis/internal/custom-types"
 )
 
 // Ensure the implementation satisfies the expected interfaces.
@@ -34,12 +36,12 @@ type garbageCollectionPolicyResource struct {
 }
 
 type bigtableGarbageCollectionPolicyModel struct {
-	Project        types.String `tfsdk:"project"`
-	Instance       types.String `tfsdk:"instance"`
-	Table          types.String `tfsdk:"table"`
-	ColumFamily    types.String `tfsdk:"column_family"`
-	DeletionPolicy types.String `tfsdk:"deletion_policy"`
-	GcRules        types.String `tfsdk:"gc_rules"`
+	Project        types.String                 `tfsdk:"project"`
+	Instance       types.String                 `tfsdk:"instance"`
+	Table          types.String                 `tfsdk:"table"`
+	ColumFamily    types.String                 `tfsdk:"column_family"`
+	DeletionPolicy types.String                 `tfsdk:"deletion_policy"`
+	GcRules        custom_types.JsonStringValue `tfsdk:"gc_rules"`
 }
 
 // Metadata returns the resource type name.
@@ -75,12 +77,15 @@ func (r *garbageCollectionPolicyResource) Schema(_ context.Context, _ resource.S
 				Validators: []validator.String{
 					stringvalidator.OneOf("ABANDON"),
 				},
-				Description: `The deletion policy for the GC policy. 
-				Setting ABANDON allows the resource to be abandoned rather than deleted. 
-				This is useful for GC policy as it cannot be deleted in a replicated instance.
-				Possible values are: "ABANDON".`,
+				Description: "The deletion policy for the GC policy.\n" +
+					"Setting `ABANDON` allows the resource to be abandoned rather than deleted.\n" +
+					"This is useful for GC policy as it cannot be deleted in a replicated instance.\n" +
+					"**Note that when set to `ABANDON`, this only removes the `deletion_policy` from terraform state.\n" +
+					"Garbage collection still happens on the specified column family.**\n" +
+					"Possible values are: `ABANDON`.",
 			},
 			"gc_rules": schema.StringAttribute{
+				CustomType:  custom_types.JsonStringType{},
 				Required:    true,
 				Description: "Serialized JSON string for garbage collection policy.",
 			},
@@ -131,8 +136,8 @@ func (r *garbageCollectionPolicyResource) Create(ctx context.Context, req resour
 	tableId := plan.Table.ValueString()
 	columnFamilyId := plan.ColumFamily.ValueString()
 
-	// Create table
-	_, err := services.UpdateBigtableGarbageCollectionPolicy(ctx, fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instanceName, tableId), columnFamilyId, &gcPolicy)
+	// Create policy
+	createdPolicy, err := services.UpdateBigtableGarbageCollectionPolicy(ctx, fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instanceName, tableId), columnFamilyId, &gcPolicy)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Creating GC Policy",
@@ -149,29 +154,26 @@ func (r *garbageCollectionPolicyResource) Create(ctx context.Context, req resour
 	//case pb.BigtableTable_ColumnFamily_GarbageCollectionPolicy_ABANDON:
 	//	plan.DeletionPolicy = types.StringValue("ABANDON")
 	//}
-	//
-	//// Populate rules
-	//if createdPolicy.GetGcRule() != nil {
-	//	gcRuleMap, err := GcPolicyToGCRuleMap(createdPolicy.GetGcRule(), true)
-	//	if err != nil {
-	//		resp.Diagnostics.AddError(
-	//			"Unable to Parse GC Policy to GC Rule String",
-	//			err.Error(),
-	//		)
-	//		return
-	//	}
-	//
-	//	gcRuleBytes, err := json.Marshal(gcRuleMap)
-	//	if err != nil {
-	//		resp.Diagnostics.AddError(
-	//			"Unable to Marshal GC Rule Map to JSON",
-	//			err.Error(),
-	//		)
-	//		return
-	//	}
-	//
-	//	plan.GcRules = types.StringValue(string(gcRuleBytes))
-	//}
+
+	// Populate rules
+	gcRuleMap, err := services.GcPolicyToGcRuleMap(*createdPolicy, true)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Unable to Parse GC Policy to GC Rule String",
+			err.Error(),
+		)
+		return
+	}
+	gcRuleBytes, err := json.Marshal(gcRuleMap)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Unable to Marshal GC Rule Map to JSON",
+			err.Error(),
+		)
+		return
+	}
+
+	plan.GcRules = custom_types.NewJsonStringValue(string(gcRuleBytes))
 
 	// Set state to fully populated data
 	diags = resp.State.Set(ctx, plan)
@@ -210,9 +212,6 @@ func (r *garbageCollectionPolicyResource) Read(ctx context.Context, req resource
 		return
 	}
 
-	// Populate deletion policy
-	state.DeletionPolicy = types.StringValue("ABANDON")
-
 	// Populate rules
 	if gcPolicy != nil {
 		gcRuleMap, err := services.GcPolicyToGcRuleMap(*gcPolicy, true)
@@ -233,7 +232,7 @@ func (r *garbageCollectionPolicyResource) Read(ctx context.Context, req resource
 			return
 		}
 
-		state.GcRules = types.StringValue(string(gcRuleBytes))
+		state.GcRules = custom_types.NewJsonStringValue(string(gcRuleBytes))
 	}
 
 	// Set refreshed state
@@ -287,7 +286,7 @@ func (r *garbageCollectionPolicyResource) Update(ctx context.Context, req resour
 	}
 
 	// Update GC Policy
-	_, err := services.UpdateBigtableGarbageCollectionPolicy(ctx,
+	updatedPolicy, err := services.UpdateBigtableGarbageCollectionPolicy(ctx,
 		fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instanceName, tableId),
 		columnFamilyId,
 		&gcPolicy,
@@ -309,28 +308,24 @@ func (r *garbageCollectionPolicyResource) Update(ctx context.Context, req resour
 	//	plan.DeletionPolicy = types.StringValue("ABANDON")
 	//}
 	//
-	//// Populate rules
-	//if updatedPolicy.GetGcRule() != nil {
-	//	gcRuleMap, err := GcPolicyToGCRuleMap(updatedPolicy.GetGcRule(), true)
-	//	if err != nil {
-	//		resp.Diagnostics.AddError(
-	//			"Unable to Parse GC Policy to GC Rule String",
-	//			err.Error(),
-	//		)
-	//		return
-	//	}
-	//
-	//	gcRuleBytes, err := json.Marshal(gcRuleMap)
-	//	if err != nil {
-	//		resp.Diagnostics.AddError(
-	//			"Unable to Marshal GC Rule Map to JSON",
-	//			err.Error(),
-	//		)
-	//		return
-	//	}
-	//
-	//	plan.GcRules = types.StringValue(string(gcRuleBytes))
-	//}
+	// Populate rules
+	gcRuleMap, err := services.GcPolicyToGcRuleMap(*updatedPolicy, true)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Unable to Parse GC Policy to GC Rule String",
+			err.Error(),
+		)
+		return
+	}
+	gcRuleBytes, err := json.Marshal(gcRuleMap)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Unable to Marshal GC Rule Map to JSON",
+			err.Error(),
+		)
+		return
+	}
+	plan.GcRules = custom_types.NewJsonStringValue(string(gcRuleBytes))
 
 	// Set state to fully populated data
 	diags = resp.State.Set(ctx, plan)
@@ -338,7 +333,6 @@ func (r *garbageCollectionPolicyResource) Update(ctx context.Context, req resour
 	if resp.Diagnostics.HasError() {
 		return
 	}
-
 }
 
 // Delete deletes the resource and removes the Terraform state on success.
@@ -348,6 +342,12 @@ func (r *garbageCollectionPolicyResource) Delete(ctx context.Context, req resour
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// If deletion policy is set to ABANDON, return early
+	if state.DeletionPolicy.ValueString() == "ABANDON" {
+		tflog.Warn(ctx, "Abandoning GC Policy for Table ("+state.Table.ValueString()+") and Column Family ("+state.ColumFamily.ValueString()+")")
 		return
 	}
 

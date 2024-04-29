@@ -26,12 +26,11 @@ provider "alis" {
 }
 
 resource "alis_google_bigtable_gc_policy" "test" {
-  project         = var.ALIS_OS_PROJECT
-  instance        = var.ALIS_OS_BIGTABLE_INSTANCE
-  table           = "tf-test"
-  column_family   = "0"
-  deletion_policy = "ABANDON"
-  gc_rules        = <<EOF
+  project       = var.ALIS_OS_PROJECT
+  instance      = var.ALIS_OS_BIGTABLE_INSTANCE
+  table         = "tf-test"
+  column_family = "0"
+  gc_rules      = <<EOF
   {
     "rules": [
       {
@@ -60,7 +59,9 @@ output "test_table" {
 
 ### Optional
 
-- `deletion_policy` (String) The deletion policy for the GC policy. 
-				Setting ABANDON allows the resource to be abandoned rather than deleted. 
-				This is useful for GC policy as it cannot be deleted in a replicated instance.
-				Possible values are: "ABANDON".
+- `deletion_policy` (String) The deletion policy for the GC policy.
+Setting `ABANDON` allows the resource to be abandoned rather than deleted.
+This is useful for GC policy as it cannot be deleted in a replicated instance.
+**Note that when set to `ABANDON`, this only removes the `deletion_policy` from terraform state.
+Garbage collection still happens on the specified column family.**
+Possible values are: `ABANDON`.

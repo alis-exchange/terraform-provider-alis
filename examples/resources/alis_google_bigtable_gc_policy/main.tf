@@ -12,12 +12,11 @@ provider "alis" {
 }
 
 resource "alis_google_bigtable_gc_policy" "test" {
-  project         = var.ALIS_OS_PROJECT
-  instance        = var.ALIS_OS_BIGTABLE_INSTANCE
-  table           = "tf-test"
-  column_family   = "0"
-  deletion_policy = "ABANDON"
-  gc_rules        = <<EOF
+  project       = var.ALIS_OS_PROJECT
+  instance      = var.ALIS_OS_BIGTABLE_INSTANCE
+  table         = "tf-test"
+  column_family = "0"
+  gc_rules      = <<EOF
   {
     "rules": [
       {

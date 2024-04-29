@@ -51,5 +51,7 @@ func GetCredentials(ctx context.Context, scopes ...string) (*googleoauth.Credent
 		}
 	}
 
+	//googleoauth.CredentialsFromJSON()
+
 	return creds, nil
 }
