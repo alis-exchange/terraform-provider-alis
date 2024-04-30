@@ -66,12 +66,23 @@ func (r *tableIamBindingResource) Schema(_ context.Context, _ resource.SchemaReq
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
+				Description: "The role that should be applied. Only one `alis_google_bigtable_table_iam_binding` can be used per role.\n" +
+					"Note that custom roles must be of the format `[projects|organizations]/{parent-name}/roles/{role-name}`",
 			},
 			"members": schema.ListAttribute{
 				ElementType: types.StringType,
 				Required:    true,
+				Description: "Identities that will be granted the privilege in `role`. Each entry can have one of the following values:\n" +
+					"	- allUsers: A special identifier that represents anyone who is on the internet; with or without a Google account.\n" +
+					"	- allAuthenticatedUsers: A special identifier that represents anyone who is authenticated with a Google account or a service account.\n" +
+					"	- user:{emailId}: An email address that represents a specific Google account.\n" +
+					"	- serviceAccount:{emailId}: An email address that represents a service account.\n" +
+					"	- group:{emailId}: An email address that represents a Google group.\n" +
+					"	- domain:{domain}: A G Suite domain (primary, instead of alias) name that represents all the users of that domain. For example, google.com or example.com.\n",
 			},
 		},
+		Description: "Authoritative for a given role. Updates the IAM policy to grant a role to a list of members.\n" +
+			"Other roles within the IAM policy for the table are preserved.",
 	}
 }
 
@@ -102,32 +113,34 @@ func (r *tableIamBindingResource) Create(ctx context.Context, req resource.Creat
 		return
 	}
 
-	// Iterate over bindings and ensure that the role is unique
+	// Iterate over bindings and get other role bindings
+	roleMembersMap := map[string][]string{}
 	for _, binding := range policy.GetBindings() {
 		if role == binding.GetRole() {
-			resp.Diagnostics.AddError(
-				"Role Already Exists",
-				"Role ("+role+") already exists in the IAM Policy for Table ("+plan.Table.ValueString()+")",
-			)
-			return
+			continue
 		}
+
+		roleMembersMap[binding.GetRole()] = binding.GetMembers()
 	}
 
+	// Add the new role binding if members are provided
 	if plan.Members != nil {
-		var members []string
-		for _, member := range plan.Members {
-			members = append(members, member.ValueString())
+		if _, ok := roleMembersMap[role]; !ok {
+			roleMembersMap[role] = []string{}
 		}
 
-		policy.Bindings = append(policy.Bindings, &iampb.Binding{
-			Role:    role,
-			Members: members,
-		})
+		for _, member := range plan.Members {
+			roleMembersMap[role] = append(roleMembersMap[role], member.ValueString())
+		}
 	}
-	for _, member := range plan.Members {
+
+	// Reset the bindings
+	policy.Bindings = make([]*iampb.Binding, 0)
+	// Add the bindings to the policy
+	for membersRole, members := range roleMembersMap {
 		policy.Bindings = append(policy.Bindings, &iampb.Binding{
-			Role:    role,
-			Members: []string{member.ValueString()},
+			Role:    membersRole,
+			Members: members,
 		})
 	}
 
@@ -224,33 +237,38 @@ func (r *tableIamBindingResource) Update(ctx context.Context, req resource.Updat
 		return
 	}
 
-	// Create a map of roles to bindings
-	roleBindings := map[string]*iampb.Binding{}
+	// Iterate over bindings and get other role bindings
+	roleMembersMap := map[string][]string{}
 	for _, binding := range policy.GetBindings() {
-		roleBindings[binding.GetRole()] = binding
-	}
-
-	// Only update the role bindings for the role being updated
-	if plan.Members != nil {
-		roleBindings[role].Members = nil
-
-		var members []string
-		for _, member := range plan.Members {
-			members = append(members, member.ValueString())
+		if role == binding.GetRole() {
+			continue
 		}
 
-		roleBindings[role].Members = members
+		roleMembersMap[binding.GetRole()] = binding.GetMembers()
 	}
 
-	// Update the IAM policy
-	var bindings []*iampb.Binding
-	for _, binding := range roleBindings {
-		bindings = append(bindings, binding)
+	// Add the new role binding if members are provided
+	if plan.Members != nil {
+		if _, ok := roleMembersMap[role]; !ok {
+			roleMembersMap[role] = []string{}
+		}
+
+		for _, member := range plan.Members {
+			roleMembersMap[role] = append(roleMembersMap[role], member.ValueString())
+		}
+	}
+
+	// Reset the bindings
+	policy.Bindings = make([]*iampb.Binding, 0)
+	// Add the bindings to the policy
+	for membersRole, members := range roleMembersMap {
+		policy.Bindings = append(policy.Bindings, &iampb.Binding{
+			Role:    membersRole,
+			Members: members,
+		})
 	}
 	updatedPolicy, err := services.SetBigtableTableIamPolicy(ctx, fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instance, table),
-		&iampb.Policy{
-			Bindings: bindings,
-		},
+		policy,
 		&fieldmaskpb.FieldMask{
 			Paths: []string{"bindings"},
 		},

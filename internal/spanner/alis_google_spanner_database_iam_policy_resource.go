@@ -41,13 +41,16 @@ func (r *databaseIamPolicyResource) Schema(_ context.Context, _ resource.SchemaR
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"project": schema.StringAttribute{
-				Required: true,
+				Required:    true,
+				Description: "The Google Cloud project ID.",
 			},
 			"instance": schema.StringAttribute{
-				Required: true,
+				Required:    true,
+				Description: "The Spanner instance ID.",
 			},
 			"database": schema.StringAttribute{
-				Required: true,
+				Required:    true,
+				Description: "The Spanner database ID.",
 			},
 			"bindings": schema.ListNestedAttribute{
 				Required: true,
@@ -60,15 +63,26 @@ func (r *databaseIamPolicyResource) Schema(_ context.Context, _ resource.SchemaR
 					Attributes: map[string]schema.Attribute{
 						"role": schema.StringAttribute{
 							Required: true,
+							Description: "The role that should be applied. Only one `alis_google_spanner_database_iam_binding` can be used per role.\n" +
+								"Note that custom roles must be of the format `[projects|organizations]/{parent-name}/roles/{role-name}`",
 						},
 						"members": schema.ListAttribute{
 							ElementType: types.StringType,
 							Required:    true,
+							Description: "Identities that will be granted the privilege in `role`. Each entry can have one of the following values:\n" +
+								"	- allUsers: A special identifier that represents anyone who is on the internet; with or without a Google account.\n" +
+								"	- allAuthenticatedUsers: A special identifier that represents anyone who is authenticated with a Google account or a service account.\n" +
+								"	- user:{emailId}: An email address that represents a specific Google account.\n" +
+								"	- serviceAccount:{emailId}: An email address that represents a service account.\n" +
+								"	- group:{emailId}: An email address that represents a Google group.\n" +
+								"	- domain:{domain}: A G Suite domain (primary, instead of alias) name that represents all the users of that domain. For example, google.com or example.com.\n",
 						},
 					},
 				},
+				Description: "IAM policy bindings to be set on the database.",
 			},
 		},
+		Description: "Authoritative. Sets the IAM policy for the databases and replaces any existing policy already attached.",
 	}
 }
 

@@ -68,14 +68,24 @@ func (r *tableIamMemberResource) Schema(_ context.Context, _ resource.SchemaRequ
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
+				Description: "The role that should be applied.\n" +
+					"Note that custom roles must be of the format `[projects|organizations]/{parent-name}/roles/{role-name}`",
 			},
 			"member": schema.StringAttribute{
 				Required: true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
+				Description: "Identity that will be granted the privilege in `role`. Can have one of the following values:\n" +
+					"	- allUsers: A special identifier that represents anyone who is on the internet; with or without a Google account.\n" +
+					"	- allAuthenticatedUsers: A special identifier that represents anyone who is authenticated with a Google account or a service account.\n" +
+					"	- user:{emailId}: An email address that represents a specific Google account.\n" +
+					"	- serviceAccount:{emailId}: An email address that represents a service account.\n" +
+					"	- group:{emailId}: An email address that represents a Google group.\n" +
+					"	- domain:{domain}: A G Suite domain (primary, instead of alias) name that represents all the users of that domain. For example, google.com or example.com.\n",
 			},
 		},
+		Description: "Non-authoritative. Updates the IAM policy to grant a role to a new member. Other members for the role for the table are preserved.",
 	}
 }
 

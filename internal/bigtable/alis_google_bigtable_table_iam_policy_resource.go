@@ -63,15 +63,26 @@ func (r *tableIamPolicyResource) Schema(_ context.Context, _ resource.SchemaRequ
 					Attributes: map[string]schema.Attribute{
 						"role": schema.StringAttribute{
 							Required: true,
+							Description: "The role that should be applied. Only one `alis_google_bigtable_table_iam_binding` can be used per role.\n" +
+								"Note that custom roles must be of the format `[projects|organizations]/{parent-name}/roles/{role-name}`",
 						},
 						"members": schema.ListAttribute{
 							ElementType: types.StringType,
 							Required:    true,
+							Description: "Identities that will be granted the privilege in `role`. Each entry can have one of the following values:\n" +
+								"	- allUsers: A special identifier that represents anyone who is on the internet; with or without a Google account.\n" +
+								"	- allAuthenticatedUsers: A special identifier that represents anyone who is authenticated with a Google account or a service account.\n" +
+								"	- user:{emailId}: An email address that represents a specific Google account.\n" +
+								"	- serviceAccount:{emailId}: An email address that represents a service account.\n" +
+								"	- group:{emailId}: An email address that represents a Google group.\n" +
+								"	- domain:{domain}: A G Suite domain (primary, instead of alias) name that represents all the users of that domain. For example, google.com or example.com.\n",
 						},
 					},
 				},
+				Description: "IAM policy bindings to be set on the table.",
 			},
 		},
+		Description: "Authoritative. Sets the IAM policy for the tables and replaces any existing policy already attached.",
 	}
 }
 
