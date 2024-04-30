@@ -12,8 +12,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
-	"terraform-provider-alis/internal/spanner/services"
-	"terraform-provider-alis/internal/utils"
+	"terraform-provider-alis/internal"
 )
 
 // Ensure the implementation satisfies the expected interfaces.
@@ -29,6 +28,7 @@ func NewIamPolicyResource() resource.Resource {
 }
 
 type databaseIamPolicyResource struct {
+	config *internal.ProviderConfig
 }
 
 // Metadata returns the resource type name.
@@ -103,7 +103,7 @@ func (r *databaseIamPolicyResource) Create(ctx context.Context, req resource.Cre
 
 	// Create a new IAM policy
 	policy := &iampb.Policy{
-		Version:  utils.IamPolicyVersion,
+		Version:  internal.IamPolicyVersion,
 		Bindings: nil,
 	}
 
@@ -141,7 +141,7 @@ func (r *databaseIamPolicyResource) Create(ctx context.Context, req resource.Cre
 	}
 
 	// Create the IAM policy
-	updatedPolicy, err := services.SetSpannerDatabaseIamPolicy(ctx,
+	updatedPolicy, err := r.config.SpannerService.SetSpannerDatabaseIamPolicy(ctx,
 		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
 		policy,
 		&fieldmaskpb.FieldMask{Paths: []string{"bindings"}},
@@ -202,10 +202,10 @@ func (r *databaseIamPolicyResource) Read(ctx context.Context, req resource.ReadR
 	instance := state.Instance.ValueString()
 	database := state.Database.ValueString()
 
-	policy, err := services.GetSpannerDatabaseIamPolicy(ctx,
+	policy, err := r.config.SpannerService.GetSpannerDatabaseIamPolicy(ctx,
 		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
 		&iampb.GetPolicyOptions{
-			RequestedPolicyVersion: utils.IamPolicyVersion,
+			RequestedPolicyVersion: internal.IamPolicyVersion,
 		},
 	)
 	if err != nil {
@@ -262,7 +262,7 @@ func (r *databaseIamPolicyResource) Update(ctx context.Context, req resource.Upd
 
 	// Create a new IAM policy
 	policy := &iampb.Policy{
-		Version:  utils.IamPolicyVersion,
+		Version:  internal.IamPolicyVersion,
 		Bindings: nil,
 	}
 
@@ -280,7 +280,7 @@ func (r *databaseIamPolicyResource) Update(ctx context.Context, req resource.Upd
 	}
 
 	// Create the IAM policy
-	updatedPolicy, err := services.SetSpannerDatabaseIamPolicy(ctx,
+	updatedPolicy, err := r.config.SpannerService.SetSpannerDatabaseIamPolicy(ctx,
 		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
 		policy,
 		&fieldmaskpb.FieldMask{Paths: []string{"bindings"}},
@@ -343,12 +343,12 @@ func (r *databaseIamPolicyResource) Delete(ctx context.Context, req resource.Del
 
 	// Create a new IAM policy
 	policy := &iampb.Policy{
-		Version:  utils.IamPolicyVersion,
+		Version:  internal.IamPolicyVersion,
 		Bindings: nil,
 	}
 
 	// Create the IAM policy
-	_, err := services.SetSpannerDatabaseIamPolicy(ctx,
+	_, err := r.config.SpannerService.SetSpannerDatabaseIamPolicy(ctx,
 		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
 		policy,
 		&fieldmaskpb.FieldMask{Paths: []string{"bindings"}},
@@ -386,6 +386,18 @@ func (r *databaseIamPolicyResource) Configure(_ context.Context, req resource.Co
 	if req.ProviderData == nil {
 		return
 	}
+
+	config, ok := req.ProviderData.(*internal.ProviderConfig)
+	if !ok {
+		resp.Diagnostics.AddError(
+			"Unexpected Resource Configure Type",
+			fmt.Sprintf("Expected *utils.ProviderConfig, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+		)
+
+		return
+	}
+
+	r.config = config
 }
 
 func (r *databaseIamPolicyResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {

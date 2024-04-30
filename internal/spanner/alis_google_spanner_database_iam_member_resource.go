@@ -15,8 +15,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
-	"terraform-provider-alis/internal/spanner/services"
-	"terraform-provider-alis/internal/utils"
+	"terraform-provider-alis/internal"
 )
 
 // Ensure the implementation satisfies the expected interfaces.
@@ -32,6 +31,7 @@ func NewIamMemberResource() resource.Resource {
 }
 
 type databaseIamMemberResource struct {
+	config *internal.ProviderConfig
 }
 
 type databaseIamMemberModel struct {
@@ -103,10 +103,10 @@ func (r *databaseIamMemberResource) Create(ctx context.Context, req resource.Cre
 	role := plan.Role.ValueString()
 	member := plan.Member.ValueString()
 
-	policy, err := services.GetSpannerDatabaseIamPolicy(ctx,
+	policy, err := r.config.SpannerService.GetSpannerDatabaseIamPolicy(ctx,
 		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
 		&iampb.GetPolicyOptions{
-			RequestedPolicyVersion: utils.IamPolicyVersion,
+			RequestedPolicyVersion: internal.IamPolicyVersion,
 		},
 	)
 	if err != nil {
@@ -152,7 +152,7 @@ func (r *databaseIamMemberResource) Create(ctx context.Context, req resource.Cre
 
 	// Create a new policy
 	newPolicy := &iampb.Policy{
-		Version:  utils.IamPolicyVersion,
+		Version:  internal.IamPolicyVersion,
 		Bindings: make([]*iampb.Binding, 0),
 	}
 
@@ -170,7 +170,7 @@ func (r *databaseIamMemberResource) Create(ctx context.Context, req resource.Cre
 		newPolicy.Bindings = append(newPolicy.Bindings, binding)
 	}
 
-	_, err = services.SetSpannerDatabaseIamPolicy(ctx,
+	_, err = r.config.SpannerService.SetSpannerDatabaseIamPolicy(ctx,
 		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
 		newPolicy,
 		&fieldmaskpb.FieldMask{Paths: []string{"bindings"}},
@@ -208,10 +208,10 @@ func (r *databaseIamMemberResource) Read(ctx context.Context, req resource.ReadR
 	role := state.Role.ValueString()
 	member := state.Member.ValueString()
 
-	policy, err := services.GetSpannerDatabaseIamPolicy(ctx,
+	policy, err := r.config.SpannerService.GetSpannerDatabaseIamPolicy(ctx,
 		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
 		&iampb.GetPolicyOptions{
-			RequestedPolicyVersion: utils.IamPolicyVersion,
+			RequestedPolicyVersion: internal.IamPolicyVersion,
 		},
 	)
 	if err != nil {
@@ -268,10 +268,10 @@ func (r *databaseIamMemberResource) Update(ctx context.Context, req resource.Upd
 	role := plan.Role.ValueString()
 	member := plan.Member.ValueString()
 
-	policy, err := services.GetSpannerDatabaseIamPolicy(ctx,
+	policy, err := r.config.SpannerService.GetSpannerDatabaseIamPolicy(ctx,
 		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
 		&iampb.GetPolicyOptions{
-			RequestedPolicyVersion: utils.IamPolicyVersion,
+			RequestedPolicyVersion: internal.IamPolicyVersion,
 		},
 	)
 	if err != nil {
@@ -306,7 +306,7 @@ func (r *databaseIamMemberResource) Update(ctx context.Context, req resource.Upd
 
 	// Create a new policy
 	newPolicy := &iampb.Policy{
-		Version:  utils.IamPolicyVersion,
+		Version:  internal.IamPolicyVersion,
 		Bindings: make([]*iampb.Binding, 0),
 	}
 
@@ -324,7 +324,7 @@ func (r *databaseIamMemberResource) Update(ctx context.Context, req resource.Upd
 		newPolicy.Bindings = append(newPolicy.Bindings, binding)
 	}
 
-	_, err = services.SetSpannerDatabaseIamPolicy(ctx,
+	_, err = r.config.SpannerService.SetSpannerDatabaseIamPolicy(ctx,
 		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
 		newPolicy,
 		&fieldmaskpb.FieldMask{Paths: []string{"bindings"}},
@@ -362,10 +362,10 @@ func (r *databaseIamMemberResource) Delete(ctx context.Context, req resource.Del
 	role := state.Role.ValueString()
 	member := state.Member.ValueString()
 
-	policy, err := services.GetSpannerDatabaseIamPolicy(ctx,
+	policy, err := r.config.SpannerService.GetSpannerDatabaseIamPolicy(ctx,
 		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
 		&iampb.GetPolicyOptions{
-			RequestedPolicyVersion: utils.IamPolicyVersion,
+			RequestedPolicyVersion: internal.IamPolicyVersion,
 		},
 	)
 	if err != nil {
@@ -400,7 +400,7 @@ func (r *databaseIamMemberResource) Delete(ctx context.Context, req resource.Del
 
 	// Create a new policy
 	newPolicy := &iampb.Policy{
-		Version:  utils.IamPolicyVersion,
+		Version:  internal.IamPolicyVersion,
 		Bindings: make([]*iampb.Binding, 0),
 	}
 
@@ -418,7 +418,7 @@ func (r *databaseIamMemberResource) Delete(ctx context.Context, req resource.Del
 		newPolicy.Bindings = append(newPolicy.Bindings, binding)
 	}
 
-	_, err = services.SetSpannerDatabaseIamPolicy(ctx,
+	_, err = r.config.SpannerService.SetSpannerDatabaseIamPolicy(ctx,
 		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
 		newPolicy,
 		&fieldmaskpb.FieldMask{Paths: []string{"bindings"}},
@@ -460,6 +460,18 @@ func (r *databaseIamMemberResource) Configure(_ context.Context, req resource.Co
 	if req.ProviderData == nil {
 		return
 	}
+
+	config, ok := req.ProviderData.(*internal.ProviderConfig)
+	if !ok {
+		resp.Diagnostics.AddError(
+			"Unexpected Resource Configure Type",
+			fmt.Sprintf("Expected *utils.ProviderConfig, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+		)
+
+		return
+	}
+
+	r.config = config
 }
 
 func (r *databaseIamMemberResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {

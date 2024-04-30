@@ -13,8 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
-	"terraform-provider-alis/internal/bigtable/services"
-	"terraform-provider-alis/internal/utils"
+	"terraform-provider-alis/internal"
 )
 
 // Ensure the implementation satisfies the expected interfaces.
@@ -30,6 +29,7 @@ func NewIamBindingResource() resource.Resource {
 }
 
 type tableIamBindingResource struct {
+	config *internal.ProviderConfig
 }
 
 type tableIamBindingModel struct {
@@ -102,8 +102,8 @@ func (r *tableIamBindingResource) Create(ctx context.Context, req resource.Creat
 	table := plan.Table.ValueString()
 	role := plan.Role.ValueString()
 
-	policy, err := services.GetBigtableTableIamPolicy(ctx, fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instance, table), &iampb.GetPolicyOptions{
-		RequestedPolicyVersion: utils.IamPolicyVersion,
+	policy, err := r.config.BigtableService.GetBigtableTableIamPolicy(ctx, fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instance, table), &iampb.GetPolicyOptions{
+		RequestedPolicyVersion: internal.IamPolicyVersion,
 	})
 	if err != nil {
 		resp.Diagnostics.AddError(
@@ -144,7 +144,7 @@ func (r *tableIamBindingResource) Create(ctx context.Context, req resource.Creat
 		})
 	}
 
-	_, err = services.SetBigtableTableIamPolicy(ctx, fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instance, table), policy, &fieldmaskpb.FieldMask{Paths: []string{"bindings"}})
+	_, err = r.config.BigtableService.SetBigtableTableIamPolicy(ctx, fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instance, table), policy, &fieldmaskpb.FieldMask{Paths: []string{"bindings"}})
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Updating IAM Policy",
@@ -177,8 +177,8 @@ func (r *tableIamBindingResource) Read(ctx context.Context, req resource.ReadReq
 	table := state.Table.ValueString()
 	role := state.Role.ValueString()
 
-	policy, err := services.GetBigtableTableIamPolicy(ctx, fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instance, table), &iampb.GetPolicyOptions{
-		RequestedPolicyVersion: utils.IamPolicyVersion,
+	policy, err := r.config.BigtableService.GetBigtableTableIamPolicy(ctx, fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instance, table), &iampb.GetPolicyOptions{
+		RequestedPolicyVersion: internal.IamPolicyVersion,
 	})
 	if err != nil {
 		resp.Diagnostics.AddError(
@@ -226,8 +226,8 @@ func (r *tableIamBindingResource) Update(ctx context.Context, req resource.Updat
 	table := plan.Table.ValueString()
 	role := plan.Role.ValueString()
 
-	policy, err := services.GetBigtableTableIamPolicy(ctx, fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instance, table), &iampb.GetPolicyOptions{
-		RequestedPolicyVersion: utils.IamPolicyVersion,
+	policy, err := r.config.BigtableService.GetBigtableTableIamPolicy(ctx, fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instance, table), &iampb.GetPolicyOptions{
+		RequestedPolicyVersion: internal.IamPolicyVersion,
 	})
 	if err != nil {
 		resp.Diagnostics.AddError(
@@ -267,7 +267,7 @@ func (r *tableIamBindingResource) Update(ctx context.Context, req resource.Updat
 			Members: members,
 		})
 	}
-	updatedPolicy, err := services.SetBigtableTableIamPolicy(ctx, fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instance, table),
+	updatedPolicy, err := r.config.BigtableService.SetBigtableTableIamPolicy(ctx, fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instance, table),
 		policy,
 		&fieldmaskpb.FieldMask{
 			Paths: []string{"bindings"},
@@ -320,8 +320,8 @@ func (r *tableIamBindingResource) Delete(ctx context.Context, req resource.Delet
 	table := state.Table.ValueString()
 	role := state.Role.ValueString()
 
-	policy, err := services.GetBigtableTableIamPolicy(ctx, fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instance, table), &iampb.GetPolicyOptions{
-		RequestedPolicyVersion: utils.IamPolicyVersion,
+	policy, err := r.config.BigtableService.GetBigtableTableIamPolicy(ctx, fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instance, table), &iampb.GetPolicyOptions{
+		RequestedPolicyVersion: internal.IamPolicyVersion,
 	})
 	if err != nil {
 		resp.Diagnostics.AddError(
@@ -346,7 +346,7 @@ func (r *tableIamBindingResource) Delete(ctx context.Context, req resource.Delet
 	for _, binding := range roleBindings {
 		bindings = append(bindings, binding)
 	}
-	_, err = services.SetBigtableTableIamPolicy(ctx, fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instance, table),
+	_, err = r.config.BigtableService.SetBigtableTableIamPolicy(ctx, fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instance, table),
 		&iampb.Policy{Bindings: bindings},
 		&fieldmaskpb.FieldMask{Paths: []string{"bindings"}},
 	)
@@ -385,6 +385,18 @@ func (r *tableIamBindingResource) Configure(_ context.Context, req resource.Conf
 	if req.ProviderData == nil {
 		return
 	}
+
+	config, ok := req.ProviderData.(*internal.ProviderConfig)
+	if !ok {
+		resp.Diagnostics.AddError(
+			"Unexpected Resource Configure Type",
+			fmt.Sprintf("Expected *utils.ProviderConfig, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+		)
+
+		return
+	}
+
+	r.config = config
 }
 
 func (r *tableIamBindingResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {

@@ -15,6 +15,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
+	"terraform-provider-alis/internal"
 	"terraform-provider-alis/internal/spanner/services"
 )
 
@@ -31,6 +32,7 @@ func NewSpannerTableResource() resource.Resource {
 }
 
 type spannerTableResource struct {
+	config *internal.ProviderConfig
 }
 
 type spannerTableModel struct {
@@ -367,7 +369,7 @@ func (r *spannerTableResource) Create(ctx context.Context, req resource.CreateRe
 	}
 
 	// Create table
-	_, err := services.CreateSpannerTable(ctx,
+	_, err := r.config.SpannerService.CreateSpannerTable(ctx,
 		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instanceName, databaseId),
 		tableId,
 		table,
@@ -414,7 +416,7 @@ func (r *spannerTableResource) Read(ctx context.Context, req resource.ReadReques
 	tableId := state.Name.ValueString()
 
 	// Get table from API
-	table, err := services.GetSpannerTable(ctx,
+	table, err := r.config.SpannerService.GetSpannerTable(ctx,
 		fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", project, instanceName, databaseId, tableId),
 	)
 	if err != nil {
@@ -681,7 +683,7 @@ func (r *spannerTableResource) Update(ctx context.Context, req resource.UpdateRe
 	}
 
 	// Update table
-	_, err := services.UpdateSpannerTable(ctx, table, &fieldmaskpb.FieldMask{
+	_, err := r.config.SpannerService.UpdateSpannerTable(ctx, table, &fieldmaskpb.FieldMask{
 		Paths: []string{"schema.columns", "schema.indices"},
 	}, false)
 	if err != nil {
@@ -720,7 +722,7 @@ func (r *spannerTableResource) Delete(ctx context.Context, req resource.DeleteRe
 	tableId := state.Name.ValueString()
 
 	// Delete existing database
-	_, err := services.DeleteSpannerTable(ctx, fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", project, instanceName, databaseId, tableId))
+	_, err := r.config.SpannerService.DeleteSpannerTable(ctx, fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", project, instanceName, databaseId, tableId))
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Deleting Table",
@@ -754,6 +756,18 @@ func (r *spannerTableResource) Configure(_ context.Context, req resource.Configu
 	if req.ProviderData == nil {
 		return
 	}
+
+	config, ok := req.ProviderData.(*internal.ProviderConfig)
+	if !ok {
+		resp.Diagnostics.AddError(
+			"Unexpected Resource Configure Type",
+			fmt.Sprintf("Expected *utils.ProviderConfig, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+		)
+
+		return
+	}
+
+	r.config = config
 }
 
 func (r *spannerTableResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {

@@ -11,13 +11,25 @@ import (
 	"cloud.google.com/go/bigtable"
 	"cloud.google.com/go/iam"
 	"cloud.google.com/go/iam/apiv1/iampb"
+	googleoauth "golang.org/x/oauth2/google"
 	"google.golang.org/api/iterator"
+	"google.golang.org/api/option"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"terraform-provider-alis/internal/utils"
 )
+
+type BigtableService struct {
+	GoogleCredentials *googleoauth.Credentials
+}
+
+func NewBigtableService(creds *googleoauth.Credentials) *BigtableService {
+	return &BigtableService{
+		GoogleCredentials: creds,
+	}
+}
 
 // BigtableTable is a struct that represents a Bigtable table.
 type BigtableTable struct {
@@ -70,7 +82,7 @@ type BigtableBackup struct {
 //   - table: *BigtableTable - The table configuration.
 //
 // Returns: *BigtableTable
-func CreateBigtableTable(ctx context.Context, parent string, tableId string, table *BigtableTable) (*BigtableTable, error) {
+func (s *BigtableService) CreateBigtableTable(ctx context.Context, parent string, tableId string, table *BigtableTable) (*BigtableTable, error) {
 	// Validate arguments
 	// Validate parent name
 	if valid := utils.ValidateArgument(parent, utils.InstanceNameRegex); !valid {
@@ -99,7 +111,12 @@ func CreateBigtableTable(ctx context.Context, parent string, tableId string, tab
 	project := parentNameParts[1]
 	instanceName := parentNameParts[3]
 
-	client, err := bigtable.NewAdminClient(context.Background(), project, instanceName)
+	// If Google credentials are provided, use them instead of Application Default Credentials
+	opts := make([]option.ClientOption, 0)
+	if s.GoogleCredentials != nil {
+		opts = append(opts, option.WithCredentials(s.GoogleCredentials))
+	}
+	client, err := bigtable.NewAdminClient(ctx, project, instanceName, opts...)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "failed to create Bigtable admin client")
 	}
@@ -131,7 +148,7 @@ func CreateBigtableTable(ctx context.Context, parent string, tableId string, tab
 //   - readMask: *fieldmaskpb.FieldMask - The set of fields to read.
 //
 // Returns: *BigtableTable
-func GetBigtableTable(ctx context.Context, name string) (*BigtableTable, error) {
+func (s *BigtableService) GetBigtableTable(ctx context.Context, name string) (*BigtableTable, error) {
 	// Validate arguments
 	// Validate table name
 	if valid := utils.ValidateArgument(name, utils.BigtableTableNameRegex); !valid {
@@ -145,7 +162,12 @@ func GetBigtableTable(ctx context.Context, name string) (*BigtableTable, error) 
 	instanceName := parentNameParts[3]
 	tableID := parentNameParts[5]
 
-	client, err := bigtable.NewAdminClient(context.Background(), project, instanceName)
+	// If Google credentials are provided, use them instead of Application Default Credentials
+	opts := make([]option.ClientOption, 0)
+	if s.GoogleCredentials != nil {
+		opts = append(opts, option.WithCredentials(s.GoogleCredentials))
+	}
+	client, err := bigtable.NewAdminClient(ctx, project, instanceName, opts...)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "failed to create Bigtable admin client")
 	}
@@ -189,7 +211,7 @@ func GetBigtableTable(ctx context.Context, name string) (*BigtableTable, error) 
 //   - parent: string - The parent instance of the tables.
 //
 // Returns: []*BigtableTable
-func ListBigtableTables(ctx context.Context, parent string) ([]*BigtableTable, error) {
+func (s *BigtableService) ListBigtableTables(ctx context.Context, parent string) ([]*BigtableTable, error) {
 	// Validate parent
 	if valid := utils.ValidateArgument(parent, utils.InstanceNameRegex); !valid {
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s`", parent, utils.InstanceNameRegex)
@@ -200,7 +222,12 @@ func ListBigtableTables(ctx context.Context, parent string) ([]*BigtableTable, e
 	project := parentNameParts[1]
 	instanceName := parentNameParts[3]
 
-	client, err := bigtable.NewAdminClient(context.Background(), project, instanceName)
+	// If Google credentials are provided, use them instead of Application Default Credentials
+	opts := make([]option.ClientOption, 0)
+	if s.GoogleCredentials != nil {
+		opts = append(opts, option.WithCredentials(s.GoogleCredentials))
+	}
+	client, err := bigtable.NewAdminClient(ctx, project, instanceName, opts...)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "failed to create Bigtable admin client")
 	}
@@ -258,7 +285,7 @@ func ListBigtableTables(ctx context.Context, parent string) ([]*BigtableTable, e
 //   - allowMissing: bool - Whether to allow missing table.
 //
 // Returns: *BigtableTable
-func UpdateBigtableTable(ctx context.Context, table *BigtableTable, updateMask *fieldmaskpb.FieldMask, allowMissing bool) (*BigtableTable, error) {
+func (s *BigtableService) UpdateBigtableTable(ctx context.Context, table *BigtableTable, updateMask *fieldmaskpb.FieldMask, allowMissing bool) (*BigtableTable, error) {
 	// Ensure table is provided
 	if table == nil {
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table, field is required but not provided")
@@ -282,7 +309,7 @@ func UpdateBigtableTable(ctx context.Context, table *BigtableTable, updateMask *
 	}
 
 	// Get existing table
-	existingTable, err := GetBigtableTable(ctx, table.Name)
+	existingTable, err := s.GetBigtableTable(ctx, table.Name)
 	if err != nil {
 		if status.Code(err) != codes.NotFound {
 			return nil, err
@@ -305,7 +332,7 @@ func UpdateBigtableTable(ctx context.Context, table *BigtableTable, updateMask *
 
 	// If table does not exist, create the table
 	if existingTable == nil {
-		table, err := CreateBigtableTable(ctx, fmt.Sprintf("projects/%s/instances/%s", project, instanceName), tableID, table)
+		table, err := s.CreateBigtableTable(ctx, fmt.Sprintf("projects/%s/instances/%s", project, instanceName), tableID, table)
 		if err != nil {
 			return nil, err
 		}
@@ -313,7 +340,12 @@ func UpdateBigtableTable(ctx context.Context, table *BigtableTable, updateMask *
 		return table, nil
 	}
 
-	client, err := bigtable.NewAdminClient(context.Background(), project, instanceName)
+	// If Google credentials are provided, use them instead of Application Default Credentials
+	opts := make([]option.ClientOption, 0)
+	if s.GoogleCredentials != nil {
+		opts = append(opts, option.WithCredentials(s.GoogleCredentials))
+	}
+	client, err := bigtable.NewAdminClient(ctx, project, instanceName, opts...)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "failed to create Bigtable admin client")
 	}
@@ -415,7 +447,7 @@ func UpdateBigtableTable(ctx context.Context, table *BigtableTable, updateMask *
 //   - name: string - The name of the table.
 //
 // Returns: *emptypb.Empty
-func DeleteBigtableTable(ctx context.Context, name string) (*emptypb.Empty, error) {
+func (s *BigtableService) DeleteBigtableTable(ctx context.Context, name string) (*emptypb.Empty, error) {
 	// Validate table name
 	if valid := utils.ValidateArgument(name, utils.BigtableTableNameRegex); !valid {
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s`", name, utils.BigtableTableNameRegex)
@@ -427,7 +459,12 @@ func DeleteBigtableTable(ctx context.Context, name string) (*emptypb.Empty, erro
 	instanceName := parentNameParts[3]
 	tableID := parentNameParts[5]
 
-	client, err := bigtable.NewAdminClient(context.Background(), project, instanceName)
+	// If Google credentials are provided, use them instead of Application Default Credentials
+	opts := make([]option.ClientOption, 0)
+	if s.GoogleCredentials != nil {
+		opts = append(opts, option.WithCredentials(s.GoogleCredentials))
+	}
+	client, err := bigtable.NewAdminClient(ctx, project, instanceName, opts...)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "failed to create Bigtable admin client")
 	}
@@ -449,7 +486,7 @@ func DeleteBigtableTable(ctx context.Context, name string) (*emptypb.Empty, erro
 //   - options: *iampb.GetPolicyOptions - The options for getting the policy.
 //
 // Returns: *iampb.Policy
-func GetBigtableTableIamPolicy(ctx context.Context, parent string, options *iampb.GetPolicyOptions) (*iampb.Policy, error) {
+func (s *BigtableService) GetBigtableTableIamPolicy(ctx context.Context, parent string, options *iampb.GetPolicyOptions) (*iampb.Policy, error) {
 	// Validate table name
 	if valid := utils.ValidateArgument(parent, utils.BigtableTableNameRegex); !valid {
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s`", parent, utils.BigtableTableNameRegex)
@@ -461,7 +498,12 @@ func GetBigtableTableIamPolicy(ctx context.Context, parent string, options *iamp
 	instanceName := tableNameParts[3]
 	tableID := tableNameParts[5]
 
-	client, err := bigtable.NewAdminClient(context.Background(), project, instanceName)
+	// If Google credentials are provided, use them instead of Application Default Credentials
+	opts := make([]option.ClientOption, 0)
+	if s.GoogleCredentials != nil {
+		opts = append(opts, option.WithCredentials(s.GoogleCredentials))
+	}
+	client, err := bigtable.NewAdminClient(ctx, project, instanceName, opts...)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "failed to create Bigtable admin client")
 	}
@@ -498,7 +540,7 @@ func GetBigtableTableIamPolicy(ctx context.Context, parent string, options *iamp
 //   - updateMask: *fieldmaskpb.FieldMask - The set of fields to update.
 //
 // Returns: *iampb.Policy
-func SetBigtableTableIamPolicy(ctx context.Context, parent string, policy *iampb.Policy, updateMask *fieldmaskpb.FieldMask) (*iampb.Policy, error) {
+func (s *BigtableService) SetBigtableTableIamPolicy(ctx context.Context, parent string, policy *iampb.Policy, updateMask *fieldmaskpb.FieldMask) (*iampb.Policy, error) {
 	// Validate table name
 	if valid := utils.ValidateArgument(parent, utils.BigtableTableNameRegex); !valid {
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s`", parent, utils.BigtableTableNameRegex)
@@ -522,7 +564,12 @@ func SetBigtableTableIamPolicy(ctx context.Context, parent string, policy *iampb
 	instanceName := tableNameParts[3]
 	tableID := tableNameParts[5]
 
-	client, err := bigtable.NewAdminClient(context.Background(), project, instanceName)
+	// If Google credentials are provided, use them instead of Application Default Credentials
+	opts := make([]option.ClientOption, 0)
+	if s.GoogleCredentials != nil {
+		opts = append(opts, option.WithCredentials(s.GoogleCredentials))
+	}
+	client, err := bigtable.NewAdminClient(ctx, project, instanceName, opts...)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "failed to create Bigtable admin client")
 	}
@@ -572,7 +619,7 @@ func SetBigtableTableIamPolicy(ctx context.Context, parent string, policy *iampb
 //   - columnFamily: *bigtable.Family - The column family configuration.
 //
 // Returns: *bigtable.Family
-func CreateBigtableColumnFamily(ctx context.Context, parent string, columnFamilyId string, columnFamily *bigtable.Family) (*bigtable.Family, error) {
+func (s *BigtableService) CreateBigtableColumnFamily(ctx context.Context, parent string, columnFamilyId string, columnFamily *bigtable.Family) (*bigtable.Family, error) {
 	// Validate arguments
 	// Validate table name
 	if valid := utils.ValidateArgument(parent, utils.BigtableTableNameRegex); !valid {
@@ -592,7 +639,12 @@ func CreateBigtableColumnFamily(ctx context.Context, parent string, columnFamily
 	project := tableNameParts[1]
 	instanceName := tableNameParts[3]
 
-	client, err := bigtable.NewAdminClient(context.Background(), project, instanceName)
+	// If Google credentials are provided, use them instead of Application Default Credentials
+	opts := make([]option.ClientOption, 0)
+	if s.GoogleCredentials != nil {
+		opts = append(opts, option.WithCredentials(s.GoogleCredentials))
+	}
+	client, err := bigtable.NewAdminClient(ctx, project, instanceName, opts...)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "failed to create Bigtable admin client")
 	}
@@ -612,7 +664,7 @@ func CreateBigtableColumnFamily(ctx context.Context, parent string, columnFamily
 //   - parent: string - The name of the table.
 //
 // Returns: []*bigtable.Family
-func ListBigtableColumnFamilies(ctx context.Context, parent string) (map[string]*bigtable.Family, error) {
+func (s *BigtableService) ListBigtableColumnFamilies(ctx context.Context, parent string) (map[string]*bigtable.Family, error) {
 	// Validate arguments
 	// Validate table name
 	if valid := utils.ValidateArgument(parent, utils.BigtableTableNameRegex); !valid {
@@ -620,7 +672,7 @@ func ListBigtableColumnFamilies(ctx context.Context, parent string) (map[string]
 	}
 
 	// Get table
-	table, err := GetBigtableTable(ctx, parent)
+	table, err := s.GetBigtableTable(ctx, parent)
 	if err != nil {
 		return nil, err
 	}
@@ -645,7 +697,7 @@ func ListBigtableColumnFamilies(ctx context.Context, parent string) (map[string]
 //   - columnFamilyId: string - The ID of the column family.
 //
 // Returns: *emptypb.Empty
-func DeleteBigtableColumnFamily(ctx context.Context, parent string, columnFamilyId string) (*emptypb.Empty, error) {
+func (s *BigtableService) DeleteBigtableColumnFamily(ctx context.Context, parent string, columnFamilyId string) (*emptypb.Empty, error) {
 	// Validate arguments
 	// Validate table name
 	if valid := utils.ValidateArgument(parent, utils.BigtableTableNameRegex); !valid {
@@ -661,13 +713,18 @@ func DeleteBigtableColumnFamily(ctx context.Context, parent string, columnFamily
 	project := tableNameParts[1]
 	instanceName := tableNameParts[3]
 
-	client, err := bigtable.NewAdminClient(context.Background(), project, instanceName)
+	// If Google credentials are provided, use them instead of Application Default Credentials
+	opts := make([]option.ClientOption, 0)
+	if s.GoogleCredentials != nil {
+		opts = append(opts, option.WithCredentials(s.GoogleCredentials))
+	}
+	client, err := bigtable.NewAdminClient(ctx, project, instanceName, opts...)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "failed to create Bigtable admin client")
 	}
 
 	// Get table
-	_, err = GetBigtableTable(ctx, parent)
+	_, err = s.GetBigtableTable(ctx, parent)
 	if err != nil {
 		return nil, err
 	}
@@ -689,7 +746,7 @@ func DeleteBigtableColumnFamily(ctx context.Context, parent string, columnFamily
 //   - columnFamilyId: string - The ID of the column family.
 //
 // Returns: *bigtable.GCPolicy
-func GetBigtableGarbageCollectionPolicy(ctx context.Context, parent string, columnFamilyId string) (*bigtable.GCPolicy, error) {
+func (s *BigtableService) GetBigtableGarbageCollectionPolicy(ctx context.Context, parent string, columnFamilyId string) (*bigtable.GCPolicy, error) {
 	// Validate arguments
 	// Validate table name
 	if valid := utils.ValidateArgument(parent, utils.BigtableTableNameRegex); !valid {
@@ -701,7 +758,7 @@ func GetBigtableGarbageCollectionPolicy(ctx context.Context, parent string, colu
 	}
 
 	// Get table
-	table, err := GetBigtableTable(ctx, parent)
+	table, err := s.GetBigtableTable(ctx, parent)
 	if err != nil {
 		return nil, err
 	}
@@ -734,7 +791,7 @@ func GetBigtableGarbageCollectionPolicy(ctx context.Context, parent string, colu
 //   - gcPolicy: *bigtable.GCPolicy - The new garbage collection policy.
 //
 // Returns: *bigtable.GCPolicy
-func UpdateBigtableGarbageCollectionPolicy(ctx context.Context, parent string, columnFamilyId string, gcPolicy *bigtable.GCPolicy) (*bigtable.GCPolicy, error) {
+func (s *BigtableService) UpdateBigtableGarbageCollectionPolicy(ctx context.Context, parent string, columnFamilyId string, gcPolicy *bigtable.GCPolicy) (*bigtable.GCPolicy, error) {
 	// Validate arguments
 	// Validate table name
 	if valid := utils.ValidateArgument(parent, utils.BigtableTableNameRegex); !valid {
@@ -746,7 +803,7 @@ func UpdateBigtableGarbageCollectionPolicy(ctx context.Context, parent string, c
 	}
 
 	// Get table
-	table, err := GetBigtableTable(ctx, parent)
+	table, err := s.GetBigtableTable(ctx, parent)
 	if err != nil {
 		return nil, err
 	}
@@ -765,7 +822,12 @@ func UpdateBigtableGarbageCollectionPolicy(ctx context.Context, parent string, c
 	instanceName := tableNameParts[3]
 	tableID := tableNameParts[5]
 
-	client, err := bigtable.NewAdminClient(context.Background(), project, instanceName)
+	// If Google credentials are provided, use them instead of Application Default Credentials
+	opts := make([]option.ClientOption, 0)
+	if s.GoogleCredentials != nil {
+		opts = append(opts, option.WithCredentials(s.GoogleCredentials))
+	}
+	client, err := bigtable.NewAdminClient(ctx, project, instanceName, opts...)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "failed to create Bigtable admin client")
 	}
@@ -786,7 +848,7 @@ func UpdateBigtableGarbageCollectionPolicy(ctx context.Context, parent string, c
 //   - parent: string - The name of the table.
 //
 // Returns: []*bigtable.GCPolicy
-func ListBigtableGarbageCollectionPolicies(ctx context.Context, parent string) ([]*bigtable.GCPolicy, error) {
+func (s *BigtableService) ListBigtableGarbageCollectionPolicies(ctx context.Context, parent string) ([]*bigtable.GCPolicy, error) {
 	// Validate arguments
 	// Validate table name
 	if valid := utils.ValidateArgument(parent, utils.BigtableTableNameRegex); !valid {
@@ -794,7 +856,7 @@ func ListBigtableGarbageCollectionPolicies(ctx context.Context, parent string) (
 	}
 
 	// Get table
-	table, err := GetBigtableTable(ctx, parent)
+	table, err := s.GetBigtableTable(ctx, parent)
 	if err != nil {
 		return nil, err
 	}
@@ -826,7 +888,7 @@ func ListBigtableGarbageCollectionPolicies(ctx context.Context, parent string) (
 //   - columnFamilyId: string - The ID of the column family.
 //
 // Returns: *emptypb.Empty
-func DeleteBigtableGarbageCollectionPolicy(ctx context.Context, parent string, columnFamilyId string) (*emptypb.Empty, error) {
+func (s *BigtableService) DeleteBigtableGarbageCollectionPolicy(ctx context.Context, parent string, columnFamilyId string) (*emptypb.Empty, error) {
 	// Validate arguments
 	// Validate table name
 	if valid := utils.ValidateArgument(parent, utils.BigtableTableNameRegex); !valid {
@@ -838,7 +900,7 @@ func DeleteBigtableGarbageCollectionPolicy(ctx context.Context, parent string, c
 	}
 
 	// Get table
-	table, err := GetBigtableTable(ctx, parent)
+	table, err := s.GetBigtableTable(ctx, parent)
 	if err != nil {
 		return nil, err
 	}
@@ -849,7 +911,12 @@ func DeleteBigtableGarbageCollectionPolicy(ctx context.Context, parent string, c
 	instanceName := tableNameParts[3]
 	tableID := tableNameParts[5]
 
-	client, err := bigtable.NewAdminClient(context.Background(), project, instanceName)
+	// If Google credentials are provided, use them instead of Application Default Credentials
+	opts := make([]option.ClientOption, 0)
+	if s.GoogleCredentials != nil {
+		opts = append(opts, option.WithCredentials(s.GoogleCredentials))
+	}
+	client, err := bigtable.NewAdminClient(ctx, project, instanceName, opts...)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "failed to create Bigtable admin client")
 	}
@@ -872,7 +939,7 @@ func DeleteBigtableGarbageCollectionPolicy(ctx context.Context, parent string, c
 //   - backup: *BigtableBackup - The backup configuration.
 //
 // Returns: *BigtableBackup
-func CreateBigtableBackup(ctx context.Context, parent string, backupId string, backup *BigtableBackup) (*BigtableBackup, error) {
+func (s *BigtableService) CreateBigtableBackup(ctx context.Context, parent string, backupId string, backup *BigtableBackup) (*BigtableBackup, error) {
 	// Validate arguments
 	// Validate parent name
 	if valid := utils.ValidateArgument(parent, utils.BigtableClusterNameRegex); !valid {
@@ -897,7 +964,12 @@ func CreateBigtableBackup(ctx context.Context, parent string, backupId string, b
 	instanceName := parentNameParts[3]
 	cluster := parentNameParts[5]
 
-	client, err := bigtable.NewAdminClient(context.Background(), project, instanceName)
+	// If Google credentials are provided, use them instead of Application Default Credentials
+	opts := make([]option.ClientOption, 0)
+	if s.GoogleCredentials != nil {
+		opts = append(opts, option.WithCredentials(s.GoogleCredentials))
+	}
+	client, err := bigtable.NewAdminClient(ctx, project, instanceName, opts...)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "failed to create Bigtable admin client")
 	}
@@ -906,7 +978,7 @@ func CreateBigtableBackup(ctx context.Context, parent string, backupId string, b
 	backup.Name = fmt.Sprintf("projects/%s/instances/%s/clusters/%s/backups/%s", project, instanceName, cluster, backupId)
 
 	// Get the backup
-	existingBackup, err := GetBigtableBackup(ctx, backup.Name)
+	existingBackup, err := s.GetBigtableBackup(ctx, backup.Name)
 	if err != nil {
 		if status.Code(err) != codes.NotFound {
 			return nil, err
@@ -928,7 +1000,7 @@ func CreateBigtableBackup(ctx context.Context, parent string, backupId string, b
 	}
 
 	// Get the updated backup
-	updatedBackup, err := GetBigtableBackup(ctx, backup.Name)
+	updatedBackup, err := s.GetBigtableBackup(ctx, backup.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -943,7 +1015,7 @@ func CreateBigtableBackup(ctx context.Context, parent string, backupId string, b
 //   - name: string - The name of the backup.
 //
 // Returns: *BigtableBackup
-func GetBigtableBackup(ctx context.Context, name string) (*BigtableBackup, error) {
+func (s *BigtableService) GetBigtableBackup(ctx context.Context, name string) (*BigtableBackup, error) {
 	// Validate arguments
 	// Validate backup name
 	if valid := utils.ValidateArgument(name, utils.BigtableBackupNameRegex); !valid {
@@ -957,7 +1029,12 @@ func GetBigtableBackup(ctx context.Context, name string) (*BigtableBackup, error
 	cluster := backupNameParts[5]
 	backupId := backupNameParts[7]
 
-	client, err := bigtable.NewAdminClient(context.Background(), project, instanceName)
+	// If Google credentials are provided, use them instead of Application Default Credentials
+	opts := make([]option.ClientOption, 0)
+	if s.GoogleCredentials != nil {
+		opts = append(opts, option.WithCredentials(s.GoogleCredentials))
+	}
+	client, err := bigtable.NewAdminClient(ctx, project, instanceName, opts...)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "failed to create Bigtable admin client")
 	}
@@ -990,7 +1067,7 @@ func GetBigtableBackup(ctx context.Context, name string) (*BigtableBackup, error
 //   - pageToken: string - The page token to resume from.
 //
 // Returns: []*BigtableBackup, string
-func ListBigtableBackups(ctx context.Context, parent string, pageSize int32, pageToken string) ([]*BigtableBackup, string, error) {
+func (s *BigtableService) ListBigtableBackups(ctx context.Context, parent string, pageSize int32, pageToken string) ([]*BigtableBackup, string, error) {
 	// Validate arguments
 	// Validate parent name
 	if valid := utils.ValidateArgument(parent, utils.BigtableClusterNameRegex); !valid {
@@ -1003,7 +1080,12 @@ func ListBigtableBackups(ctx context.Context, parent string, pageSize int32, pag
 	instanceName := parentNameParts[3]
 	cluster := parentNameParts[5]
 
-	client, err := bigtable.NewAdminClient(context.Background(), project, instanceName)
+	// If Google credentials are provided, use them instead of Application Default Credentials
+	opts := make([]option.ClientOption, 0)
+	if s.GoogleCredentials != nil {
+		opts = append(opts, option.WithCredentials(s.GoogleCredentials))
+	}
+	client, err := bigtable.NewAdminClient(ctx, project, instanceName, opts...)
 	if err != nil {
 		return nil, "", status.Error(codes.Internal, "failed to create Bigtable admin client")
 	}
@@ -1053,7 +1135,7 @@ func ListBigtableBackups(ctx context.Context, parent string, pageSize int32, pag
 //   - allowMissing: bool - If set to true, allows the creation of a new backup if the backup does not exist.
 //
 // Returns: *BigtableBackup
-func UpdateBigtableBackup(ctx context.Context, backup *BigtableBackup, updateMask *fieldmaskpb.FieldMask, allowMissing bool) (*BigtableBackup, error) {
+func (s *BigtableService) UpdateBigtableBackup(ctx context.Context, backup *BigtableBackup, updateMask *fieldmaskpb.FieldMask, allowMissing bool) (*BigtableBackup, error) {
 	// Validate arguments
 	// Ensure backup is provided
 	if backup == nil {
@@ -1069,7 +1151,7 @@ func UpdateBigtableBackup(ctx context.Context, backup *BigtableBackup, updateMas
 	}
 
 	// Get backup
-	existingBackup, err := GetBigtableBackup(ctx, backup.Name)
+	existingBackup, err := s.GetBigtableBackup(ctx, backup.Name)
 	if err != nil {
 		if status.Code(err) != codes.NotFound {
 			return nil, err
@@ -1091,14 +1173,19 @@ func UpdateBigtableBackup(ctx context.Context, backup *BigtableBackup, updateMas
 	cluster := backupNameParts[5]
 	backupId := backupNameParts[7]
 
-	client, err := bigtable.NewAdminClient(context.Background(), project, instanceName)
+	// If Google credentials are provided, use them instead of Application Default Credentials
+	opts := make([]option.ClientOption, 0)
+	if s.GoogleCredentials != nil {
+		opts = append(opts, option.WithCredentials(s.GoogleCredentials))
+	}
+	client, err := bigtable.NewAdminClient(ctx, project, instanceName, opts...)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "failed to create Bigtable admin client")
 	}
 
 	// If backup is not found and allow missing is set, create the backup
 	if existingBackup == nil {
-		newBackup, err := CreateBigtableBackup(ctx, fmt.Sprintf("projects/%s/instances/%s/clusters/%s", project, instanceName, cluster), backupId, backup)
+		newBackup, err := s.CreateBigtableBackup(ctx, fmt.Sprintf("projects/%s/instances/%s/clusters/%s", project, instanceName, cluster), backupId, backup)
 		if err != nil {
 			return nil, err
 		}
@@ -1121,7 +1208,7 @@ func UpdateBigtableBackup(ctx context.Context, backup *BigtableBackup, updateMas
 	}
 
 	// Get the updated backup
-	updatedBackup, err := GetBigtableBackup(ctx, backup.Name)
+	updatedBackup, err := s.GetBigtableBackup(ctx, backup.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -1136,7 +1223,7 @@ func UpdateBigtableBackup(ctx context.Context, backup *BigtableBackup, updateMas
 //   - name: string - The name of the backup.
 //
 // Returns: *emptypb.Empty
-func DeleteBigtableBackup(ctx context.Context, name string) (*emptypb.Empty, error) {
+func (s *BigtableService) DeleteBigtableBackup(ctx context.Context, name string) (*emptypb.Empty, error) {
 	// Validate arguments
 	// Validate backup name
 	if valid := utils.ValidateArgument(name, utils.BigtableBackupNameRegex); !valid {
@@ -1150,7 +1237,12 @@ func DeleteBigtableBackup(ctx context.Context, name string) (*emptypb.Empty, err
 	cluster := backupNameParts[5]
 	backupId := backupNameParts[7]
 
-	client, err := bigtable.NewAdminClient(context.Background(), project, instanceName)
+	// If Google credentials are provided, use them instead of Application Default Credentials
+	opts := make([]option.ClientOption, 0)
+	if s.GoogleCredentials != nil {
+		opts = append(opts, option.WithCredentials(s.GoogleCredentials))
+	}
+	client, err := bigtable.NewAdminClient(ctx, project, instanceName, opts...)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "failed to create Bigtable admin client")
 	}

@@ -6,12 +6,6 @@ import (
 	"terraform-provider-alis/internal/provider"
 )
 
-const (
-	ProviderConfig = `
-	provider "google" {}
-	`
-)
-
 var (
 	TestAccProtoV6ProviderFactories = map[string]func() (tfprotov6.ProviderServer, error){
 		"google": providerserver.NewProtocol6WithError(provider.NewProvider("test")()),

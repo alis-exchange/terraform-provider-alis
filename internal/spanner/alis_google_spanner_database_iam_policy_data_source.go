@@ -9,8 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"terraform-provider-alis/internal/spanner/services"
-	"terraform-provider-alis/internal/utils"
+	"terraform-provider-alis/internal"
 )
 
 // Ensure the implementation satisfies the expected interfaces.
@@ -25,6 +24,7 @@ func NewIamPolicyDataSource() datasource.DataSource {
 }
 
 type databaseIamPolicyDataSource struct {
+	config *internal.ProviderConfig
 }
 
 type databaseIamPolicyModel struct {
@@ -104,10 +104,10 @@ func (d *databaseIamPolicyDataSource) Read(ctx context.Context, req datasource.R
 	instance := state.Instance.ValueString()
 	database := state.Database.ValueString()
 
-	policy, err := services.GetSpannerDatabaseIamPolicy(ctx,
+	policy, err := d.config.SpannerService.GetSpannerDatabaseIamPolicy(ctx,
 		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
 		&iampb.GetPolicyOptions{
-			RequestedPolicyVersion: utils.IamPolicyVersion,
+			RequestedPolicyVersion: internal.IamPolicyVersion,
 		},
 	)
 	if err != nil {
@@ -153,6 +153,18 @@ func (d *databaseIamPolicyDataSource) Configure(_ context.Context, req datasourc
 	if req.ProviderData == nil {
 		return
 	}
+
+	config, ok := req.ProviderData.(*internal.ProviderConfig)
+	if !ok {
+		resp.Diagnostics.AddError(
+			"Unexpected Data Source Configure Type",
+			fmt.Sprintf("Expected *utils.ProviderConfig, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+		)
+
+		return
+	}
+
+	d.config = config
 }
 
 func (d *databaseIamPolicyDataSource) ConfigValidators(ctx context.Context) []datasource.ConfigValidator {

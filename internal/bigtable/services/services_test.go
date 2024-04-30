@@ -22,6 +22,7 @@ var (
 	// TestInstance is the instance used for testing.
 	TestInstance string
 	TestCluster  string
+	service      *BigtableService
 )
 
 func init() {
@@ -40,6 +41,8 @@ func init() {
 	if TestCluster == "" {
 		log.Fatalf("ALIS_OS_BIGTABLE_CLUSTER must be set for integration tests")
 	}
+
+	service = NewBigtableService(nil)
 }
 
 func TestCreateBigtableTable(t *testing.T) {
@@ -83,7 +86,7 @@ func TestCreateBigtableTable(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := CreateBigtableTable(tt.args.ctx, tt.args.parent, tt.args.tableId, tt.args.table)
+			got, err := service.CreateBigtableTable(tt.args.ctx, tt.args.parent, tt.args.tableId, tt.args.table)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("CreateBigtableTable() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -124,7 +127,7 @@ func TestGetBigtableTable(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := GetBigtableTable(tt.args.ctx, tt.args.name)
+			got, err := service.GetBigtableTable(tt.args.ctx, tt.args.name)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GetBigtableTable() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -171,7 +174,7 @@ func TestUpdateBigtableTable(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := UpdateBigtableTable(tt.args.ctx, tt.args.table, tt.args.updateMask, tt.args.allowMissing)
+			got, err := service.UpdateBigtableTable(tt.args.ctx, tt.args.table, tt.args.updateMask, tt.args.allowMissing)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("UpdateBigtableTable() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -205,7 +208,7 @@ func TestListBigtableTables(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ListBigtableTables(tt.args.ctx, tt.args.parent)
+			got, err := service.ListBigtableTables(tt.args.ctx, tt.args.parent)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ListBigtableTables() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -239,7 +242,7 @@ func TestDeleteBigtableTable(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := DeleteBigtableTable(tt.args.ctx, tt.args.name)
+			got, err := service.DeleteBigtableTable(tt.args.ctx, tt.args.name)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("DeleteBigtableTable() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -276,7 +279,7 @@ func TestCreateBigtableColumnFamily(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := CreateBigtableColumnFamily(tt.args.ctx, tt.args.parent, tt.args.columnFamilyId, tt.args.columnFamily)
+			got, err := service.CreateBigtableColumnFamily(tt.args.ctx, tt.args.parent, tt.args.columnFamilyId, tt.args.columnFamily)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("CreateBigtableColumnFamily() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -310,7 +313,7 @@ func TestListBigtableColumnFamilies(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ListBigtableColumnFamilies(tt.args.ctx, tt.args.parent)
+			got, err := service.ListBigtableColumnFamilies(tt.args.ctx, tt.args.parent)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ListBigtableColumnFamilies() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -346,7 +349,7 @@ func TestDeleteBigtableColumnFamily(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := DeleteBigtableColumnFamily(tt.args.ctx, tt.args.parent, tt.args.columnFamilyId)
+			got, err := service.DeleteBigtableColumnFamily(tt.args.ctx, tt.args.parent, tt.args.columnFamilyId)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("DeleteBigtableColumnFamily() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -383,7 +386,7 @@ func TestGetBigtableGarbageCollectionPolicy(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := GetBigtableGarbageCollectionPolicy(tt.args.ctx, tt.args.parent, tt.args.columnFamilyId)
+			got, err := service.GetBigtableGarbageCollectionPolicy(tt.args.ctx, tt.args.parent, tt.args.columnFamilyId)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GetBigtableGarbageCollectionPolicy() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -435,7 +438,7 @@ func TestUpdateBigtableGarbageCollectionPolicy(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := UpdateBigtableGarbageCollectionPolicy(tt.args.ctx, tt.args.parent, tt.args.columnFamilyId, tt.args.gcPolicy)
+			got, err := service.UpdateBigtableGarbageCollectionPolicy(tt.args.ctx, tt.args.parent, tt.args.columnFamilyId, tt.args.gcPolicy)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("UpdateBigtableGarbageCollectionPolicy() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -469,7 +472,7 @@ func TestListBigtableGarbageCollectionPolicies(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ListBigtableGarbageCollectionPolicies(tt.args.ctx, tt.args.parent)
+			got, err := service.ListBigtableGarbageCollectionPolicies(tt.args.ctx, tt.args.parent)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ListBigtableGarbageCollectionPolicies() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -505,7 +508,7 @@ func TestDeleteBigtableGarbageCollectionPolicy(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := DeleteBigtableGarbageCollectionPolicy(tt.args.ctx, tt.args.parent, tt.args.columnFamilyId)
+			got, err := service.DeleteBigtableGarbageCollectionPolicy(tt.args.ctx, tt.args.parent, tt.args.columnFamilyId)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("DeleteBigtableGarbageCollectionPolicy() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -544,7 +547,7 @@ func TestGetBigtableTableIamPolicy(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := GetBigtableTableIamPolicy(tt.args.ctx, tt.args.parent, tt.args.options)
+			got, err := service.GetBigtableTableIamPolicy(tt.args.ctx, tt.args.parent, tt.args.options)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GetBigtableTableIamPolicy() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -592,7 +595,7 @@ func TestSetBigtableTableIamPolicy(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := SetBigtableTableIamPolicy(tt.args.ctx, tt.args.parent, tt.args.policy, tt.args.updateMask)
+			got, err := service.SetBigtableTableIamPolicy(tt.args.ctx, tt.args.parent, tt.args.policy, tt.args.updateMask)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("SetBigtableTableIamPolicy() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -632,7 +635,7 @@ func TestCreateBigtableBackup(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := CreateBigtableBackup(tt.args.ctx, tt.args.parent, tt.args.backupId, tt.args.backup)
+			got, err := service.CreateBigtableBackup(tt.args.ctx, tt.args.parent, tt.args.backupId, tt.args.backup)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("CreateBigtableBackup() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -666,7 +669,7 @@ func TestGetBigtableBackup(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := GetBigtableBackup(tt.args.ctx, tt.args.name)
+			got, err := service.GetBigtableBackup(tt.args.ctx, tt.args.name)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GetBigtableBackup() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -708,7 +711,7 @@ func TestUpdateBigtableBackup(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := UpdateBigtableBackup(tt.args.ctx, tt.args.backup, tt.args.updateMask, tt.args.allowMissing)
+			got, err := service.UpdateBigtableBackup(tt.args.ctx, tt.args.backup, tt.args.updateMask, tt.args.allowMissing)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("UpdateBigtableBackup() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -746,7 +749,7 @@ func TestListBigtableBackups(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, got1, err := ListBigtableBackups(tt.args.ctx, tt.args.parent, tt.args.pageSize, tt.args.pageToken)
+			got, got1, err := service.ListBigtableBackups(tt.args.ctx, tt.args.parent, tt.args.pageSize, tt.args.pageToken)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ListBigtableBackups() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -783,7 +786,7 @@ func TestDeleteBigtableBackup(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := DeleteBigtableBackup(tt.args.ctx, tt.args.name)
+			got, err := service.DeleteBigtableBackup(tt.args.ctx, tt.args.name)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("DeleteBigtableBackup() error = %v, wantErr %v", err, tt.wantErr)
 				return

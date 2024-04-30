@@ -22,6 +22,7 @@ var (
 	TestProject string
 	// TestInstance is the instance used for testing.
 	TestInstance string
+	service      *SpannerService
 )
 
 func init() {
@@ -35,6 +36,8 @@ func init() {
 	if TestInstance == "" {
 		log.Fatalf("ALIS_OS_INSTANCE must be set for integration tests")
 	}
+
+	service = NewSpannerService(nil)
 }
 
 func TestCreateSpannerDatabase(t *testing.T) {
@@ -66,7 +69,7 @@ func TestCreateSpannerDatabase(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := CreateSpannerDatabase(tt.args.ctx, tt.args.parent, tt.args.databaseId, tt.args.database)
+			got, err := service.CreateSpannerDatabase(tt.args.ctx, tt.args.parent, tt.args.databaseId, tt.args.database)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("CreateSpannerDatabase() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -108,7 +111,7 @@ func TestGetSpannerDatabase(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := GetSpannerDatabase(tt.args.ctx, tt.args.name)
+			got, err := service.GetSpannerDatabase(tt.args.ctx, tt.args.name)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GetSpannerDatabase() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -152,7 +155,7 @@ func TestUpdateSpannerDatabase(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := UpdateSpannerDatabase(tt.args.ctx, tt.args.database, tt.args.updateMask)
+			got, err := service.UpdateSpannerDatabase(tt.args.ctx, tt.args.database, tt.args.updateMask)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("UpdateSpannerDatabase() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -192,7 +195,7 @@ func TestListSpannerDatabases(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, got1, err := ListSpannerDatabases(tt.args.ctx, tt.args.parent, tt.args.pageSize, tt.args.pageToken)
+			got, got1, err := service.ListSpannerDatabases(tt.args.ctx, tt.args.parent, tt.args.pageSize, tt.args.pageToken)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ListSpannerDatabases() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -229,7 +232,7 @@ func TestDeleteSpannerDatabase(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := DeleteSpannerDatabase(tt.args.ctx, tt.args.name)
+			got, err := service.DeleteSpannerDatabase(tt.args.ctx, tt.args.name)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("DeleteSpannerDatabase() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -324,7 +327,7 @@ func TestCreateSpannerTable(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := CreateSpannerTable(tt.args.ctx, tt.args.parent, tt.args.tableId, tt.args.table)
+			got, err := service.CreateSpannerTable(tt.args.ctx, tt.args.parent, tt.args.tableId, tt.args.table)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("CreateSpannerTable() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -358,7 +361,7 @@ func TestGetSpannerTable(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := GetSpannerTable(tt.args.ctx, tt.args.name)
+			got, err := service.GetSpannerTable(tt.args.ctx, tt.args.name)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GetSpannerTable() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -463,7 +466,7 @@ func TestUpdateSpannerTable(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := UpdateSpannerTable(tt.args.ctx, tt.args.table, tt.args.updateMask, tt.args.allowMissing)
+			got, err := service.UpdateSpannerTable(tt.args.ctx, tt.args.table, tt.args.updateMask, tt.args.allowMissing)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("UpdateSpannerTable() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -497,7 +500,7 @@ func TestListSpannerTables(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ListSpannerTables(tt.args.ctx, tt.args.parent)
+			got, err := service.ListSpannerTables(tt.args.ctx, tt.args.parent)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ListSpannerTables() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -529,7 +532,7 @@ func TestDeleteSpannerTable(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := DeleteSpannerTable(tt.args.ctx, tt.args.name)
+			got, err := service.DeleteSpannerTable(tt.args.ctx, tt.args.name)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("DeleteSpannerTable() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -571,7 +574,7 @@ func TestCreateSpannerBackup(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := CreateSpannerBackup(tt.args.ctx, tt.args.parent, tt.args.backupId, tt.args.backup, tt.args.encryptionConfig)
+			got, err := service.CreateSpannerBackup(tt.args.ctx, tt.args.parent, tt.args.backupId, tt.args.backup, tt.args.encryptionConfig)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("CreateSpannerBackup() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -614,7 +617,7 @@ func TestGetSpannerBackup(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := GetSpannerBackup(tt.args.ctx, tt.args.name, tt.args.readMask)
+			got, err := service.GetSpannerBackup(tt.args.ctx, tt.args.name, tt.args.readMask)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GetSpannerBackup() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -657,7 +660,7 @@ func TestUpdateSpannerBackup(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := UpdateSpannerBackup(tt.args.ctx, tt.args.backup, tt.args.updateMask)
+			got, err := service.UpdateSpannerBackup(tt.args.ctx, tt.args.backup, tt.args.updateMask)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("UpdateSpannerBackup() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -700,7 +703,7 @@ func TestListSpannerBackups(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, got1, err := ListSpannerBackups(tt.args.ctx, tt.args.parent, tt.args.filter, tt.args.pageSize, tt.args.pageToken)
+			got, got1, err := service.ListSpannerBackups(tt.args.ctx, tt.args.parent, tt.args.filter, tt.args.pageSize, tt.args.pageToken)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ListSpannerBackups() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -737,7 +740,7 @@ func TestDeleteSpannerBackup(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := DeleteSpannerBackup(tt.args.ctx, tt.args.name)
+			got, err := service.DeleteSpannerBackup(tt.args.ctx, tt.args.name)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("DeleteSpannerBackup() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -786,7 +789,7 @@ func TestSetSpannerDatabaseIamPolicy(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := SetSpannerDatabaseIamPolicy(tt.args.ctx, tt.args.parent, tt.args.policy, tt.args.updateMask)
+			got, err := service.SetSpannerDatabaseIamPolicy(tt.args.ctx, tt.args.parent, tt.args.policy, tt.args.updateMask)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("SetSpannerDatabaseIamPolicy() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -824,7 +827,7 @@ func TestGetSpannerDatabaseIamPolicy(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := GetSpannerDatabaseIamPolicy(tt.args.ctx, tt.args.parent, tt.args.options)
+			got, err := service.GetSpannerDatabaseIamPolicy(tt.args.ctx, tt.args.parent, tt.args.options)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GetSpannerDatabaseIamPolicy() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -860,7 +863,7 @@ func TestTestSpannerDatabaseIamPermissions(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := TestSpannerDatabaseIamPermissions(tt.args.ctx, tt.args.parent, tt.args.permissions)
+			got, err := service.TestSpannerDatabaseIamPermissions(tt.args.ctx, tt.args.parent, tt.args.permissions)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("TestSpannerDatabaseIamPermissions() error = %v, wantErr %v", err, tt.wantErr)
 				return

@@ -8,7 +8,6 @@ terraform {
 }
 
 provider "alis" {
-
 }
 
 resource "alis_google_bigtable_table_iam_policy" "policy" {

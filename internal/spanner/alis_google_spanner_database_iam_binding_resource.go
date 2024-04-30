@@ -13,8 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
-	"terraform-provider-alis/internal/spanner/services"
-	"terraform-provider-alis/internal/utils"
+	"terraform-provider-alis/internal"
 )
 
 // Ensure the implementation satisfies the expected interfaces.
@@ -30,6 +29,7 @@ func NewIamBindingResource() resource.Resource {
 }
 
 type databaseIamBindingResource struct {
+	config *internal.ProviderConfig
 }
 
 type databaseIamBindingModel struct {
@@ -99,10 +99,10 @@ func (r *databaseIamBindingResource) Create(ctx context.Context, req resource.Cr
 	database := plan.Database.ValueString()
 	role := plan.Role.ValueString()
 
-	policy, err := services.GetSpannerDatabaseIamPolicy(ctx,
+	policy, err := r.config.SpannerService.GetSpannerDatabaseIamPolicy(ctx,
 		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
 		&iampb.GetPolicyOptions{
-			RequestedPolicyVersion: utils.IamPolicyVersion,
+			RequestedPolicyVersion: internal.IamPolicyVersion,
 		},
 	)
 	if err != nil {
@@ -144,7 +144,7 @@ func (r *databaseIamBindingResource) Create(ctx context.Context, req resource.Cr
 		})
 	}
 
-	_, err = services.SetSpannerDatabaseIamPolicy(ctx,
+	_, err = r.config.SpannerService.SetSpannerDatabaseIamPolicy(ctx,
 		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
 		policy,
 		&fieldmaskpb.FieldMask{Paths: []string{"bindings"}},
@@ -181,10 +181,10 @@ func (r *databaseIamBindingResource) Read(ctx context.Context, req resource.Read
 	database := state.Database.ValueString()
 	role := state.Role.ValueString()
 
-	policy, err := services.GetSpannerDatabaseIamPolicy(ctx,
+	policy, err := r.config.SpannerService.GetSpannerDatabaseIamPolicy(ctx,
 		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
 		&iampb.GetPolicyOptions{
-			RequestedPolicyVersion: utils.IamPolicyVersion,
+			RequestedPolicyVersion: internal.IamPolicyVersion,
 		},
 	)
 	if err != nil {
@@ -233,10 +233,10 @@ func (r *databaseIamBindingResource) Update(ctx context.Context, req resource.Up
 	database := plan.Database.ValueString()
 	role := plan.Role.ValueString()
 
-	policy, err := services.GetSpannerDatabaseIamPolicy(ctx,
+	policy, err := r.config.SpannerService.GetSpannerDatabaseIamPolicy(ctx,
 		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
 		&iampb.GetPolicyOptions{
-			RequestedPolicyVersion: utils.IamPolicyVersion,
+			RequestedPolicyVersion: internal.IamPolicyVersion,
 		},
 	)
 	if err != nil {
@@ -278,7 +278,7 @@ func (r *databaseIamBindingResource) Update(ctx context.Context, req resource.Up
 		})
 	}
 
-	updatedPolicy, err := services.SetSpannerDatabaseIamPolicy(ctx,
+	updatedPolicy, err := r.config.SpannerService.SetSpannerDatabaseIamPolicy(ctx,
 		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
 		policy,
 		&fieldmaskpb.FieldMask{Paths: []string{"bindings"}},
@@ -330,10 +330,10 @@ func (r *databaseIamBindingResource) Delete(ctx context.Context, req resource.De
 	database := state.Database.ValueString()
 	role := state.Role.ValueString()
 
-	policy, err := services.GetSpannerDatabaseIamPolicy(ctx,
+	policy, err := r.config.SpannerService.GetSpannerDatabaseIamPolicy(ctx,
 		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
 		&iampb.GetPolicyOptions{
-			RequestedPolicyVersion: utils.IamPolicyVersion,
+			RequestedPolicyVersion: internal.IamPolicyVersion,
 		},
 	)
 	if err != nil {
@@ -359,7 +359,7 @@ func (r *databaseIamBindingResource) Delete(ctx context.Context, req resource.De
 	for _, binding := range roleBindings {
 		bindings = append(bindings, binding)
 	}
-	_, err = services.SetSpannerDatabaseIamPolicy(ctx,
+	_, err = r.config.SpannerService.SetSpannerDatabaseIamPolicy(ctx,
 		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
 		&iampb.Policy{Bindings: bindings},
 		&fieldmaskpb.FieldMask{Paths: []string{"bindings"}},
@@ -399,6 +399,18 @@ func (r *databaseIamBindingResource) Configure(_ context.Context, req resource.C
 	if req.ProviderData == nil {
 		return
 	}
+
+	config, ok := req.ProviderData.(*internal.ProviderConfig)
+	if !ok {
+		resp.Diagnostics.AddError(
+			"Unexpected Resource Configure Type",
+			fmt.Sprintf("Expected *utils.ProviderConfig, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+		)
+
+		return
+	}
+
+	r.config = config
 }
 
 func (r *databaseIamBindingResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {

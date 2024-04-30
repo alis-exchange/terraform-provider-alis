@@ -12,6 +12,7 @@ import (
 	"cloud.google.com/go/spanner/admin/database/apiv1/databasepb"
 	spannergorm "github.com/googleapis/go-gorm-spanner"
 	_ "github.com/googleapis/go-sql-spanner"
+	googleoauth "golang.org/x/oauth2/google"
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -33,6 +34,16 @@ const (
 	DatabaseEncryptionType_CustomerManaged         = "CUSTOMER_MANAGED_ENCRYPTION"
 	DatabaseEncryptionType_GoogleDefaultEncryption = "GOOGLE_DEFAULT_ENCRYPTION"
 )
+
+type SpannerService struct {
+	GoogleCredentials *googleoauth.Credentials
+}
+
+func NewSpannerService(creds *googleoauth.Credentials) *SpannerService {
+	return &SpannerService{
+		GoogleCredentials: creds,
+	}
+}
 
 // SpannerTableColumn represents a Spanner table column.
 type SpannerTableColumn struct {
@@ -111,7 +122,7 @@ type DatabaseOperationResponse[T interface{}] struct {
 //   - database: *databasepb.Database - Required. The database to create.
 //
 // Returns: *databasepb.Database
-func CreateSpannerDatabase(ctx context.Context, parent string, databaseId string, database *databasepb.Database) (*DatabaseOperationResponse[databaseApiV1.CreateDatabaseOperation], error) {
+func (s *SpannerService) CreateSpannerDatabase(ctx context.Context, parent string, databaseId string, database *databasepb.Database) (*DatabaseOperationResponse[databaseApiV1.CreateDatabaseOperation], error) {
 	// Validate arguments
 	// Validate database id
 	if valid := utils.ValidateArgument(databaseId, utils.SpannerDatabaseIdRegex); !valid {
@@ -167,7 +178,7 @@ func CreateSpannerDatabase(ctx context.Context, parent string, databaseId string
 //   - name: string - Required. The name of the database to get.
 //
 // Returns: *databasepb.Database
-func GetSpannerDatabase(ctx context.Context, name string) (*databasepb.Database, error) {
+func (s *SpannerService) GetSpannerDatabase(ctx context.Context, name string) (*databasepb.Database, error) {
 	// Validate arguments
 	// Validate name
 	if valid := utils.ValidateArgument(name, utils.SpannerDatabaseNameRegex); !valid {
@@ -200,7 +211,7 @@ func GetSpannerDatabase(ctx context.Context, name string) (*databasepb.Database,
 //   - pageToken: string - The value of `next_page_token` returned by a previous call.
 //
 // Returns: []*databasepb.Database
-func ListSpannerDatabases(ctx context.Context, parent string, pageSize int32, pageToken string) ([]*databasepb.Database, string, error) {
+func (s *SpannerService) ListSpannerDatabases(ctx context.Context, parent string, pageSize int32, pageToken string) ([]*databasepb.Database, string, error) {
 	// Validate arguments
 	// Validate parent
 	if valid := utils.ValidateArgument(parent, utils.InstanceNameRegex); !valid {
@@ -252,7 +263,7 @@ func ListSpannerDatabases(ctx context.Context, parent string, pageSize int32, pa
 //   - allowMissing: bool - If true and the database does not exist, a new database will be created. Default is false.
 //
 // Returns: *databasepb.Database
-func UpdateSpannerDatabase(ctx context.Context, database *databasepb.Database, updateMask *fieldmaskpb.FieldMask) (*databasepb.Database, error) {
+func (s *SpannerService) UpdateSpannerDatabase(ctx context.Context, database *databasepb.Database, updateMask *fieldmaskpb.FieldMask) (*databasepb.Database, error) {
 	// Validate arguments
 	// Ensure database is provided
 	if database == nil {
@@ -342,7 +353,7 @@ func UpdateSpannerDatabase(ctx context.Context, database *databasepb.Database, u
 	}
 
 	// Get database state
-	updatedDatabase, err := GetSpannerDatabase(ctx, database.GetName())
+	updatedDatabase, err := s.GetSpannerDatabase(ctx, database.GetName())
 	if err != nil {
 		return nil, err
 	}
@@ -357,7 +368,7 @@ func UpdateSpannerDatabase(ctx context.Context, database *databasepb.Database, u
 //   - name: string - Required. The name of the database to delete.
 //
 // Returns: *emptypb.Empty
-func DeleteSpannerDatabase(ctx context.Context, name string) (*emptypb.Empty, error) {
+func (s *SpannerService) DeleteSpannerDatabase(ctx context.Context, name string) (*emptypb.Empty, error) {
 	// Validate arguments
 	// Validate name
 	if valid := utils.ValidateArgument(name, utils.SpannerDatabaseNameRegex); !valid {
@@ -390,7 +401,7 @@ func DeleteSpannerDatabase(ctx context.Context, name string) (*emptypb.Empty, er
 //   - options: *iampb.GetPolicyOptions - Optional. Options for GetIamPolicy.
 //
 // Returns: *iampb.Policy
-func GetSpannerDatabaseIamPolicy(ctx context.Context, parent string, options *iampb.GetPolicyOptions) (*iampb.Policy, error) {
+func (s *SpannerService) GetSpannerDatabaseIamPolicy(ctx context.Context, parent string, options *iampb.GetPolicyOptions) (*iampb.Policy, error) {
 	// Validate parent
 	if valid := utils.ValidateArgument(parent, utils.SpannerDatabaseNameRegex); !valid {
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s`", parent, utils.SpannerDatabaseNameRegex)
@@ -423,7 +434,7 @@ func GetSpannerDatabaseIamPolicy(ctx context.Context, parent string, options *ia
 //   - updateMask: *fieldmaskpb.FieldMask - Optional. The fields to update.
 //
 // Returns: *iampb.Policy
-func SetSpannerDatabaseIamPolicy(ctx context.Context, parent string, policy *iampb.Policy, updateMask *fieldmaskpb.FieldMask) (*iampb.Policy, error) {
+func (s *SpannerService) SetSpannerDatabaseIamPolicy(ctx context.Context, parent string, policy *iampb.Policy, updateMask *fieldmaskpb.FieldMask) (*iampb.Policy, error) {
 	// Validate parent
 	if valid := utils.ValidateArgument(parent, utils.SpannerDatabaseNameRegex); !valid {
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s`", parent, utils.SpannerDatabaseNameRegex)
@@ -464,7 +475,7 @@ func SetSpannerDatabaseIamPolicy(ctx context.Context, parent string, policy *iam
 //   - permissions: []string - Required. The set of permissions to check for the resource.
 //
 // Returns: []string
-func TestSpannerDatabaseIamPermissions(ctx context.Context, parent string, permissions []string) ([]string, error) {
+func (s *SpannerService) TestSpannerDatabaseIamPermissions(ctx context.Context, parent string, permissions []string) ([]string, error) {
 	// Validate parent
 	if valid := utils.ValidateArgument(parent, utils.SpannerDatabaseNameRegex); !valid {
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s`", parent, utils.SpannerDatabaseNameRegex)
@@ -498,7 +509,7 @@ func TestSpannerDatabaseIamPermissions(ctx context.Context, parent string, permi
 //   - encryptionConfig: *databasepb.CreateBackupEncryptionConfig - Optional. The encryption configuration for the backup.
 //
 // Returns: *databasepb.Backup
-func CreateSpannerBackup(ctx context.Context, parent string, backupId string, backup *databasepb.Backup, encryptionConfig *databasepb.CreateBackupEncryptionConfig) (*DatabaseOperationResponse[databaseApiV1.CreateBackupOperation], error) {
+func (s *SpannerService) CreateSpannerBackup(ctx context.Context, parent string, backupId string, backup *databasepb.Backup, encryptionConfig *databasepb.CreateBackupEncryptionConfig) (*DatabaseOperationResponse[databaseApiV1.CreateBackupOperation], error) {
 	// Validate arguments
 	// Validate parent name
 	if valid := utils.ValidateArgument(parent, utils.InstanceNameRegex); !valid {
@@ -520,7 +531,7 @@ func CreateSpannerBackup(ctx context.Context, parent string, backupId string, ba
 
 	// Set the backup name
 	backup.Name = fmt.Sprintf("projects/%s/instances/%s/backups/%s", project, instance, backupId)
-	b, err := GetSpannerBackup(ctx, backup.GetName(), nil)
+	b, err := s.GetSpannerBackup(ctx, backup.GetName(), nil)
 	if err != nil {
 		if status.Code(err) != codes.NotFound {
 			return nil, err
@@ -563,7 +574,7 @@ func CreateSpannerBackup(ctx context.Context, parent string, backupId string, ba
 //   - readMask: *fieldmaskpb.FieldMask - Optional. The fields to return.
 //
 // Returns: *databasepb.Backup
-func GetSpannerBackup(ctx context.Context, name string, readMask *fieldmaskpb.FieldMask) (*databasepb.Backup, error) {
+func (s *SpannerService) GetSpannerBackup(ctx context.Context, name string, readMask *fieldmaskpb.FieldMask) (*databasepb.Backup, error) {
 	// Validate name
 	if valid := utils.ValidateArgument(name, utils.SpannerBackupNameRegex); !valid {
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s`", name, utils.SpannerBackupNameRegex)
@@ -596,7 +607,7 @@ func GetSpannerBackup(ctx context.Context, name string, readMask *fieldmaskpb.Fi
 //   - pageToken: string - The value of `next_page_token` returned by a previous call.
 //
 // Returns: []*databasepb.Backup, string
-func ListSpannerBackups(ctx context.Context, parent string, filter string, pageSize int32, pageToken string) ([]*databasepb.Backup, string, error) {
+func (s *SpannerService) ListSpannerBackups(ctx context.Context, parent string, filter string, pageSize int32, pageToken string) ([]*databasepb.Backup, string, error) {
 	// Validate arguments
 	// Validate parent
 	if valid := utils.ValidateArgument(parent, utils.InstanceNameRegex); !valid {
@@ -650,7 +661,7 @@ func ListSpannerBackups(ctx context.Context, parent string, filter string, pageS
 //   - allowMissing: bool - If true and the backup does not exist, a new backup will be created. Default is false.
 //
 // Returns: *databasepb.Backup
-func UpdateSpannerBackup(ctx context.Context, backup *databasepb.Backup, updateMask *fieldmaskpb.FieldMask) (*databasepb.Backup, error) {
+func (s *SpannerService) UpdateSpannerBackup(ctx context.Context, backup *databasepb.Backup, updateMask *fieldmaskpb.FieldMask) (*databasepb.Backup, error) {
 	// Validate arguments
 	// Ensure backup is provided
 	if backup == nil {
@@ -719,7 +730,7 @@ func UpdateSpannerBackup(ctx context.Context, backup *databasepb.Backup, updateM
 //   - name: string - Required. The name of the backup to delete.
 //
 // Returns: *emptypb.Empty
-func DeleteSpannerBackup(ctx context.Context, name string) (*emptypb.Empty, error) {
+func (s *SpannerService) DeleteSpannerBackup(ctx context.Context, name string) (*emptypb.Empty, error) {
 	// Validate arguments
 	// Validate name
 	if valid := utils.ValidateArgument(name, utils.SpannerBackupNameRegex); !valid {
@@ -753,7 +764,7 @@ func DeleteSpannerBackup(ctx context.Context, name string) (*emptypb.Empty, erro
 //   - table: *SpannerTable - Required. The table to create.
 //
 // Returns: *SpannerTable
-func CreateSpannerTable(ctx context.Context, parent string, tableId string, table *SpannerTable) (*SpannerTable, error) {
+func (s *SpannerService) CreateSpannerTable(ctx context.Context, parent string, tableId string, table *SpannerTable) (*SpannerTable, error) {
 	// Validate parent
 	if valid := utils.ValidateArgument(parent, utils.SpannerDatabaseNameRegex); !valid {
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s`", parent, utils.SpannerDatabaseNameRegex)
@@ -824,7 +835,7 @@ func CreateSpannerTable(ctx context.Context, parent string, tableId string, tabl
 	}
 
 	// Get created table
-	updatedTable, err := GetSpannerTable(ctx, table.Name)
+	updatedTable, err := s.GetSpannerTable(ctx, table.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -839,7 +850,7 @@ func CreateSpannerTable(ctx context.Context, parent string, tableId string, tabl
 //   - name: string - Required. The name of the table to get.
 //
 // Returns: *SpannerTable
-func GetSpannerTable(ctx context.Context, name string) (*SpannerTable, error) {
+func (s *SpannerService) GetSpannerTable(ctx context.Context, name string) (*SpannerTable, error) {
 	// Validate name
 	if valid := utils.ValidateArgument(name, utils.SpannerTableNameRegex); !valid {
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s`", name, utils.SpannerTableNameRegex)
@@ -961,7 +972,7 @@ func GetSpannerTable(ctx context.Context, name string) (*SpannerTable, error) {
 //   - parent: string - Required. The database whose tables should be listed.
 //
 // Returns: []*SpannerTable
-func ListSpannerTables(ctx context.Context, parent string) ([]*SpannerTable, error) {
+func (s *SpannerService) ListSpannerTables(ctx context.Context, parent string) ([]*SpannerTable, error) {
 	// Validate arguments
 	// Validate parent
 	if valid := utils.ValidateArgument(parent, utils.SpannerDatabaseNameRegex); !valid {
@@ -997,7 +1008,7 @@ func ListSpannerTables(ctx context.Context, parent string) ([]*SpannerTable, err
 	res := make([]*SpannerTable, len(tableNames))
 
 	for i, tableName := range tableNames {
-		table, err := GetSpannerTable(ctx, fmt.Sprintf("%s/tables/%s", parent, tableName))
+		table, err := s.GetSpannerTable(ctx, fmt.Sprintf("%s/tables/%s", parent, tableName))
 		if err != nil {
 			return nil, err
 		}
@@ -1016,7 +1027,7 @@ func ListSpannerTables(ctx context.Context, parent string) ([]*SpannerTable, err
 //   - allowMissing: bool - If true and the table does not exist, a new table will be created. Default is false.
 //
 // Returns: *SpannerTable
-func UpdateSpannerTable(ctx context.Context, table *SpannerTable, updateMask *fieldmaskpb.FieldMask, allowMissing bool) (*SpannerTable, error) {
+func (s *SpannerService) UpdateSpannerTable(ctx context.Context, table *SpannerTable, updateMask *fieldmaskpb.FieldMask, allowMissing bool) (*SpannerTable, error) {
 	// Validate arguments
 	// Ensure table is provided
 	if table == nil {
@@ -1062,7 +1073,7 @@ func UpdateSpannerTable(ctx context.Context, table *SpannerTable, updateMask *fi
 	tableId := nameParts[7]
 
 	// Get table state
-	existingTable, err := GetSpannerTable(ctx, table.Name)
+	existingTable, err := s.GetSpannerTable(ctx, table.Name)
 	if err != nil {
 		if status.Code(err) != codes.NotFound {
 			return nil, err
@@ -1079,7 +1090,7 @@ func UpdateSpannerTable(ctx context.Context, table *SpannerTable, updateMask *fi
 
 	// If table does not exist and allow missing is set, create the table
 	if existingTable == nil {
-		return CreateSpannerTable(ctx, fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId), tableId, table)
+		return s.CreateSpannerTable(ctx, fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId), tableId, table)
 	}
 
 	db, err := gorm.Open(
@@ -1199,7 +1210,7 @@ func UpdateSpannerTable(ctx context.Context, table *SpannerTable, updateMask *fi
 //   - name: string - Required. The name of the table to delete.
 //
 // Returns: *emptypb.Empty
-func DeleteSpannerTable(ctx context.Context, name string) (*emptypb.Empty, error) {
+func (s *SpannerService) DeleteSpannerTable(ctx context.Context, name string) (*emptypb.Empty, error) {
 	// Validate name
 	if valid := utils.ValidateArgument(name, utils.SpannerTableNameRegex); !valid {
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s`", name, utils.SpannerTableNameRegex)
@@ -1213,7 +1224,7 @@ func DeleteSpannerTable(ctx context.Context, name string) (*emptypb.Empty, error
 	tableId := nameParts[7]
 
 	// Get table state
-	table, err := GetSpannerTable(ctx, name)
+	table, err := s.GetSpannerTable(ctx, name)
 	if err != nil {
 		return nil, err
 	}
@@ -1266,7 +1277,7 @@ func DeleteSpannerTable(ctx context.Context, name string) (*emptypb.Empty, error
 //   - index: *SpannerTableIndex - Required. The index to create.
 //
 // Returns: *SpannerTableIndex
-func CreateSpannerTableIndex(ctx context.Context, parent string, index *SpannerTableIndex) (*SpannerTableIndex, error) {
+func (s *SpannerService) CreateSpannerTableIndex(ctx context.Context, parent string, index *SpannerTableIndex) (*SpannerTableIndex, error) {
 	// Validate parent
 	if valid := utils.ValidateArgument(parent, utils.SpannerTableNameRegex); !valid {
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s`", parent, utils.SpannerDatabaseNameRegex)
@@ -1310,7 +1321,7 @@ func CreateSpannerTableIndex(ctx context.Context, parent string, index *SpannerT
 	}
 
 	// Get parent table
-	table, err := GetSpannerTable(ctx, parent)
+	table, err := s.GetSpannerTable(ctx, parent)
 	if err != nil {
 		return nil, err
 	}
@@ -1352,7 +1363,7 @@ func CreateSpannerTableIndex(ctx context.Context, parent string, index *SpannerT
 //   - name: string - Required. The name of the index to get.
 //
 // Returns: *SpannerTableIndex
-func GetSpannerTableIndex(ctx context.Context, parent string, name string) (*SpannerTableIndex, error) {
+func (s *SpannerService) GetSpannerTableIndex(ctx context.Context, parent string, name string) (*SpannerTableIndex, error) {
 	// Validate parent
 	if valid := utils.ValidateArgument(parent, utils.SpannerTableNameRegex); !valid {
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s`", parent, utils.SpannerDatabaseNameRegex)
@@ -1415,7 +1426,7 @@ func GetSpannerTableIndex(ctx context.Context, parent string, name string) (*Spa
 //   - parent: string - Required. The name of the table whose indices should be listed.
 //
 // Returns: []*SpannerTableIndex
-func ListSpannerTableIndices(ctx context.Context, parent string) ([]*SpannerTableIndex, error) {
+func (s *SpannerService) ListSpannerTableIndices(ctx context.Context, parent string) ([]*SpannerTableIndex, error) {
 	// Validate parent
 	if valid := utils.ValidateArgument(parent, utils.SpannerTableNameRegex); !valid {
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s`", parent, utils.SpannerDatabaseNameRegex)
@@ -1475,7 +1486,7 @@ func ListSpannerTableIndices(ctx context.Context, parent string) ([]*SpannerTabl
 //   - indexName: string - Required. The name of the index to delete.
 //
 // Returns: *emptypb.Empty
-func DeleteIndex(ctx context.Context, parent string, indexName string) (*emptypb.Empty, error) {
+func (s *SpannerService) DeleteIndex(ctx context.Context, parent string, indexName string) (*emptypb.Empty, error) {
 	// Validate arguments
 	// Validate parent
 	if valid := utils.ValidateArgument(parent, utils.SpannerTableNameRegex); !valid {

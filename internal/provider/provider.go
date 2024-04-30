@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"os"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -13,8 +12,11 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"terraform-provider-alis/internal"
 	"terraform-provider-alis/internal/bigtable"
+	bigtableservices "terraform-provider-alis/internal/bigtable/services"
 	"terraform-provider-alis/internal/spanner"
+	spannerservices "terraform-provider-alis/internal/spanner/services"
 	"terraform-provider-alis/internal/utils"
 	"terraform-provider-alis/internal/validators"
 )
@@ -43,7 +45,6 @@ type googleProvider struct {
 
 // googleProviderModel maps provider schema data to a Go type.
 type googleProviderModel struct {
-	Host        types.String `tfsdk:"host"`
 	Credentials types.String `tfsdk:"credentials"`
 	AccessToken types.String `tfsdk:"access_token"`
 	Project     types.String `tfsdk:"project"`
@@ -59,15 +60,14 @@ func (p *googleProvider) Metadata(_ context.Context, _ provider.MetadataRequest,
 func (p *googleProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
-			"host": schema.StringAttribute{
-				Optional: true,
-			},
 			"credentials": schema.StringAttribute{
 				Optional: true,
 				Validators: []validator.String{
-					stringvalidator.ConflictsWith(path.Expressions{
-						path.MatchRoot("access_token"),
-					}...),
+					stringvalidator.ConflictsWith(
+						path.Expressions{
+							path.MatchRoot("access_token"),
+						}...,
+					),
 					validators.GoogleCredentialsValidator(),
 					validators.StringNotEmpty(),
 				},
@@ -76,6 +76,11 @@ func (p *googleProvider) Schema(_ context.Context, _ provider.SchemaRequest, res
 			"access_token": schema.StringAttribute{
 				Optional: true,
 				Validators: []validator.String{
+					stringvalidator.AlsoRequires(
+						path.Expressions{
+							path.MatchRoot("project"),
+						}...,
+					),
 					stringvalidator.ConflictsWith(path.Expressions{
 						path.MatchRoot("credentials"),
 					}...),
@@ -121,31 +126,35 @@ func (p *googleProvider) Configure(ctx context.Context, req provider.ConfigureRe
 
 	// Default values to environment variables, but override
 	// with Terraform configuration value if set.
-	credentials := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
-	if !config.Credentials.IsNull() {
-		credentials = config.Credentials.ValueString()
-	}
-
+	credentials := config.Credentials.ValueString()
 	accessToken := config.AccessToken.ValueString()
 
-	if credentials == "" && accessToken == "" {
-		googleDefaultCreds, err := utils.GetCredentials(ctx)
-		if err != nil {
-			resp.Diagnostics.AddError("Failed to get Default Google Cloud credentials",
-				"Ensure that either credentials or access_token is specified or that the plugin is running in an ADC environment: "+err.Error())
-			return
-		}
-
-		if googleDefaultCreds == nil {
-			resp.Diagnostics.AddError("Failed to get Default Google Cloud credentials",
-				"Ensure that either credentials or access_token is specified or that the plugin is running in an ADC environment.")
-			return
-		}
+	// Get Google Cloud credentials
+	googleCreds, err := utils.GetGoogleCredentials(ctx, config.Project.ValueString(), credentials, accessToken)
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to get Google Cloud credentials",
+			"Ensure that either credentials or access_token is specified or that the plugin is running in an ADC environment: "+err.Error())
+		return
+	}
+	if googleCreds == nil {
+		resp.Diagnostics.AddError("Failed to get Google Cloud credentials",
+			"Ensure that either credentials or access_token is specified or that the plugin is running in an ADC environment.")
+		return
 	}
 
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	// Make the Bigtable and Spanner services available during DataSource and Resource
+	// type Configure methods.
+	providerConfig := &internal.ProviderConfig{
+		GoogleProjectId: config.Project.ValueString(),
+		BigtableService: bigtableservices.NewBigtableService(googleCreds),
+		SpannerService:  spannerservices.NewSpannerService(googleCreds),
+	}
+	resp.DataSourceData = providerConfig
+	resp.ResourceData = providerConfig
 
 	tflog.Info(ctx, "Done initializing alis provider", map[string]any{"success": true})
 }

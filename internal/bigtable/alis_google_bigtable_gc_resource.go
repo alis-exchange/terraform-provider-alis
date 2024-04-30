@@ -16,6 +16,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"terraform-provider-alis/internal"
 	"terraform-provider-alis/internal/bigtable/services"
 	custom_types "terraform-provider-alis/internal/custom-types"
 )
@@ -33,6 +34,7 @@ func NewGarbageCollectionPolicyResource() resource.Resource {
 }
 
 type garbageCollectionPolicyResource struct {
+	config *internal.ProviderConfig
 }
 
 type bigtableGarbageCollectionPolicyModel struct {
@@ -142,7 +144,7 @@ func (r *garbageCollectionPolicyResource) Create(ctx context.Context, req resour
 	columnFamilyId := plan.ColumFamily.ValueString()
 
 	// Create policy
-	createdPolicy, err := services.UpdateBigtableGarbageCollectionPolicy(ctx, fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instanceName, tableId), columnFamilyId, &gcPolicy)
+	createdPolicy, err := r.config.BigtableService.UpdateBigtableGarbageCollectionPolicy(ctx, fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instanceName, tableId), columnFamilyId, &gcPolicy)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Creating GC Policy",
@@ -205,7 +207,7 @@ func (r *garbageCollectionPolicyResource) Read(ctx context.Context, req resource
 	columnFamilyId := state.ColumFamily.ValueString()
 
 	// Read garbage collection policy
-	gcPolicy, err := services.GetBigtableGarbageCollectionPolicy(ctx,
+	gcPolicy, err := r.config.BigtableService.GetBigtableGarbageCollectionPolicy(ctx,
 		fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instanceName, tableId),
 		columnFamilyId,
 	)
@@ -291,7 +293,7 @@ func (r *garbageCollectionPolicyResource) Update(ctx context.Context, req resour
 	}
 
 	// Update GC Policy
-	updatedPolicy, err := services.UpdateBigtableGarbageCollectionPolicy(ctx,
+	updatedPolicy, err := r.config.BigtableService.UpdateBigtableGarbageCollectionPolicy(ctx,
 		fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instanceName, tableId),
 		columnFamilyId,
 		&gcPolicy,
@@ -363,7 +365,7 @@ func (r *garbageCollectionPolicyResource) Delete(ctx context.Context, req resour
 	columnFamilyId := state.ColumFamily.ValueString()
 
 	// Delete existing table
-	_, err := services.DeleteBigtableGarbageCollectionPolicy(ctx,
+	_, err := r.config.BigtableService.DeleteBigtableGarbageCollectionPolicy(ctx,
 		fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instanceName, tableName),
 		columnFamilyId,
 	)
@@ -401,4 +403,16 @@ func (r *garbageCollectionPolicyResource) Configure(_ context.Context, req resou
 	if req.ProviderData == nil {
 		return
 	}
+
+	config, ok := req.ProviderData.(*internal.ProviderConfig)
+	if !ok {
+		resp.Diagnostics.AddError(
+			"Unexpected Resource Configure Type",
+			fmt.Sprintf("Expected *utils.ProviderConfig, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+		)
+
+		return
+	}
+
+	r.config = config
 }

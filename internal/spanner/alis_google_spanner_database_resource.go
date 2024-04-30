@@ -20,6 +20,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	"terraform-provider-alis/internal"
 	"terraform-provider-alis/internal/spanner/services"
 	"terraform-provider-alis/internal/validators"
 )
@@ -37,6 +38,7 @@ func NewSpannerDatabaseResource() resource.Resource {
 }
 
 type spannerDatabaseResource struct {
+	config *internal.ProviderConfig
 }
 
 type spannerDatabaseModel struct {
@@ -245,7 +247,7 @@ func (r *spannerDatabaseResource) Create(ctx context.Context, req resource.Creat
 	}
 
 	// Create table
-	databaseOperation, err := services.CreateSpannerDatabase(ctx,
+	databaseOperation, err := r.config.SpannerService.CreateSpannerDatabase(ctx,
 		fmt.Sprintf("projects/%s/instances/%s", project, instanceName),
 		databaseId,
 		database,
@@ -372,7 +374,7 @@ func (r *spannerDatabaseResource) Read(ctx context.Context, req resource.ReadReq
 	databaseId := state.Name.ValueString()
 
 	// Get database from API
-	database, err := services.GetSpannerDatabase(ctx,
+	database, err := r.config.SpannerService.GetSpannerDatabase(ctx,
 		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instanceName, databaseId),
 	)
 	if err != nil {
@@ -523,7 +525,7 @@ func (r *spannerDatabaseResource) Update(ctx context.Context, req resource.Updat
 	}
 
 	// Update existing table
-	_, err := services.UpdateSpannerDatabase(ctx,
+	_, err := r.config.SpannerService.UpdateSpannerDatabase(ctx,
 		database,
 		&fieldmaskpb.FieldMask{
 			Paths: []string{"enable_drop_protection", "dialect", "version_retention_period", "encryption_config"},
@@ -627,7 +629,7 @@ func (r *spannerDatabaseResource) Delete(ctx context.Context, req resource.Delet
 	databaseId := state.Name.ValueString()
 
 	// Delete existing database
-	_, err := services.DeleteSpannerDatabase(ctx,
+	_, err := r.config.SpannerService.DeleteSpannerDatabase(ctx,
 		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instanceName, databaseId),
 	)
 	if err != nil {
@@ -663,6 +665,18 @@ func (r *spannerDatabaseResource) Configure(_ context.Context, req resource.Conf
 	if req.ProviderData == nil {
 		return
 	}
+
+	config, ok := req.ProviderData.(*internal.ProviderConfig)
+	if !ok {
+		resp.Diagnostics.AddError(
+			"Unexpected Resource Configure Type",
+			fmt.Sprintf("Expected *utils.ProviderConfig, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+		)
+
+		return
+	}
+
+	r.config = config
 }
 
 func (r *spannerDatabaseResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {

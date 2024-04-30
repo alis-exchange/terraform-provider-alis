@@ -17,6 +17,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	"terraform-provider-alis/internal"
 	"terraform-provider-alis/internal/bigtable/services"
 	"terraform-provider-alis/internal/validators"
 )
@@ -34,6 +35,7 @@ func NewTableResource() resource.Resource {
 }
 
 type tableResource struct {
+	config *internal.ProviderConfig
 }
 
 type bigtableTableModel struct {
@@ -178,7 +180,7 @@ func (r *tableResource) Create(ctx context.Context, req resource.CreateRequest, 
 	}
 
 	// Create table
-	_, err := services.CreateBigtableTable(ctx, fmt.Sprintf("projects/%s/instances/%s", project, instanceName), tableId, table)
+	_, err := r.config.BigtableService.CreateBigtableTable(ctx, fmt.Sprintf("projects/%s/instances/%s", project, instanceName), tableId, table)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Creating Table",
@@ -216,7 +218,7 @@ func (r *tableResource) Read(ctx context.Context, req resource.ReadRequest, resp
 	tflog.Error(ctx, "Reading Bigtable Table: "+fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instanceName, tableName))
 
 	// Get table from API
-	table, err := services.GetBigtableTable(ctx, fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instanceName, tableName))
+	table, err := r.config.BigtableService.GetBigtableTable(ctx, fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instanceName, tableName))
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Reading Table",
@@ -345,7 +347,7 @@ func (r *tableResource) Update(ctx context.Context, req resource.UpdateRequest, 
 	}
 
 	// Update existing table
-	_, err := services.UpdateBigtableTable(ctx, table, &fieldmaskpb.FieldMask{
+	_, err := r.config.BigtableService.UpdateBigtableTable(ctx, table, &fieldmaskpb.FieldMask{
 		Paths: []string{"deletion_protection", "change_stream_retention", "column_families"},
 	}, true)
 	if err != nil {
@@ -383,7 +385,7 @@ func (r *tableResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 	tableName := state.Name.ValueString()
 
 	// Delete existing table
-	_, err := services.DeleteBigtableTable(ctx, fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instanceName, tableName))
+	_, err := r.config.BigtableService.DeleteBigtableTable(ctx, fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instanceName, tableName))
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Deleting Table",
@@ -418,17 +420,21 @@ func (r *tableResource) Configure(_ context.Context, req resource.ConfigureReque
 		return
 	}
 
-	//clients, ok := req.ProviderData.(utils.ProviderClients)
-	//if !ok {
-	//	resp.Diagnostics.AddError(
-	//		"Unexpected Data Source Configure Type",
-	//		fmt.Sprintf("Expected ProviderClients, got: %T. Please report this issue to the provider developers.", req.ProviderData),
-	//	)
-	//
-	//	return
-	//}
-	//
-	//r.client = clients.Bigtable
+	if req.ProviderData == nil {
+		return
+	}
+
+	config, ok := req.ProviderData.(*internal.ProviderConfig)
+	if !ok {
+		resp.Diagnostics.AddError(
+			"Unexpected Resource Configure Type",
+			fmt.Sprintf("Expected *utils.ProviderConfig, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+		)
+
+		return
+	}
+
+	r.config = config
 }
 
 func (r *tableResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {

@@ -8,6 +8,11 @@ import (
 	"cloud.google.com/go/bigtable"
 )
 
+type ProviderConfig struct {
+	GoogleProjectId string
+	BigtableService *BigtableService
+}
+
 const (
 	GCPolicyModeIntersection = "INTERSECTION"
 	GCPolicyModeUnion        = "UNION"
