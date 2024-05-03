@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"cloud.google.com/go/iam/apiv1/iampb"
-	databaseApiV1 "cloud.google.com/go/spanner/admin/database/apiv1"
 	spanner "cloud.google.com/go/spanner/admin/database/apiv1"
 	"cloud.google.com/go/spanner/admin/database/apiv1/databasepb"
 	spannergorm "github.com/googleapis/go-gorm-spanner"
@@ -116,12 +115,6 @@ type SpannerTable struct {
 	Schema *SpannerTableSchema
 }
 
-// DatabaseOperationResponse represents a database operation response.
-type DatabaseOperationResponse[T interface{}] struct {
-	Operation       *T
-	CloseClientConn func() error
-}
-
 // CreateSpannerDatabase creates a new Spanner database.
 //
 // Params:
@@ -131,11 +124,23 @@ type DatabaseOperationResponse[T interface{}] struct {
 //   - database: *databasepb.Database - Required. The database to create.
 //
 // Returns: *databasepb.Database
-func (s *SpannerService) CreateSpannerDatabase(ctx context.Context, parent string, databaseId string, database *databasepb.Database) (*DatabaseOperationResponse[databaseApiV1.CreateDatabaseOperation], error) {
+func (s *SpannerService) CreateSpannerDatabase(ctx context.Context, parent string, databaseId string, database *databasepb.Database) (*databasepb.Database, error) {
+	// Set database dialect to Google Standard SQL if not provided
+	if database.GetDatabaseDialect() == databasepb.DatabaseDialect_DATABASE_DIALECT_UNSPECIFIED {
+		database.DatabaseDialect = databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL
+	}
+
 	// Validate arguments
 	// Validate database id
-	if valid := utils.ValidateArgument(databaseId, utils.SpannerDatabaseIdRegex); !valid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument database_id (%s), must match `%s`", databaseId, utils.SpannerDatabaseIdRegex)
+	if database.GetDatabaseDialect() == databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL {
+		if valid := utils.ValidateArgument(databaseId, utils.SpannerGoogleSqlDatabaseIdRegex); !valid {
+			return nil, status.Errorf(codes.InvalidArgument, "Invalid argument database_id (%s), must match `%s`", databaseId, utils.SpannerGoogleSqlDatabaseIdRegex)
+		}
+	}
+	if database.GetDatabaseDialect() == databasepb.DatabaseDialect_POSTGRESQL {
+		if valid := utils.ValidateArgument(databaseId, utils.SpannerPostgresSqlDatabaseIdRegex); !valid {
+			return nil, status.Errorf(codes.InvalidArgument, "Invalid argument database_id (%s), must match `%s`", databaseId, utils.SpannerPostgresSqlDatabaseIdRegex)
+		}
 	}
 	// Validate parent
 	if valid := utils.ValidateArgument(parent, utils.InstanceNameRegex); !valid {
@@ -146,17 +151,27 @@ func (s *SpannerService) CreateSpannerDatabase(ctx context.Context, parent strin
 		return nil, status.Error(codes.InvalidArgument, "Invalid argument database, field is required but not provided")
 	}
 
+	// Set database name
+	database.Name = fmt.Sprintf("%s/databases/%s", parent, databaseId)
+
 	// "projects/my-project/instances/my-instance/database/my-db"
 	client, err := spanner.NewDatabaseAdminClient(ctx)
 	if err != nil {
 		return nil, err
 	}
+	defer client.Close()
 
 	// Construct create statement
-	createStatement := fmt.Sprintf("CREATE DATABASE `%s`", databaseId)
+	var createStatement string
 	var extraStatements []string
-	if database.GetVersionRetentionPeriod() != "" {
-		extraStatements = append(extraStatements, fmt.Sprintf("ALTER DATABASE `%s` SET OPTIONS(version_retention_period='%s')", databaseId, database.GetVersionRetentionPeriod()))
+	switch database.GetDatabaseDialect() {
+	case databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL:
+		createStatement = fmt.Sprintf("CREATE DATABASE `%s`", databaseId)
+		if database.GetVersionRetentionPeriod() != "" {
+			extraStatements = append(extraStatements, fmt.Sprintf("ALTER DATABASE `%s` SET OPTIONS(version_retention_period='%s')", databaseId, database.GetVersionRetentionPeriod()))
+		}
+	case databasepb.DatabaseDialect_POSTGRESQL:
+		createStatement = fmt.Sprintf("CREATE DATABASE \"%s\"", databaseId)
 	}
 
 	// Create database
@@ -172,12 +187,46 @@ func (s *SpannerService) CreateSpannerDatabase(ctx context.Context, parent strin
 		return nil, err
 	}
 
-	return &DatabaseOperationResponse[databaseApiV1.CreateDatabaseOperation]{
-		Operation: createDatabaseOperation,
-		CloseClientConn: func() error {
-			return client.Close()
-		},
-	}, nil
+	// Wait for LRO to complete
+	createdDatabase, err := createDatabaseOperation.Wait(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// If dialect is PostgreSQL and version retention period is provided, update the database
+	if database.GetDatabaseDialect() == databasepb.DatabaseDialect_POSTGRESQL && database.GetVersionRetentionPeriod() != "" {
+		updateDatabaseDdlOperation, err := client.UpdateDatabaseDdl(ctx, &databasepb.UpdateDatabaseDdlRequest{
+			Database: createdDatabase.GetName(),
+			Statements: []string{
+				fmt.Sprintf("ALTER DATABASE %s SET spanner.version_retention_period=\"%s\"", databaseId, database.GetVersionRetentionPeriod()),
+			},
+		})
+		if err != nil {
+			// Drop database if update fails
+			dropErr := client.DropDatabase(ctx, &databasepb.DropDatabaseRequest{
+				Database: createdDatabase.GetName(),
+			})
+			if dropErr != nil {
+				return nil, dropErr
+			}
+
+			return nil, err
+		}
+
+		// Wait for LRO to complete
+		err = updateDatabaseDdlOperation.Wait(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		// Get updated database
+		createdDatabase, err = s.GetSpannerDatabase(ctx, createdDatabase.GetName())
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return createdDatabase, nil
 }
 
 // GetSpannerDatabase gets a Spanner database.
@@ -190,8 +239,10 @@ func (s *SpannerService) CreateSpannerDatabase(ctx context.Context, parent strin
 func (s *SpannerService) GetSpannerDatabase(ctx context.Context, name string) (*databasepb.Database, error) {
 	// Validate arguments
 	// Validate name
-	if valid := utils.ValidateArgument(name, utils.SpannerDatabaseNameRegex); !valid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s`", name, utils.SpannerDatabaseNameRegex)
+	googleSqlValid := utils.ValidateArgument(name, utils.SpannerGoogleSqlDatabaseNameRegex)
+	postgresSqlValid := utils.ValidateArgument(name, utils.SpannerPostgresSqlDatabaseNameRegex)
+	if !googleSqlValid && !postgresSqlValid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", name, utils.SpannerGoogleSqlDatabaseNameRegex, utils.SpannerPostgresSqlDatabaseNameRegex)
 	}
 
 	// "projects/my-project/instances/my-instance/database/my-db"
@@ -279,8 +330,10 @@ func (s *SpannerService) UpdateSpannerDatabase(ctx context.Context, database *da
 		return nil, status.Error(codes.InvalidArgument, "Invalid argument database, field is required but not provided")
 	}
 	// Validate name
-	if valid := utils.ValidateArgument(database.GetName(), utils.SpannerDatabaseNameRegex); !valid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument database.name (%s), must match `%s`", database.GetName(), utils.SpannerDatabaseNameRegex)
+	googleSqlValid := utils.ValidateArgument(database.GetName(), utils.SpannerGoogleSqlDatabaseNameRegex)
+	postgresSqlValid := utils.ValidateArgument(database.GetName(), utils.SpannerPostgresSqlDatabaseNameRegex)
+	if !googleSqlValid && !postgresSqlValid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument database.name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", database.GetName(), utils.SpannerGoogleSqlDatabaseNameRegex, utils.SpannerPostgresSqlDatabaseNameRegex)
 	}
 	// Validate update_mask if provided
 	if updateMask != nil && len(updateMask.GetPaths()) > 0 {
@@ -343,11 +396,16 @@ func (s *SpannerService) UpdateSpannerDatabase(ctx context.Context, database *da
 			}
 
 		case "version_retention_period":
+			var ddlStatements []string
+			if database.GetDatabaseDialect() == databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL {
+				ddlStatements = append(ddlStatements, fmt.Sprintf("ALTER DATABASE `%s` SET OPTIONS(version_retention_period='%s')", databaseId, database.GetVersionRetentionPeriod()))
+			}
+			if database.GetDatabaseDialect() == databasepb.DatabaseDialect_POSTGRESQL {
+				ddlStatements = append(ddlStatements, fmt.Sprintf("ALTER DATABASE %s SET spanner.version_retention_period=\"%s\"", databaseId, database.GetVersionRetentionPeriod()))
+			}
 			updateDatabaseDdlOperation, err := client.UpdateDatabaseDdl(ctx, &databasepb.UpdateDatabaseDdlRequest{
-				Database: database.GetName(),
-				Statements: []string{
-					fmt.Sprintf("ALTER DATABASE `%s` SET OPTIONS(version_retention_period='%s')", databaseId, database.GetVersionRetentionPeriod()),
-				},
+				Database:   database.GetName(),
+				Statements: ddlStatements,
 			})
 			if err != nil {
 				return nil, err
@@ -380,8 +438,10 @@ func (s *SpannerService) UpdateSpannerDatabase(ctx context.Context, database *da
 func (s *SpannerService) DeleteSpannerDatabase(ctx context.Context, name string) (*emptypb.Empty, error) {
 	// Validate arguments
 	// Validate name
-	if valid := utils.ValidateArgument(name, utils.SpannerDatabaseNameRegex); !valid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s`", name, utils.SpannerDatabaseNameRegex)
+	googleSqlValid := utils.ValidateArgument(name, utils.SpannerGoogleSqlDatabaseNameRegex)
+	postgresSqlValid := utils.ValidateArgument(name, utils.SpannerPostgresSqlDatabaseNameRegex)
+	if !googleSqlValid && !postgresSqlValid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", name, utils.SpannerGoogleSqlDatabaseNameRegex, utils.SpannerPostgresSqlDatabaseNameRegex)
 	}
 
 	// "projects/my-project/instances/my-instance/database/my-db"
@@ -412,8 +472,10 @@ func (s *SpannerService) DeleteSpannerDatabase(ctx context.Context, name string)
 // Returns: *iampb.Policy
 func (s *SpannerService) GetSpannerDatabaseIamPolicy(ctx context.Context, parent string, options *iampb.GetPolicyOptions) (*iampb.Policy, error) {
 	// Validate parent
-	if valid := utils.ValidateArgument(parent, utils.SpannerDatabaseNameRegex); !valid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s`", parent, utils.SpannerDatabaseNameRegex)
+	googleSqlValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlDatabaseNameRegex)
+	postgresSqlValid := utils.ValidateArgument(parent, utils.SpannerPostgresSqlDatabaseNameRegex)
+	if !googleSqlValid && !postgresSqlValid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", parent, utils.SpannerGoogleSqlDatabaseNameRegex, utils.SpannerPostgresSqlDatabaseNameRegex)
 	}
 
 	// "projects/my-project/instances/my-instance/database/my-db"
@@ -445,8 +507,10 @@ func (s *SpannerService) GetSpannerDatabaseIamPolicy(ctx context.Context, parent
 // Returns: *iampb.Policy
 func (s *SpannerService) SetSpannerDatabaseIamPolicy(ctx context.Context, parent string, policy *iampb.Policy, updateMask *fieldmaskpb.FieldMask) (*iampb.Policy, error) {
 	// Validate parent
-	if valid := utils.ValidateArgument(parent, utils.SpannerDatabaseNameRegex); !valid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s`", parent, utils.SpannerDatabaseNameRegex)
+	googleSqlValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlDatabaseNameRegex)
+	postgresSqlValid := utils.ValidateArgument(parent, utils.SpannerPostgresSqlDatabaseNameRegex)
+	if !googleSqlValid && !postgresSqlValid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", parent, utils.SpannerGoogleSqlDatabaseNameRegex, utils.SpannerPostgresSqlDatabaseNameRegex)
 	}
 	// If update mask is provided, validate it
 	if updateMask != nil && len(updateMask.GetPaths()) > 0 {
@@ -486,8 +550,10 @@ func (s *SpannerService) SetSpannerDatabaseIamPolicy(ctx context.Context, parent
 // Returns: []string
 func (s *SpannerService) TestSpannerDatabaseIamPermissions(ctx context.Context, parent string, permissions []string) ([]string, error) {
 	// Validate parent
-	if valid := utils.ValidateArgument(parent, utils.SpannerDatabaseNameRegex); !valid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s`", parent, utils.SpannerDatabaseNameRegex)
+	googleSqlValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlDatabaseNameRegex)
+	postgresSqlValid := utils.ValidateArgument(parent, utils.SpannerPostgresSqlDatabaseNameRegex)
+	if !googleSqlValid && !postgresSqlValid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", parent, utils.SpannerGoogleSqlDatabaseNameRegex, utils.SpannerPostgresSqlDatabaseNameRegex)
 	}
 
 	// "projects/my-project/instances/my-instance/database/my-db"
@@ -518,15 +584,17 @@ func (s *SpannerService) TestSpannerDatabaseIamPermissions(ctx context.Context, 
 //   - encryptionConfig: *databasepb.CreateBackupEncryptionConfig - Optional. The encryption configuration for the backup.
 //
 // Returns: *databasepb.Backup
-func (s *SpannerService) CreateSpannerBackup(ctx context.Context, parent string, backupId string, backup *databasepb.Backup, encryptionConfig *databasepb.CreateBackupEncryptionConfig) (*DatabaseOperationResponse[databaseApiV1.CreateBackupOperation], error) {
+func (s *SpannerService) CreateSpannerBackup(ctx context.Context, parent string, backupId string, backup *databasepb.Backup, encryptionConfig *databasepb.CreateBackupEncryptionConfig) (*databasepb.Backup, error) {
 	// Validate arguments
 	// Validate parent name
 	if valid := utils.ValidateArgument(parent, utils.InstanceNameRegex); !valid {
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s`", parent, utils.InstanceNameRegex)
 	}
 	// Validate backup id
-	if valid := utils.ValidateArgument(backupId, utils.SpannerBackupIdRegex); !valid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument backup_id (%s), must match `%s`", backupId, utils.SpannerBackupIdRegex)
+	googleSqlValid := utils.ValidateArgument(backupId, utils.SpannerGoogleSqlBackupIdRegex)
+	postgresSqlValid := utils.ValidateArgument(backupId, utils.SpannerPostgresSqlBackupIdRegex)
+	if !googleSqlValid && !postgresSqlValid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument backup_id (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", backupId, utils.SpannerGoogleSqlBackupIdRegex, utils.SpannerPostgresSqlBackupIdRegex)
 	}
 	// Ensure backup is provided
 	if backup == nil {
@@ -556,6 +624,7 @@ func (s *SpannerService) CreateSpannerBackup(ctx context.Context, parent string,
 	if err != nil {
 		return nil, err
 	}
+	defer client.Close()
 
 	createBackupOperation, err := client.CreateBackup(ctx, &databasepb.CreateBackupRequest{
 		Parent:           parent,
@@ -567,12 +636,12 @@ func (s *SpannerService) CreateSpannerBackup(ctx context.Context, parent string,
 		return nil, err
 	}
 
-	return &DatabaseOperationResponse[databaseApiV1.CreateBackupOperation]{
-		Operation: createBackupOperation,
-		CloseClientConn: func() error {
-			return client.Close()
-		},
-	}, nil
+	createdBackup, err := createBackupOperation.Wait(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return createdBackup, nil
 }
 
 // GetSpannerBackup gets a Spanner database backup.
@@ -585,8 +654,10 @@ func (s *SpannerService) CreateSpannerBackup(ctx context.Context, parent string,
 // Returns: *databasepb.Backup
 func (s *SpannerService) GetSpannerBackup(ctx context.Context, name string, readMask *fieldmaskpb.FieldMask) (*databasepb.Backup, error) {
 	// Validate name
-	if valid := utils.ValidateArgument(name, utils.SpannerBackupNameRegex); !valid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s`", name, utils.SpannerBackupNameRegex)
+	googleSqlValid := utils.ValidateArgument(name, utils.SpannerGoogleSqlBackupNameRegex)
+	postgresSqlValid := utils.ValidateArgument(name, utils.SpannerPostgresSqlBackupNameRegex)
+	if !googleSqlValid && !postgresSqlValid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", name, utils.SpannerGoogleSqlBackupNameRegex, utils.SpannerPostgresSqlBackupNameRegex)
 	}
 
 	// "projects/my-project/instances/my-instance/backups/my-backup"
@@ -677,8 +748,10 @@ func (s *SpannerService) UpdateSpannerBackup(ctx context.Context, backup *databa
 		return nil, status.Error(codes.InvalidArgument, "Invalid argument backup, field is required but not provided")
 	}
 	// Validate name
-	if valid := utils.ValidateArgument(backup.GetName(), utils.SpannerBackupNameRegex); !valid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s`", backup.GetName(), utils.SpannerBackupNameRegex)
+	googleSqlValid := utils.ValidateArgument(backup.GetName(), utils.SpannerGoogleSqlBackupNameRegex)
+	postgresSqlValid := utils.ValidateArgument(backup.GetName(), utils.SpannerPostgresSqlBackupNameRegex)
+	if !googleSqlValid && !postgresSqlValid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument backup.name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", backup.GetName(), utils.SpannerGoogleSqlBackupNameRegex, utils.SpannerPostgresSqlBackupNameRegex)
 	}
 	// Validate update_mask if provided
 	if updateMask != nil && len(updateMask.GetPaths()) > 0 {
@@ -742,8 +815,10 @@ func (s *SpannerService) UpdateSpannerBackup(ctx context.Context, backup *databa
 func (s *SpannerService) DeleteSpannerBackup(ctx context.Context, name string) (*emptypb.Empty, error) {
 	// Validate arguments
 	// Validate name
-	if valid := utils.ValidateArgument(name, utils.SpannerBackupNameRegex); !valid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s`", name, utils.SpannerBackupNameRegex)
+	googleSqlValid := utils.ValidateArgument(name, utils.SpannerGoogleSqlBackupNameRegex)
+	postgresSqlValid := utils.ValidateArgument(name, utils.SpannerPostgresSqlBackupNameRegex)
+	if !googleSqlValid && !postgresSqlValid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", name, utils.SpannerGoogleSqlBackupNameRegex, utils.SpannerPostgresSqlBackupNameRegex)
 	}
 
 	// "projects/my-project/instances/my-instance/backups/my-backup"
@@ -775,12 +850,16 @@ func (s *SpannerService) DeleteSpannerBackup(ctx context.Context, name string) (
 // Returns: *SpannerTable
 func (s *SpannerService) CreateSpannerTable(ctx context.Context, parent string, tableId string, table *SpannerTable) (*SpannerTable, error) {
 	// Validate parent
-	if valid := utils.ValidateArgument(parent, utils.SpannerDatabaseNameRegex); !valid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s`", parent, utils.SpannerDatabaseNameRegex)
+	googleSqlParentValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlDatabaseNameRegex)
+	postgresSqlParentValid := utils.ValidateArgument(parent, utils.SpannerPostgresSqlDatabaseNameRegex)
+	if !googleSqlParentValid && !postgresSqlParentValid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", parent, utils.SpannerGoogleSqlDatabaseNameRegex, utils.SpannerPostgresSqlDatabaseNameRegex)
 	}
 	// Validate table id
-	if valid := utils.ValidateArgument(tableId, utils.SpannerTableIdRegex); !valid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table_id (%s), must match `%s`", tableId, utils.SpannerTableIdRegex)
+	googleSqlTableValid := utils.ValidateArgument(tableId, utils.SpannerGoogleSqlTableIdRegex)
+	postgresSqlTableValid := utils.ValidateArgument(tableId, utils.SpannerPostgresSqlTableIdRegex)
+	if !googleSqlTableValid && !postgresSqlTableValid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table_id (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", tableId, utils.SpannerGoogleSqlTableIdRegex, utils.SpannerPostgresSqlTableIdRegex)
 	}
 	// Ensure table is provided
 	if table == nil {
@@ -797,8 +876,8 @@ func (s *SpannerService) CreateSpannerTable(ctx context.Context, parent string, 
 	// Validate columns
 	for i, column := range table.Schema.Columns {
 		// Validate column name
-		if valid := utils.ValidateArgument(column.Name, utils.SpannerColumnIdRegex); !valid {
-			return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.schema.columns[%d].name (%s), must match `%s`", i, column.Name, utils.SpannerColumnIdRegex)
+		if valid := utils.ValidateArgument(column.Name, utils.SpannerGoogleSqlColumnIdRegex); !valid {
+			return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.schema.columns[%d].name (%s), must match `%s`", i, column.Name, utils.SpannerGoogleSqlColumnIdRegex)
 		}
 
 		// Ensure a type is provided
@@ -861,8 +940,10 @@ func (s *SpannerService) CreateSpannerTable(ctx context.Context, parent string, 
 // Returns: *SpannerTable
 func (s *SpannerService) GetSpannerTable(ctx context.Context, name string) (*SpannerTable, error) {
 	// Validate name
-	if valid := utils.ValidateArgument(name, utils.SpannerTableNameRegex); !valid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s`", name, utils.SpannerTableNameRegex)
+	googleSqlValid := utils.ValidateArgument(name, utils.SpannerGoogleSqlTableNameRegex)
+	postgresSqlValid := utils.ValidateArgument(name, utils.SpannerPostgresSqlTableNameRegex)
+	if !googleSqlValid && !postgresSqlValid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", name, utils.SpannerGoogleSqlTableNameRegex, utils.SpannerPostgresSqlTableNameRegex)
 	}
 
 	// Decompose name to get project, instance, database and table
@@ -990,8 +1071,10 @@ func (s *SpannerService) GetSpannerTable(ctx context.Context, name string) (*Spa
 func (s *SpannerService) ListSpannerTables(ctx context.Context, parent string) ([]*SpannerTable, error) {
 	// Validate arguments
 	// Validate parent
-	if valid := utils.ValidateArgument(parent, utils.SpannerDatabaseNameRegex); !valid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s`", parent, utils.SpannerDatabaseNameRegex)
+	googleSqlValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlDatabaseNameRegex)
+	postgresSqlValid := utils.ValidateArgument(parent, utils.SpannerPostgresSqlDatabaseNameRegex)
+	if !googleSqlValid && !postgresSqlValid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", parent, utils.SpannerGoogleSqlDatabaseNameRegex, utils.SpannerPostgresSqlDatabaseNameRegex)
 	}
 
 	// Decompose parent name to get project, instance and database id
@@ -1049,8 +1132,10 @@ func (s *SpannerService) UpdateSpannerTable(ctx context.Context, table *SpannerT
 		return nil, status.Error(codes.InvalidArgument, "Invalid argument table, field is required but not provided")
 	}
 	// Validate name
-	if valid := utils.ValidateArgument(table.Name, utils.SpannerTableNameRegex); !valid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s`", table.Name, utils.SpannerTableNameRegex)
+	googleSqlValid := utils.ValidateArgument(table.Name, utils.SpannerGoogleSqlTableNameRegex)
+	postgresSqlValid := utils.ValidateArgument(table.Name, utils.SpannerPostgresSqlTableNameRegex)
+	if !googleSqlValid && !postgresSqlValid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", table.Name, utils.SpannerGoogleSqlTableNameRegex, utils.SpannerPostgresSqlTableNameRegex)
 	}
 	// Ensure schema is provided
 	if table.Schema == nil {
@@ -1227,8 +1312,10 @@ func (s *SpannerService) UpdateSpannerTable(ctx context.Context, table *SpannerT
 // Returns: *emptypb.Empty
 func (s *SpannerService) DeleteSpannerTable(ctx context.Context, name string) (*emptypb.Empty, error) {
 	// Validate name
-	if valid := utils.ValidateArgument(name, utils.SpannerTableNameRegex); !valid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s`", name, utils.SpannerTableNameRegex)
+	googleSqlValid := utils.ValidateArgument(name, utils.SpannerGoogleSqlTableNameRegex)
+	postgresSqlValid := utils.ValidateArgument(name, utils.SpannerPostgresSqlTableNameRegex)
+	if !googleSqlValid && !postgresSqlValid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", name, utils.SpannerGoogleSqlTableNameRegex, utils.SpannerPostgresSqlTableNameRegex)
 	}
 
 	// Decompose name to get project, instance, database and table
@@ -1294,15 +1381,19 @@ func (s *SpannerService) DeleteSpannerTable(ctx context.Context, name string) (*
 // Returns: *SpannerTableIndex
 func (s *SpannerService) CreateSpannerTableIndex(ctx context.Context, parent string, index *SpannerTableIndex) (*SpannerTableIndex, error) {
 	// Validate parent
-	if valid := utils.ValidateArgument(parent, utils.SpannerTableNameRegex); !valid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s`", parent, utils.SpannerDatabaseNameRegex)
+	googleSqlParentValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlTableNameRegex)
+	postgresSqlParentValid := utils.ValidateArgument(parent, utils.SpannerPostgresSqlTableNameRegex)
+	if !googleSqlParentValid && !postgresSqlParentValid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", parent, utils.SpannerGoogleSqlTableNameRegex, utils.SpannerPostgresSqlTableNameRegex)
 	}
 	// Ensure index is provided and has a name and columns
 	if index == nil {
 		return nil, status.Error(codes.InvalidArgument, "Invalid argument index, field is required but not provided")
 	}
-	if valid := utils.ValidateArgument(index.Name, utils.SpannerIndexIdRegex); !valid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument index.name (%s), must match `%s`", index.Name, utils.SpannerIndexIdRegex)
+	googleSqlIndexIdValid := utils.ValidateArgument(index.Name, utils.SpannerGoogleSqlIndexIdRegex)
+	postgresSqlIndexIdValid := utils.ValidateArgument(index.Name, utils.SpannerPostgresSqlIndexIdRegex)
+	if !googleSqlIndexIdValid && !postgresSqlIndexIdValid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument index.name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", index.Name, utils.SpannerGoogleSqlIndexIdRegex, utils.SpannerPostgresSqlIndexIdRegex)
 	}
 	if index.Columns == nil || len(index.Columns) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "Invalid argument index.columns, field is required but not provided")
@@ -1312,8 +1403,10 @@ func (s *SpannerService) CreateSpannerTableIndex(ctx context.Context, parent str
 			return nil, status.Errorf(codes.InvalidArgument, "Invalid argument index.columns[%d], field is required but not provided", i)
 		}
 
-		if valid := utils.ValidateArgument(column.Name, utils.SpannerColumnIdRegex); !valid {
-			return nil, status.Errorf(codes.InvalidArgument, "Invalid argument index.columns[%d] (%s), must match `%s`", i, column, utils.SpannerColumnIdRegex)
+		googleSqlColumnIdValid := utils.ValidateArgument(column.Name, utils.SpannerGoogleSqlColumnIdRegex)
+		postgresSqlColumnIdValid := utils.ValidateArgument(column.Name, utils.SpannerPostgresSqlColumnIdRegex)
+		if !googleSqlColumnIdValid && !postgresSqlColumnIdValid {
+			return nil, status.Errorf(codes.InvalidArgument, "Invalid argument index.columns[%d].name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", i, column.Name, utils.SpannerGoogleSqlColumnIdRegex, utils.SpannerPostgresSqlColumnIdRegex)
 		}
 	}
 
@@ -1384,12 +1477,16 @@ func (s *SpannerService) CreateSpannerTableIndex(ctx context.Context, parent str
 // Returns: *SpannerTableIndex
 func (s *SpannerService) GetSpannerTableIndex(ctx context.Context, parent string, name string) (*SpannerTableIndex, error) {
 	// Validate parent
-	if valid := utils.ValidateArgument(parent, utils.SpannerTableNameRegex); !valid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s`", parent, utils.SpannerDatabaseNameRegex)
+	googleSqlParentValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlTableNameRegex)
+	postgresSqlParentValid := utils.ValidateArgument(parent, utils.SpannerPostgresSqlTableNameRegex)
+	if !googleSqlParentValid && !postgresSqlParentValid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", parent, utils.SpannerGoogleSqlTableNameRegex, utils.SpannerPostgresSqlTableNameRegex)
 	}
 	// Validate name
-	if valid := utils.ValidateArgument(name, utils.SpannerIndexIdRegex); !valid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s`", name, utils.SpannerIndexIdRegex)
+	googleSqlIndexIdValid := utils.ValidateArgument(name, utils.SpannerGoogleSqlIndexIdRegex)
+	postgresSqlIndexIdValid := utils.ValidateArgument(name, utils.SpannerPostgresSqlIndexIdRegex)
+	if !googleSqlIndexIdValid && !postgresSqlIndexIdValid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", name, utils.SpannerGoogleSqlIndexIdRegex, utils.SpannerPostgresSqlIndexIdRegex)
 	}
 
 	// Deconstruct parent name to get project, instance and database id
@@ -1453,8 +1550,10 @@ func (s *SpannerService) GetSpannerTableIndex(ctx context.Context, parent string
 // Returns: []*SpannerTableIndex
 func (s *SpannerService) ListSpannerTableIndices(ctx context.Context, parent string) ([]*SpannerTableIndex, error) {
 	// Validate parent
-	if valid := utils.ValidateArgument(parent, utils.SpannerTableNameRegex); !valid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s`", parent, utils.SpannerDatabaseNameRegex)
+	googleSqlValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlTableNameRegex)
+	postgresSqlValid := utils.ValidateArgument(parent, utils.SpannerPostgresSqlTableNameRegex)
+	if !googleSqlValid && !postgresSqlValid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", parent, utils.SpannerGoogleSqlTableNameRegex, utils.SpannerPostgresSqlTableNameRegex)
 	}
 
 	// Deconstruct parent name to get project, instance and database id
@@ -1519,12 +1618,16 @@ func (s *SpannerService) ListSpannerTableIndices(ctx context.Context, parent str
 func (s *SpannerService) DeleteIndex(ctx context.Context, parent string, indexName string) (*emptypb.Empty, error) {
 	// Validate arguments
 	// Validate parent
-	if valid := utils.ValidateArgument(parent, utils.SpannerTableNameRegex); !valid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s`", parent, utils.SpannerTableNameRegex)
+	googleSqlParentValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlTableNameRegex)
+	postgresSqlParentValid := utils.ValidateArgument(parent, utils.SpannerPostgresSqlTableNameRegex)
+	if !googleSqlParentValid && !postgresSqlParentValid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", parent, utils.SpannerGoogleSqlTableNameRegex, utils.SpannerPostgresSqlTableNameRegex)
 	}
 	// Validate index name
-	if valid := utils.ValidateArgument(indexName, utils.SpannerIndexIdRegex); !valid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument index_name (%s), must match `%s`", indexName, utils.SpannerIndexIdRegex)
+	googleSqlIndexIdValid := utils.ValidateArgument(indexName, utils.SpannerGoogleSqlIndexIdRegex)
+	postgresSqlIndexIdValid := utils.ValidateArgument(indexName, utils.SpannerPostgresSqlIndexIdRegex)
+	if !googleSqlIndexIdValid && !postgresSqlIndexIdValid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument index_name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", indexName, utils.SpannerGoogleSqlIndexIdRegex, utils.SpannerPostgresSqlIndexIdRegex)
 	}
 
 	// Deconstruct parent name to get project, instance, database and table

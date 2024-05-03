@@ -3,6 +3,7 @@ package spanner
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -17,6 +18,8 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 	"terraform-provider-alis/internal"
 	"terraform-provider-alis/internal/spanner/services"
+	"terraform-provider-alis/internal/utils"
+	"terraform-provider-alis/internal/validators"
 )
 
 // Ensure the implementation satisfies the expected interfaces.
@@ -121,7 +124,13 @@ func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaReques
 			"name": schema.StringAttribute{
 				Required: true,
 				Description: "The name of the table.\n" +
-					"The name must satisfy the expression `^[a-zA-Z0-9_-]{1,50}$`",
+					"The name must satisfy the expression `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`",
+				Validators: []validator.String{
+					validators.RegexMatches([]*regexp.Regexp{
+						regexp.MustCompile(utils.SpannerGoogleSqlTableIdRegex),
+						regexp.MustCompile(utils.SpannerPostgresSqlTableIdRegex),
+					}, "Name must be a valid Spanner Table ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions"),
+				},
 			},
 			"project": schema.StringAttribute{
 				Required:    true,
@@ -152,6 +161,12 @@ func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaReques
 									Description: "The name of the column.\n" +
 										"The name must contain only letters (a-z, A-Z), numbers (0-9), or underscores (_), and must start with a letter and not end in an underscore.\n" +
 										"The maximum length is 128 characters.",
+									Validators: []validator.String{
+										validators.RegexMatches([]*regexp.Regexp{
+											regexp.MustCompile(utils.SpannerGoogleSqlColumnIdRegex),
+											regexp.MustCompile(utils.SpannerPostgresSqlColumnIdRegex),
+										}, "Name must be a valid Spanner Column ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions"),
+									},
 								},
 								"is_primary_key": schema.BoolAttribute{
 									Optional: true,
@@ -218,6 +233,12 @@ func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaReques
 									Required: true,
 									Description: "The name of the index.\n" +
 										"The name must contain only letters (a-z, A-Z), numbers (0-9), or hyphens (-), and must start with a letter and not end in a hyphen.",
+									Validators: []validator.String{
+										validators.RegexMatches([]*regexp.Regexp{
+											regexp.MustCompile(utils.SpannerGoogleSqlIndexIdRegex),
+											regexp.MustCompile(utils.SpannerPostgresSqlIndexIdRegex),
+										}, "Name must be a valid Spanner Index ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions"),
+									},
 								},
 								"columns": schema.ListNestedAttribute{
 									Required: true,
@@ -231,6 +252,12 @@ func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaReques
 											"name": schema.StringAttribute{
 												Required:    true,
 												Description: "The name of the column that makes up the index.",
+												Validators: []validator.String{
+													validators.RegexMatches([]*regexp.Regexp{
+														regexp.MustCompile(utils.SpannerGoogleSqlColumnIdRegex),
+														regexp.MustCompile(utils.SpannerPostgresSqlColumnIdRegex),
+													}, "Name must be a valid Spanner Column ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions"),
+												},
 											},
 											"order": schema.StringAttribute{
 												Optional: true,

@@ -22,6 +22,7 @@ import (
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"terraform-provider-alis/internal"
 	"terraform-provider-alis/internal/spanner/services"
+	"terraform-provider-alis/internal/utils"
 	"terraform-provider-alis/internal/validators"
 )
 
@@ -89,6 +90,10 @@ func (r *spannerDatabaseResource) Schema(_ context.Context, _ resource.SchemaReq
 				Required: true,
 				Validators: []validator.String{
 					stringvalidator.RegexMatches(regexp.MustCompile(`^[a-z][a-z0-9_\-]*[a-z0-9]{2,30}$`), "Name must be a valid Spanner Database ID"),
+					validators.RegexMatches([]*regexp.Regexp{
+						regexp.MustCompile(utils.SpannerGoogleSqlDatabaseIdRegex),
+						regexp.MustCompile(utils.SpannerPostgresSqlDatabaseIdRegex),
+					}, "Name must be a valid Spanner Database ID"),
 					stringvalidator.LengthBetween(2, 30),
 				},
 				Description: "A unique identifier for the database, which cannot be changed after\n" +
@@ -248,29 +253,11 @@ func (r *spannerDatabaseResource) Create(ctx context.Context, req resource.Creat
 	}
 
 	// Create table
-	databaseOperation, err := r.config.SpannerService.CreateSpannerDatabase(ctx,
+	database, err := r.config.SpannerService.CreateSpannerDatabase(ctx,
 		fmt.Sprintf("projects/%s/instances/%s", project, instanceName),
 		databaseId,
 		database,
 	)
-	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error Creating Database",
-			"Could not create Database ("+databaseId+") in project ("+project+") and instance ("+instanceName+"): "+err.Error(),
-		)
-		return
-	}
-
-	database, err = databaseOperation.Operation.Wait(ctx)
-	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error Creating Database",
-			"Could not create Database ("+databaseId+") in project ("+project+") and instance ("+instanceName+"): "+err.Error(),
-		)
-		return
-	}
-
-	err = databaseOperation.CloseClientConn()
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Creating Database",

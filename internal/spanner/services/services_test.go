@@ -61,7 +61,7 @@ func TestCreateSpannerDatabase(t *testing.T) {
 				databaseId: "tf-test",
 				database: &databasepb.Database{
 					VersionRetentionPeriod: "4h",
-					DatabaseDialect:        databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL,
+					DatabaseDialect:        databasepb.DatabaseDialect_POSTGRESQL,
 					EnableDropProtection:   false,
 				},
 			},
@@ -75,14 +75,7 @@ func TestCreateSpannerDatabase(t *testing.T) {
 				return
 			}
 
-			database, err := got.Operation.Wait(tt.args.ctx)
-			if err != nil {
-				t.Errorf("CreateSpannerDatabase() error = %v", err)
-				return
-			}
-			got.CloseClientConn()
-
-			if !reflect.DeepEqual(database, tt.want) {
+			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("CreateSpannerDatabase() got = %v, want %v", got, tt.want)
 			}
 		})
@@ -580,14 +573,7 @@ func TestCreateSpannerBackup(t *testing.T) {
 				return
 			}
 
-			backup, err := got.Operation.Wait(tt.args.ctx)
-			if err != nil {
-				t.Errorf("CreateSpannerBackup() error = %v", err)
-				return
-			}
-			got.CloseClientConn()
-
-			if !reflect.DeepEqual(backup, tt.want) {
+			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("CreateSpannerBackup() got = %v, want %v", got, tt.want)
 			}
 		})
