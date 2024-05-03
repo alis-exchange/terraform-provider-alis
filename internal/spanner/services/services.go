@@ -80,12 +80,21 @@ type SpannerTableColumn struct {
 	DefaultValue *wrapperspb.StringValue
 }
 
+type SpannerTableIndexColumn struct {
+	// The name of the column
+	Name string
+	// The sort order of the column in the index
+	//
+	// Accepts either SpannerTableIndexColumnOrder_ASC or SpannerTableIndexColumnOrder_DESC
+	Order SpannerTableIndexColumnOrder
+}
+
 // SpannerTableIndex represents a Spanner table index.
 type SpannerTableIndex struct {
 	// The name of the index
 	Name string
 	// The columns that make up the index
-	Columns []string
+	Columns []*SpannerTableIndexColumn
 	// Whether the index is unique
 	Unique *wrapperspb.BoolValue
 }
@@ -943,9 +952,15 @@ func (s *SpannerService) GetSpannerTable(ctx context.Context, name string) (*Spa
 			continue
 		}
 
+		indexColumns := make([]*SpannerTableIndexColumn, len(index.Columns()))
+		for i, indexColumn := range index.Columns() {
+			indexColumns[i] = &SpannerTableIndexColumn{
+				Name: indexColumn,
+			}
+		}
 		idx := &SpannerTableIndex{
 			Name:    index.Name(),
-			Columns: index.Columns(),
+			Columns: indexColumns,
 		}
 		if unique, ok := index.Unique(); ok {
 			idx.Unique = wrapperspb.Bool(unique)
@@ -1293,7 +1308,11 @@ func (s *SpannerService) CreateSpannerTableIndex(ctx context.Context, parent str
 		return nil, status.Error(codes.InvalidArgument, "Invalid argument index.columns, field is required but not provided")
 	}
 	for i, column := range index.Columns {
-		if valid := utils.ValidateArgument(column, utils.SpannerColumnIdRegex); !valid {
+		if column == nil {
+			return nil, status.Errorf(codes.InvalidArgument, "Invalid argument index.columns[%d], field is required but not provided", i)
+		}
+
+		if valid := utils.ValidateArgument(column.Name, utils.SpannerColumnIdRegex); !valid {
 			return nil, status.Errorf(codes.InvalidArgument, "Invalid argument index.columns[%d] (%s), must match `%s`", i, column, utils.SpannerColumnIdRegex)
 		}
 	}
@@ -1402,11 +1421,17 @@ func (s *SpannerService) GetSpannerTableIndex(ctx context.Context, parent string
 
 	for _, index := range indexes {
 		if index.Name() == name {
-			columns := index.Columns()
+
+			indexColumns := make([]*SpannerTableIndexColumn, len(index.Columns()))
+			for i, indexColumn := range index.Columns() {
+				indexColumns[i] = &SpannerTableIndexColumn{
+					Name: indexColumn,
+				}
+			}
 
 			idx := &SpannerTableIndex{
 				Name:    name,
-				Columns: columns,
+				Columns: indexColumns,
 			}
 			if unique, ok := index.Unique(); ok {
 				idx.Unique = wrapperspb.Bool(unique)
@@ -1462,11 +1487,16 @@ func (s *SpannerService) ListSpannerTableIndices(ctx context.Context, parent str
 	res := make([]*SpannerTableIndex, len(indexes))
 
 	for i, index := range indexes {
-		columns := index.Columns()
+		indexColumns := make([]*SpannerTableIndexColumn, len(index.Columns()))
+		for j, indexColumn := range index.Columns() {
+			indexColumns[j] = &SpannerTableIndexColumn{
+				Name: indexColumn,
+			}
+		}
 
 		idx := &SpannerTableIndex{
 			Name:    index.Name(),
-			Columns: columns,
+			Columns: indexColumns,
 		}
 		if unique, ok := index.Unique(); ok {
 			idx.Unique = wrapperspb.Bool(unique)

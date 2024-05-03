@@ -45,6 +45,23 @@ var SpannerTableDataTypes = []string{
 	SpannerTableDataType_JSON.String(),
 }
 
+type SpannerTableIndexColumnOrder int64
+
+const (
+	SpannerTableIndexColumnOrder_UNSPECIFIED SpannerTableIndexColumnOrder = iota
+	SpannerTableIndexColumnOrder_ASC
+	SpannerTableIndexColumnOrder_DESC
+)
+
+func (s SpannerTableIndexColumnOrder) String() string {
+	return [...]string{"unspecified", "asc", "desc"}[s]
+}
+
+var SpannerTableIndexColumnOrders = []string{
+	SpannerTableIndexColumnOrder_ASC.String(),
+	SpannerTableIndexColumnOrder_DESC.String(),
+}
+
 type Index struct {
 	IndexName       string
 	IndexType       string
@@ -132,6 +149,7 @@ func ParseSchemaToStruct(schema *SpannerTableSchema) (interface{}, error) {
 		Name     string
 		Unique   bool
 		Priority int
+		Order    string
 	}
 
 	type ColumnIndices struct {
@@ -146,8 +164,8 @@ func ParseSchemaToStruct(schema *SpannerTableSchema) (interface{}, error) {
 		for i, index := range schema.Indices {
 			if index.Columns != nil && len(index.Columns) > 0 {
 				for _, column := range index.Columns {
-					if _, ok := columnIndices[column]; !ok {
-						columnIndices[column] = &ColumnIndices{}
+					if _, ok := columnIndices[column.Name]; !ok {
+						columnIndices[column.Name] = &ColumnIndices{}
 					}
 
 					// Check if the index is unique
@@ -156,10 +174,11 @@ func ParseSchemaToStruct(schema *SpannerTableSchema) (interface{}, error) {
 						unique = index.Unique.GetValue()
 					}
 					// Add the index to the column
-					columnIndices[column].Indices = append(columnIndices[column].Indices, &ColumnIndex{
+					columnIndices[column.Name].Indices = append(columnIndices[column.Name].Indices, &ColumnIndex{
 						Name:     index.Name,
 						Unique:   unique,
 						Priority: i + 1,
+						Order:    column.Order.String(),
 					})
 				}
 			}
@@ -219,7 +238,7 @@ func ParseSchemaToStruct(schema *SpannerTableSchema) (interface{}, error) {
 		// Check if the column has any indices
 		if indices, ok := columnIndices[column.Name]; ok {
 			for _, index := range indices.Indices {
-				tag := fmt.Sprintf("index:%s,priority:%d", index.Name, index.Priority)
+				tag := fmt.Sprintf("index:%s,sort:%s,priority:%d", index.Name, index.Order, index.Priority)
 				// Check if the index is unique
 				if index.Unique {
 					tag += ",unique"

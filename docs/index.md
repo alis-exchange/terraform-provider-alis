@@ -33,5 +33,4 @@ provider "alis" {
 
 - `access_token` (String)
 - `credentials` (String) A JSON string of Google Cloud credentials.
-- `host` (String)
 - `project` (String) The Google Cloud project ID.

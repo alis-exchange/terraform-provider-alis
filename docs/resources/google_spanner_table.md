@@ -79,9 +79,14 @@ resource "alis_google_spanner_table" "test" {
     ],
     indices = [
       {
-        name    = "display_name_idx",
-        columns = ["display_name"],
-        unique  = false,
+        name = "display_name_idx",
+        columns = [
+          {
+            name  = "display_name",
+            order = "asc",
+          },
+        ],
+        unique = false,
       },
     ]
   }
@@ -151,11 +156,23 @@ This is only applicable to columns of type `FLOAT64`.
 
 Required:
 
-- `columns` (Set of String) The columns that make up the index.
-The order of the columns is significant.
+- `columns` (Attributes List) The columns that make up the index.
+The order of the columns is significant. (see [below for nested schema](#nestedatt--schema--indices--columns))
 - `name` (String) The name of the index.
 The name must contain only letters (a-z, A-Z), numbers (0-9), or hyphens (-), and must start with a letter and not end in a hyphen.
 
 Optional:
 
 - `unique` (Boolean) Indicates if the index is unique.
+
+<a id="nestedatt--schema--indices--columns"></a>
+### Nested Schema for `schema.indices.columns`
+
+Required:
+
+- `name` (String) The name of the column that makes up the index.
+
+Optional:
+
+- `order` (String) The sorting order of the column in the index.
+Valid values are: `asc` or `desc`. If not specified the default is `asc`.

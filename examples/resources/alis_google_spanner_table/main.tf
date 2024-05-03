@@ -63,9 +63,14 @@ resource "alis_google_spanner_table" "test" {
     ],
     indices = [
       {
-        name    = "display_name_idx",
-        columns = ["display_name"],
-        unique  = false,
+        name = "display_name_idx",
+        columns = [
+          {
+            name  = "display_name",
+            order = "asc",
+          },
+        ],
+        unique = false,
       },
     ]
   }

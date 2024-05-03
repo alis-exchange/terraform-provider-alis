@@ -78,17 +78,34 @@ func (o spannerTableColumn) attrTypes() map[string]attr.Type {
 
 type spannerTableIndex struct {
 	Name    types.String `tfsdk:"name"`
-	Columns types.Set    `tfsdk:"columns"`
+	Columns types.List   `tfsdk:"columns"`
 	Unique  types.Bool   `tfsdk:"unique"`
 }
 
 func (o spannerTableIndex) attrTypes() map[string]attr.Type {
 	return map[string]attr.Type{
 		"name": types.StringType,
-		"columns": types.SetType{
-			ElemType: types.StringType,
+		"columns": types.ListType{
+			ElemType: types.ObjectType{
+				AttrTypes: map[string]attr.Type{
+					"name":  types.StringType,
+					"order": types.StringType,
+				},
+			},
 		},
 		"unique": types.BoolType,
+	}
+}
+
+type spannerTableIndexColumn struct {
+	Name  types.String `tfsdk:"name"`
+	Order types.String `tfsdk:"order"`
+}
+
+func (o spannerTableIndexColumn) attrTypes() map[string]attr.Type {
+	return map[string]attr.Type{
+		"name":  types.StringType,
+		"order": types.StringType,
 	}
 }
 
@@ -202,9 +219,29 @@ func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaReques
 									Description: "The name of the index.\n" +
 										"The name must contain only letters (a-z, A-Z), numbers (0-9), or hyphens (-), and must start with a letter and not end in a hyphen.",
 								},
-								"columns": schema.SetAttribute{
-									Required:    true,
-									ElementType: types.StringType,
+								"columns": schema.ListNestedAttribute{
+									Required: true,
+									CustomType: types.ListType{
+										ElemType: types.ObjectType{
+											AttrTypes: spannerTableIndexColumn{}.attrTypes(),
+										},
+									},
+									NestedObject: schema.NestedAttributeObject{
+										Attributes: map[string]schema.Attribute{
+											"name": schema.StringAttribute{
+												Required:    true,
+												Description: "The name of the column that makes up the index.",
+											},
+											"order": schema.StringAttribute{
+												Optional: true,
+												Description: "The sorting order of the column in the index.\n" +
+													"Valid values are: `asc` or `desc`. If not specified the default is `asc`.",
+												Validators: []validator.String{
+													stringvalidator.OneOf(services.SpannerTableIndexColumnOrders...),
+												},
+											},
+										},
+									},
 									Description: "The columns that make up the index.\n" +
 										"The order of the columns is significant.",
 								},
@@ -350,7 +387,7 @@ func (r *spannerTableResource) Create(ctx context.Context, req resource.CreateRe
 
 				// Populate columns
 				if !index.Columns.IsNull() {
-					columns := make([]string, 0, len(index.Columns.Elements()))
+					columns := make([]spannerTableIndexColumn, 0, len(index.Columns.Elements()))
 					d := index.Columns.ElementsAs(ctx, &columns, false)
 					if d.HasError() {
 						tflog.Error(ctx, fmt.Sprintf("Error reading index columns: %v", d))
@@ -358,7 +395,19 @@ func (r *spannerTableResource) Create(ctx context.Context, req resource.CreateRe
 					}
 					diags.Append(d...)
 
-					idx.Columns = columns
+					for _, column := range columns {
+						order := services.SpannerTableIndexColumnOrder_ASC
+						switch column.Order.ValueString() {
+						case "asc":
+							order = services.SpannerTableIndexColumnOrder_ASC
+						case "desc":
+							order = services.SpannerTableIndexColumnOrder_DESC
+						}
+						idx.Columns = append(idx.Columns, &services.SpannerTableIndexColumn{
+							Name:  column.Name.ValueString(),
+							Order: order,
+						})
+					}
 				}
 
 				tableSchema.Indices = append(tableSchema.Indices, idx)
@@ -500,7 +549,7 @@ func (r *spannerTableResource) Read(ctx context.Context, req resource.ReadReques
 			for _, index := range table.Schema.Indices {
 				idx := &spannerTableIndex{
 					Name:    types.StringValue(index.Name),
-					Columns: types.Set{},
+					Columns: types.List{},
 				}
 
 				// Get unique
@@ -509,14 +558,19 @@ func (r *spannerTableResource) Read(ctx context.Context, req resource.ReadReques
 				}
 
 				// Get columns
-				columns := make([]string, 0, len(index.Columns))
+				columns := make([]*spannerTableIndexColumn, 0)
 				for _, column := range index.Columns {
-					columns = append(columns, column)
+					columns = append(columns, &spannerTableIndexColumn{
+						Name:  types.StringValue(column.Name),
+						Order: types.StringValue(column.Order.String()),
+					})
 				}
-				generatedSet, d := types.SetValueFrom(ctx, types.StringType, columns)
+				generatedList, d := types.ListValueFrom(ctx, types.ObjectType{
+					AttrTypes: spannerTableIndexColumn{}.attrTypes(),
+				}, columns)
 				diags.Append(d...)
 
-				idx.Columns = generatedSet
+				idx.Columns = generatedList
 
 				indices = append(indices, idx)
 			}
@@ -664,7 +718,7 @@ func (r *spannerTableResource) Update(ctx context.Context, req resource.UpdateRe
 
 				// Populate columns
 				if !index.Columns.IsNull() {
-					columns := make([]string, 0, len(index.Columns.Elements()))
+					columns := make([]spannerTableIndexColumn, 0, len(index.Columns.Elements()))
 					d := index.Columns.ElementsAs(ctx, &columns, false)
 					if d.HasError() {
 						tflog.Error(ctx, fmt.Sprintf("Error reading index columns: %v", d))
@@ -672,7 +726,19 @@ func (r *spannerTableResource) Update(ctx context.Context, req resource.UpdateRe
 					}
 					diags.Append(d...)
 
-					idx.Columns = columns
+					for _, column := range columns {
+						order := services.SpannerTableIndexColumnOrder_ASC
+						switch column.Order.ValueString() {
+						case "asc":
+							order = services.SpannerTableIndexColumnOrder_ASC
+						case "desc":
+							order = services.SpannerTableIndexColumnOrder_DESC
+						}
+						idx.Columns = append(idx.Columns, &services.SpannerTableIndexColumn{
+							Name:  column.Name.ValueString(),
+							Order: order,
+						})
+					}
 				}
 
 				tableSchema.Indices = append(tableSchema.Indices, idx)
