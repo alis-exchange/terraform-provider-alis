@@ -48,7 +48,7 @@ output "test_table" {
 
 - `instance` (String) The Spanner instance ID.
 - `name` (String) A unique identifier for the database, which cannot be changed after
-the instance is created. Values are of the form `[a-z][-a-z0-9]*[a-z0-9]` and must be 2-30 characters long.
+the instance is created. Values are of the form `^[a-z][a-z0-9_\-]*[a-z0-9]{2,30}$` for GoogleSQL and `^[a-zA-Z][a-zA-Z0-9_]{2,30}$` for PostgreSQL.
 - `project` (String) The Google Cloud project ID.
 
 ### Optional

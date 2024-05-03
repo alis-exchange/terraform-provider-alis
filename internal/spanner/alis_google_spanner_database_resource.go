@@ -89,7 +89,6 @@ func (r *spannerDatabaseResource) Schema(_ context.Context, _ resource.SchemaReq
 			"name": schema.StringAttribute{
 				Required: true,
 				Validators: []validator.String{
-					stringvalidator.RegexMatches(regexp.MustCompile(`^[a-z][a-z0-9_\-]*[a-z0-9]{2,30}$`), "Name must be a valid Spanner Database ID"),
 					validators.RegexMatches([]*regexp.Regexp{
 						regexp.MustCompile(utils.SpannerGoogleSqlDatabaseIdRegex),
 						regexp.MustCompile(utils.SpannerPostgresSqlDatabaseIdRegex),
@@ -97,7 +96,7 @@ func (r *spannerDatabaseResource) Schema(_ context.Context, _ resource.SchemaReq
 					stringvalidator.LengthBetween(2, 30),
 				},
 				Description: "A unique identifier for the database, which cannot be changed after\n" +
-					"the instance is created. Values are of the form `[a-z][-a-z0-9]*[a-z0-9]` and must be 2-30 characters long.",
+					"the instance is created. Values are of the form `^[a-z][a-z0-9_\\-]*[a-z0-9]{2,30}$` for GoogleSQL and `^[a-zA-Z][a-zA-Z0-9_]{2,30}$` for PostgreSQL.",
 			},
 			"project": schema.StringAttribute{
 				Required:    true,
