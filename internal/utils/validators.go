@@ -16,12 +16,12 @@ var (
 	BigtableBackupIdRegex       = `^[a-zA-Z0-9_.-]{1,50}$`
 	BigtableBackupNameRegex     = `^projects\/[a-z](?:[-a-z0-9]{4,28}[a-z0-9])?\/instances\/[a-z0-9-]{6,33}\/clusters\/[a-z0-9-]{6,30}\/backups\/[a-zA-Z0-9_.-]{1,50}$`
 
-	SpannerDatabaseIdRegex   = `^[a-z][a-z0-9_\-]*[a-z0-9]{2,60}$`
-	SpannerDatabaseNameRegex = `^projects\/[a-z](?:[-a-z0-9]{4,28}[a-z0-9])?\/instances\/[a-z0-9-]{6,33}\/databases\/[a-z][a-z0-9_\-]*[a-z0-9]{2,60}$`
-	SpannerTableIdRegex      = `^[a-zA-Z0-9_-]{1,50}$`
-	SpannerTableNameRegex    = `^projects\/[a-z](?:[-a-z0-9]{4,28}[a-z0-9])?\/instances\/[a-z0-9-]{6,33}\/databases\/[a-z][a-z0-9_\-]*[a-z0-9]{2,60}\/tables\/[a-zA-Z0-9_-]{1,50}$`
-	SpannerBackupIdRegex     = `^[a-z][a-z0-9_\-]*[a-z0-9]{2,60}$`
-	SpannerBackupNameRegex   = `^projects\/[a-z](?:[-a-z0-9]{4,28}[a-z0-9])?\/instances\/[a-z0-9-]{6,33}\/backups\/[a-z][a-z0-9_\-]*[a-z0-9]{2,60}$`
+	SpannerDatabaseIdRegex   = `^[a-z][a-z0-9_\-]*[a-z0-9]{2,30}$`
+	SpannerDatabaseNameRegex = `^projects\/[a-z](?:[-a-z0-9]{4,28}[a-z0-9])?\/instances\/[a-z0-9-]{6,33}\/databases\/[a-z][a-z0-9_\-]*[a-z0-9]{2,30}$`
+	SpannerTableIdRegex      = `^[a-zA-Z0-9_.-]{1,50}$`
+	SpannerTableNameRegex    = `^projects\/[a-z](?:[-a-z0-9]{4,28}[a-z0-9])?\/instances\/[a-z0-9-]{6,33}\/databases\/[a-z][a-z0-9_\-]*[a-z0-9]{2,30}\/tables\/[a-zA-Z0-9_.-]{1,50}$`
+	SpannerBackupIdRegex     = `^[a-z][a-z0-9_\-]*[a-z0-9]{2,30}$`
+	SpannerBackupNameRegex   = `^projects\/[a-z](?:[-a-z0-9]{4,28}[a-z0-9])?\/instances\/[a-z0-9-]{6,33}\/backups\/[a-z][a-z0-9_\-]*[a-z0-9]{2,30}$`
 	SpannerColumnIdRegex     = `^[a-zA-Z0-9_-]{1,50}$`
 	SpannerIndexIdRegex      = `^[a-zA-Z0-9_-]{1,50}$`
 )

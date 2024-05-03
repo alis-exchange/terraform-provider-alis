@@ -88,10 +88,11 @@ func (r *spannerDatabaseResource) Schema(_ context.Context, _ resource.SchemaReq
 			"name": schema.StringAttribute{
 				Required: true,
 				Validators: []validator.String{
-					stringvalidator.RegexMatches(regexp.MustCompile(`^[a-z][a-z0-9_\-]*[a-z0-9]$`), "Name must be a valid Spanner Database ID"),
+					stringvalidator.RegexMatches(regexp.MustCompile(`^[a-z][a-z0-9_\-]*[a-z0-9]{2,30}$`), "Name must be a valid Spanner Database ID"),
+					stringvalidator.LengthBetween(2, 30),
 				},
 				Description: "A unique identifier for the database, which cannot be changed after\n" +
-					"the instance is created. Values are of the form `[a-z][-a-z0-9]*[a-z0-9]`.",
+					"the instance is created. Values are of the form `[a-z][-a-z0-9]*[a-z0-9]` and must be 2-30 characters long.",
 			},
 			"project": schema.StringAttribute{
 				Required:    true,
