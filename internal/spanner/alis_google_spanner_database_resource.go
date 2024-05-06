@@ -515,7 +515,7 @@ func (r *spannerDatabaseResource) Update(ctx context.Context, req resource.Updat
 	_, err := r.config.SpannerService.UpdateSpannerDatabase(ctx,
 		database,
 		&fieldmaskpb.FieldMask{
-			Paths: []string{"enable_drop_protection", "dialect", "version_retention_period", "encryption_config"},
+			Paths: []string{"enable_drop_protection", "version_retention_period"},
 		},
 	)
 	if err != nil {
