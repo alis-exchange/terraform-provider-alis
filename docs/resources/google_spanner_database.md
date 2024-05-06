@@ -46,6 +46,8 @@ output "test_table" {
 
 ### Required
 
+- `dialect` (String) The dialect of the Cloud Spanner Database.
+Possible values: [`GOOGLE_STANDARD_SQL`]
 - `instance` (String) The Spanner instance ID.
 - `name` (String) A unique identifier for the database, which cannot be changed after
 the instance is created. Values are of the form `^[a-z][a-z0-9_\-]*[a-z0-9]{2,30}$` for GoogleSQL and `^[a-zA-Z][a-zA-Z0-9_]{2,30}$` for PostgreSQL.
@@ -53,8 +55,6 @@ the instance is created. Values are of the form `^[a-z][a-z0-9_\-]*[a-z0-9]{2,30
 
 ### Optional
 
-- `dialect` (String) The dialect of the Cloud Spanner Database.
-If it is not provided, `GOOGLE_STANDARD_SQL` will be used. Possible values: [`GOOGLE_STANDARD_SQL`, `POSTGRESQL`]
 - `enable_drop_protection` (Boolean) Whether drop protection is enabled for this database. Defaults to false.
 - `encryption_config` (Attributes) Encryption configuration for the database (see [below for nested schema](#nestedatt--encryption_config))
 - `encryption_info` (Attributes List) (see [below for nested schema](#nestedatt--encryption_info))

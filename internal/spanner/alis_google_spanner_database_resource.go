@@ -107,16 +107,16 @@ func (r *spannerDatabaseResource) Schema(_ context.Context, _ resource.SchemaReq
 				Description: "The Spanner instance ID.",
 			},
 			"dialect": schema.StringAttribute{
-				Optional: true,
+				Required: true,
 				Validators: []validator.String{
-					stringvalidator.OneOf(services.DatabaseDialect_GoogleStandardSQL, services.DatabaseDialect_PostgreSQL),
+					stringvalidator.OneOf(services.DatabaseDialect_GoogleStandardSQL),
 				},
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 					stringplanmodifier.UseStateForUnknown(),
 				},
 				Description: "The dialect of the Cloud Spanner Database.\n" +
-					"If it is not provided, `GOOGLE_STANDARD_SQL` will be used. Possible values: [`GOOGLE_STANDARD_SQL`, `POSTGRESQL`]",
+					"Possible values: [`GOOGLE_STANDARD_SQL`]",
 			},
 			"enable_drop_protection": schema.BoolAttribute{
 				Optional:    true,
@@ -252,7 +252,7 @@ func (r *spannerDatabaseResource) Create(ctx context.Context, req resource.Creat
 	}
 
 	// Create table
-	database, err := r.config.SpannerService.CreateSpannerDatabase(ctx,
+	createdDatabase, err := r.config.SpannerService.CreateSpannerDatabase(ctx,
 		fmt.Sprintf("projects/%s/instances/%s", project, instanceName),
 		databaseId,
 		database,
@@ -269,7 +269,7 @@ func (r *spannerDatabaseResource) Create(ctx context.Context, req resource.Creat
 	plan.Name = types.StringValue(databaseId)
 
 	// Populate state
-	switch database.GetState() {
+	switch createdDatabase.GetState() {
 	case databasepb.Database_CREATING:
 		plan.State = types.StringValue(services.DatabaseState_Creating)
 	case databasepb.Database_READY:
@@ -279,25 +279,21 @@ func (r *spannerDatabaseResource) Create(ctx context.Context, req resource.Creat
 	default:
 		plan.State = types.StringNull()
 	}
-
 	// Populate create time
-	if database.GetCreateTime() != nil {
-		plan.CreateTime = types.StringValue(database.GetCreateTime().AsTime().Format(time.RFC3339))
+	if createdDatabase.GetCreateTime() != nil {
+		plan.CreateTime = types.StringValue(createdDatabase.GetCreateTime().AsTime().Format(time.RFC3339))
 	} else {
-		plan.CreateTime = types.StringValue("")
+		plan.CreateTime = types.StringNull()
 	}
-
 	// Populate earliest version time
-	if database.GetEarliestVersionTime() != nil {
-		plan.EarliestVersionTime = types.StringValue(database.GetEarliestVersionTime().AsTime().Format(time.RFC3339))
+	if createdDatabase.GetEarliestVersionTime() != nil {
+		plan.EarliestVersionTime = types.StringValue(createdDatabase.GetEarliestVersionTime().AsTime().Format(time.RFC3339))
 	} else {
-		plan.EarliestVersionTime = types.StringValue("")
+		plan.EarliestVersionTime = types.StringNull()
 	}
-
-	// Populate encryption info
 	var encryptionInfoList []spannerDatabaseEncryptionInfo
-	if database.GetEncryptionInfo() != nil && len(database.GetEncryptionInfo()) > 0 {
-		for _, encryptionInfo := range database.GetEncryptionInfo() {
+	if createdDatabase.GetEncryptionInfo() != nil && len(createdDatabase.GetEncryptionInfo()) > 0 {
+		for _, encryptionInfo := range createdDatabase.GetEncryptionInfo() {
 			var encryptionType types.String
 			switch encryptionInfo.GetEncryptionType() {
 			case databasepb.EncryptionInfo_CUSTOMER_MANAGED_ENCRYPTION:
@@ -312,6 +308,13 @@ func (r *spannerDatabaseResource) Create(ctx context.Context, req resource.Creat
 				KmsKeyVersion: types.StringValue(encryptionInfo.GetKmsKeyVersion()),
 			})
 		}
+
+		generatedList, d := types.ListValueFrom(ctx, types.ObjectType{
+			AttrTypes: spannerDatabaseEncryptionInfo{}.attrTypes(),
+		}, encryptionInfoList)
+		diags.Append(d...)
+
+		plan.EncryptionInfo = generatedList
 	} else {
 		encryptionInfoList = []spannerDatabaseEncryptionInfo{}
 	}
@@ -320,16 +323,14 @@ func (r *spannerDatabaseResource) Create(ctx context.Context, req resource.Creat
 	}, []spannerDatabaseEncryptionInfo{})
 	diags.Append(d...)
 	plan.EncryptionInfo = generatedList
-
 	// Populate default leader
-	if database.GetDefaultLeader() != "" {
-		plan.DefaultLeader = types.StringValue(database.GetDefaultLeader())
+	if createdDatabase.GetDefaultLeader() != "" {
+		plan.DefaultLeader = types.StringValue(createdDatabase.GetDefaultLeader())
 	} else {
 		plan.DefaultLeader = types.StringValue("")
 	}
-
 	// Populate reconciling
-	plan.Reconciling = types.BoolValue(database.GetReconciling())
+	plan.Reconciling = types.BoolValue(createdDatabase.GetReconciling())
 
 	// Set state to fully populated data
 	diags = resp.State.Set(ctx, plan)
@@ -512,7 +513,7 @@ func (r *spannerDatabaseResource) Update(ctx context.Context, req resource.Updat
 	}
 
 	// Update existing table
-	_, err := r.config.SpannerService.UpdateSpannerDatabase(ctx,
+	updatedDatabase, err := r.config.SpannerService.UpdateSpannerDatabase(ctx,
 		database,
 		&fieldmaskpb.FieldMask{
 			Paths: []string{"enable_drop_protection", "version_retention_period"},
@@ -529,7 +530,7 @@ func (r *spannerDatabaseResource) Update(ctx context.Context, req resource.Updat
 	// Map response body to schema and populate Computed attribute values
 	plan.Name = types.StringValue(databaseId)
 	// Populate state
-	switch database.GetState() {
+	switch updatedDatabase.GetState() {
 	case databasepb.Database_CREATING:
 		plan.State = types.StringValue(services.DatabaseState_Creating)
 	case databasepb.Database_READY:
@@ -540,20 +541,20 @@ func (r *spannerDatabaseResource) Update(ctx context.Context, req resource.Updat
 		plan.State = types.StringNull()
 	}
 	// Populate create time
-	if database.GetCreateTime() != nil {
-		plan.CreateTime = types.StringValue(database.GetCreateTime().AsTime().Format(time.RFC3339))
+	if updatedDatabase.GetCreateTime() != nil {
+		plan.CreateTime = types.StringValue(updatedDatabase.GetCreateTime().AsTime().Format(time.RFC3339))
 	} else {
-		plan.CreateTime = types.StringValue("")
+		plan.CreateTime = types.StringNull()
 	}
 	// Populate earliest version time
-	if database.GetEarliestVersionTime() != nil {
-		plan.EarliestVersionTime = types.StringValue(database.GetEarliestVersionTime().AsTime().Format(time.RFC3339))
+	if updatedDatabase.GetEarliestVersionTime() != nil {
+		plan.EarliestVersionTime = types.StringValue(updatedDatabase.GetEarliestVersionTime().AsTime().Format(time.RFC3339))
 	} else {
-		plan.EarliestVersionTime = types.StringValue("")
+		plan.EarliestVersionTime = types.StringNull()
 	}
 	var encryptionInfoList []spannerDatabaseEncryptionInfo
-	if database.GetEncryptionInfo() != nil && len(database.GetEncryptionInfo()) > 0 {
-		for _, encryptionInfo := range database.GetEncryptionInfo() {
+	if updatedDatabase.GetEncryptionInfo() != nil && len(updatedDatabase.GetEncryptionInfo()) > 0 {
+		for _, encryptionInfo := range updatedDatabase.GetEncryptionInfo() {
 			var encryptionType types.String
 			switch encryptionInfo.GetEncryptionType() {
 			case databasepb.EncryptionInfo_CUSTOMER_MANAGED_ENCRYPTION:
@@ -584,13 +585,13 @@ func (r *spannerDatabaseResource) Update(ctx context.Context, req resource.Updat
 	diags.Append(d...)
 	plan.EncryptionInfo = generatedList
 	// Populate default leader
-	if database.GetDefaultLeader() != "" {
-		plan.DefaultLeader = types.StringValue(database.GetDefaultLeader())
+	if updatedDatabase.GetDefaultLeader() != "" {
+		plan.DefaultLeader = types.StringValue(updatedDatabase.GetDefaultLeader())
 	} else {
 		plan.DefaultLeader = types.StringValue("")
 	}
 	// Populate reconciling
-	plan.Reconciling = types.BoolValue(database.GetReconciling())
+	plan.Reconciling = types.BoolValue(updatedDatabase.GetReconciling())
 
 	// Set state to fully populated data
 	diags = resp.State.Set(ctx, plan)
