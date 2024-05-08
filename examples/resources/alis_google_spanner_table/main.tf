@@ -60,18 +60,6 @@ resource "alis_google_spanner_table" "test" {
         name = "data",
         type = "BYTES",
       }
-    ],
-    indices = [
-      {
-        name = "display_name_idx",
-        columns = [
-          {
-            name  = "display_name",
-            order = "asc",
-          },
-        ],
-        unique = false,
-      },
     ]
   }
 }

@@ -76,18 +76,6 @@ resource "alis_google_spanner_table" "test" {
         name = "data",
         type = "BYTES",
       }
-    ],
-    indices = [
-      {
-        name = "display_name_idx",
-        columns = [
-          {
-            name  = "display_name",
-            order = "asc",
-          },
-        ],
-        unique = false,
-      },
     ]
   }
 }
@@ -115,10 +103,6 @@ The name must satisfy the expression `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`
 Required:
 
 - `columns` (Attributes List) The columns of the table. (see [below for nested schema](#nestedatt--schema--columns))
-
-Optional:
-
-- `indices` (Attributes List) The indices/indexes of the table. (see [below for nested schema](#nestedatt--schema--indices))
 
 <a id="nestedatt--schema--columns"></a>
 ### Nested Schema for `schema.columns`
@@ -149,30 +133,3 @@ The maximum is 17
 This is only applicable to columns of type `FLOAT64`.
 - `size` (Number) The maximum size of the column.
 - `unique` (Boolean) Indicates if the column is unique.
-
-
-<a id="nestedatt--schema--indices"></a>
-### Nested Schema for `schema.indices`
-
-Required:
-
-- `columns` (Attributes List) The columns that make up the index.
-The order of the columns is significant. (see [below for nested schema](#nestedatt--schema--indices--columns))
-- `name` (String) The name of the index.
-The name must contain only letters (a-z, A-Z), numbers (0-9), or hyphens (-), and must start with a letter and not end in a hyphen.
-
-Optional:
-
-- `unique` (Boolean) Indicates if the index is unique.
-
-<a id="nestedatt--schema--indices--columns"></a>
-### Nested Schema for `schema.indices.columns`
-
-Required:
-
-- `name` (String) The name of the column that makes up the index.
-
-Optional:
-
-- `order` (String) The sorting order of the column in the index.
-Valid values are: `asc` or `desc`. If not specified the default is `asc`.

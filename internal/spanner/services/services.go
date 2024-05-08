@@ -102,8 +102,6 @@ type SpannerTableIndex struct {
 type SpannerTableSchema struct {
 	// The columns that make up the table schema.
 	Columns []*SpannerTableColumn
-	// The indexes for the table.
-	Indices []*SpannerTableIndex
 }
 
 // SpannerTable represents a Spanner table.
@@ -1021,16 +1019,10 @@ func (s *SpannerService) GetSpannerTable(ctx context.Context, name string) (*Spa
 		columns[i] = column
 	}
 
-	indexes, err := GetIndexes(db, tableId)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "Error getting table indices: %v", err)
-	}
-
 	table := &SpannerTable{
 		Name: name,
 		Schema: &SpannerTableSchema{
 			Columns: columns,
-			Indices: indexes,
 		},
 	}
 
@@ -1126,13 +1118,12 @@ func (s *SpannerService) UpdateSpannerTable(ctx context.Context, table *SpannerT
 		// Normalize the update mask
 		updateMask.Normalize()
 
-		// Ensure only valid fields are updated i.e. schema.columns, schema.indices
+		// Ensure only valid fields are updated i.e. schema.columns
 		for _, path := range updateMask.GetPaths() {
 			switch path {
 			case "schema.columns":
-			case "schema.indices":
 			default:
-				return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("Invalid argument update_mask, only fields `schema.columns` and `schema.indices` are allowed, got `%s`", path))
+				return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("Invalid argument update_mask, only field `schema.columns` is allowed, got `%s`", path))
 			}
 		}
 	}
@@ -1227,43 +1218,6 @@ func (s *SpannerService) UpdateSpannerTable(ctx context.Context, table *SpannerT
 					err = db.Table(tableId).Migrator().DropColumn(&structInstance, column.Name)
 					if err != nil {
 						return nil, status.Errorf(codes.Internal, "Error dropping column: %v", err)
-					}
-				}
-			}
-		case "schema.indices":
-			var removedIndices []*SpannerTableIndex
-
-			// Get existing indices
-			existingIndices := existingTable.Schema.Indices
-			newIndices := map[string]*SpannerTableIndex{}
-			for _, index := range table.Schema.Indices {
-				newIndices[index.Name] = index
-			}
-
-			// If there are existing indices, but no new indices are provided, remove all existing indices
-			if (existingIndices != nil && len(existingIndices) > 0) && (newIndices == nil || len(newIndices) == 0) {
-				for _, index := range existingIndices {
-					removedIndices = append(removedIndices, index)
-				}
-			}
-
-			// If there are existing indices and new indices are provided, compare and update
-			if (existingIndices != nil && len(existingIndices) > 0) && (newIndices != nil && len(newIndices) > 0) {
-				// Iterate over the existing indices and compare with the new indices
-				for _, existingIndex := range existingIndices {
-					if _, exists := newIndices[existingIndex.Name]; !exists {
-						// Index does not exist in new indices, remove it
-						removedIndices = append(removedIndices, existingIndex)
-					}
-				}
-			}
-
-			// If there are removed indices, drop them
-			if len(removedIndices) > 0 {
-				for _, index := range removedIndices {
-					err = db.Migrator().DropIndex(tableId, index.Name)
-					if err != nil {
-						return nil, status.Errorf(codes.Internal, "Error dropping index: %v", err)
 					}
 				}
 			}

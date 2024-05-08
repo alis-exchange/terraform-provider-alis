@@ -440,13 +440,6 @@ func TestUpdateSpannerTable(t *testing.T) {
 								Type:         "BYTES",
 							},
 						},
-						//Indices: []*SpannerTableIndex{
-						//	{
-						//		Name:    "display_name_index",
-						//		Columns: []string{"display_name"},
-						//		Unique:  wrapperspb.Bool(false),
-						//	},
-						//},
 					},
 				},
 				updateMask: &fieldmaskpb.FieldMask{

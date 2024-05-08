@@ -50,7 +50,6 @@ type spannerTableModel struct {
 
 type spannerTableSchema struct {
 	Columns types.List `tfsdk:"columns"`
-	Indices types.List `tfsdk:"indices"`
 }
 
 type spannerTableColumn struct {
@@ -78,27 +77,6 @@ func (o spannerTableColumn) attrTypes() map[string]attr.Type {
 		"scale":          types.Int64Type,
 		"required":       types.BoolType,
 		"default_value":  types.StringType,
-	}
-}
-
-type spannerTableIndex struct {
-	Name    types.String `tfsdk:"name"`
-	Columns types.List   `tfsdk:"columns"`
-	Unique  types.Bool   `tfsdk:"unique"`
-}
-
-func (o spannerTableIndex) attrTypes() map[string]attr.Type {
-	return map[string]attr.Type{
-		"name": types.StringType,
-		"columns": types.ListType{
-			ElemType: types.ObjectType{
-				AttrTypes: map[string]attr.Type{
-					"name":  types.StringType,
-					"order": types.StringType,
-				},
-			},
-		},
-		"unique": types.BoolType,
 	}
 }
 
@@ -210,66 +188,6 @@ func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaReques
 						},
 						Description: "The columns of the table.",
 					},
-					"indices": schema.ListNestedAttribute{
-						Optional: true,
-						CustomType: types.ListType{
-							ElemType: types.ObjectType{
-								AttrTypes: spannerTableIndex{}.attrTypes(),
-							},
-						},
-						NestedObject: schema.NestedAttributeObject{
-							Attributes: map[string]schema.Attribute{
-								"name": schema.StringAttribute{
-									Required: true,
-									Description: "The name of the index.\n" +
-										"The name must contain only letters (a-z, A-Z), numbers (0-9), or hyphens (-), and must start with a letter and not end in a hyphen.",
-									Validators: []validator.String{
-										validators.RegexMatches([]*regexp.Regexp{
-											regexp.MustCompile(utils.SpannerGoogleSqlIndexIdRegex),
-											regexp.MustCompile(utils.SpannerPostgresSqlIndexIdRegex),
-										}, "Name must be a valid Spanner Index ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions"),
-									},
-								},
-								"columns": schema.ListNestedAttribute{
-									Required: true,
-									CustomType: types.ListType{
-										ElemType: types.ObjectType{
-											AttrTypes: spannerTableIndexColumn{}.attrTypes(),
-										},
-									},
-									NestedObject: schema.NestedAttributeObject{
-										Attributes: map[string]schema.Attribute{
-											"name": schema.StringAttribute{
-												Required:    true,
-												Description: "The name of the column that makes up the index.",
-												Validators: []validator.String{
-													validators.RegexMatches([]*regexp.Regexp{
-														regexp.MustCompile(utils.SpannerGoogleSqlColumnIdRegex),
-														regexp.MustCompile(utils.SpannerPostgresSqlColumnIdRegex),
-													}, "Name must be a valid Spanner Column ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions"),
-												},
-											},
-											"order": schema.StringAttribute{
-												Optional: true,
-												Description: "The sorting order of the column in the index.\n" +
-													"Valid values are: `asc` or `desc`. If not specified the default is `asc`.",
-												Validators: []validator.String{
-													stringvalidator.OneOf(services.SpannerTableIndexColumnOrders...),
-												},
-											},
-										},
-									},
-									Description: "The columns that make up the index.\n" +
-										"The order of the columns is significant.",
-								},
-								"unique": schema.BoolAttribute{
-									Optional:    true,
-									Description: "Indicates if the index is unique.",
-								},
-							},
-						},
-						Description: "The indices/indexes of the table.",
-					},
 				},
 				Description: "The schema of the table.",
 			},
@@ -297,7 +215,6 @@ func (r *spannerTableResource) Create(ctx context.Context, req resource.CreateRe
 		Name: "",
 		Schema: &services.SpannerTableSchema{
 			Columns: nil,
-			Indices: nil,
 		},
 	}
 
@@ -311,7 +228,6 @@ func (r *spannerTableResource) Create(ctx context.Context, req resource.CreateRe
 	if plan.Schema != nil {
 		tableSchema := &services.SpannerTableSchema{
 			Columns: nil,
-			Indices: nil,
 		}
 
 		if !plan.Schema.Columns.IsNull() {
@@ -377,57 +293,6 @@ func (r *spannerTableResource) Create(ctx context.Context, req resource.CreateRe
 				}
 
 				tableSchema.Columns = append(tableSchema.Columns, col)
-			}
-		}
-
-		if !plan.Schema.Indices.IsNull() {
-			indices := make([]spannerTableIndex, 0, len(plan.Schema.Indices.Elements()))
-			d := plan.Schema.Indices.ElementsAs(ctx, &indices, false)
-			if d.HasError() {
-				tflog.Error(ctx, fmt.Sprintf("Error reading indices: %v", d))
-				return
-			}
-			diags.Append(d...)
-
-			for _, index := range indices {
-				idx := &services.SpannerTableIndex{}
-
-				// Populate index name
-				if !index.Name.IsNull() {
-					idx.Name = index.Name.ValueString()
-				}
-
-				// Populate unique
-				if !index.Unique.IsNull() {
-					idx.Unique = wrapperspb.Bool(index.Unique.ValueBool())
-				}
-
-				// Populate columns
-				if !index.Columns.IsNull() {
-					columns := make([]spannerTableIndexColumn, 0, len(index.Columns.Elements()))
-					d := index.Columns.ElementsAs(ctx, &columns, false)
-					if d.HasError() {
-						tflog.Error(ctx, fmt.Sprintf("Error reading index columns: %v", d))
-						return
-					}
-					diags.Append(d...)
-
-					for _, column := range columns {
-						order := services.SpannerTableIndexColumnOrder_ASC
-						switch column.Order.ValueString() {
-						case "asc":
-							order = services.SpannerTableIndexColumnOrder_ASC
-						case "desc":
-							order = services.SpannerTableIndexColumnOrder_DESC
-						}
-						idx.Columns = append(idx.Columns, &services.SpannerTableIndexColumn{
-							Name:  column.Name.ValueString(),
-							Order: order,
-						})
-					}
-				}
-
-				tableSchema.Indices = append(tableSchema.Indices, idx)
 			}
 		}
 
@@ -567,44 +432,6 @@ func (r *spannerTableResource) Read(ctx context.Context, req resource.ReadReques
 
 			s.Columns = generatedList
 		}
-		if table.Schema.Indices != nil {
-			indices := make([]*spannerTableIndex, 0, len(table.Schema.Indices))
-			for _, index := range table.Schema.Indices {
-				idx := &spannerTableIndex{
-					Name:    types.StringValue(index.Name),
-					Columns: types.List{},
-				}
-
-				// Get unique
-				if index.Unique != nil {
-					idx.Unique = types.BoolValue(index.Unique.GetValue())
-				}
-
-				// Get columns
-				columns := make([]*spannerTableIndexColumn, 0)
-				for _, column := range index.Columns {
-					columns = append(columns, &spannerTableIndexColumn{
-						Name:  types.StringValue(column.Name),
-						Order: types.StringValue(column.Order.String()),
-					})
-				}
-				generatedList, d := types.ListValueFrom(ctx, types.ObjectType{
-					AttrTypes: spannerTableIndexColumn{}.attrTypes(),
-				}, columns)
-				diags.Append(d...)
-
-				idx.Columns = generatedList
-
-				indices = append(indices, idx)
-			}
-
-			generatedList, d := types.ListValueFrom(ctx, types.ObjectType{
-				AttrTypes: spannerTableIndex{}.attrTypes(),
-			}, indices)
-			diags.Append(d...)
-
-			s.Indices = generatedList
-		}
 
 		state.Schema = s
 	}
@@ -640,7 +467,6 @@ func (r *spannerTableResource) Update(ctx context.Context, req resource.UpdateRe
 		Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", project, instanceName, databaseId, tableId),
 		Schema: &services.SpannerTableSchema{
 			Columns: nil,
-			Indices: nil,
 		},
 	}
 
@@ -648,7 +474,6 @@ func (r *spannerTableResource) Update(ctx context.Context, req resource.UpdateRe
 	if plan.Schema != nil {
 		tableSchema := &services.SpannerTableSchema{
 			Columns: nil,
-			Indices: nil,
 		}
 
 		if !plan.Schema.Columns.IsNull() {
@@ -717,63 +542,12 @@ func (r *spannerTableResource) Update(ctx context.Context, req resource.UpdateRe
 			}
 		}
 
-		if !plan.Schema.Indices.IsNull() {
-			indices := make([]spannerTableIndex, 0, len(plan.Schema.Indices.Elements()))
-			d := plan.Schema.Indices.ElementsAs(ctx, &indices, false)
-			if d.HasError() {
-				tflog.Error(ctx, fmt.Sprintf("Error reading indices: %v", d))
-				return
-			}
-			diags.Append(d...)
-
-			for _, index := range indices {
-				idx := &services.SpannerTableIndex{}
-
-				// Populate index name
-				if !index.Name.IsNull() {
-					idx.Name = index.Name.ValueString()
-				}
-
-				// Populate unique
-				if !index.Unique.IsNull() {
-					idx.Unique = wrapperspb.Bool(index.Unique.ValueBool())
-				}
-
-				// Populate columns
-				if !index.Columns.IsNull() {
-					columns := make([]spannerTableIndexColumn, 0, len(index.Columns.Elements()))
-					d := index.Columns.ElementsAs(ctx, &columns, false)
-					if d.HasError() {
-						tflog.Error(ctx, fmt.Sprintf("Error reading index columns: %v", d))
-						return
-					}
-					diags.Append(d...)
-
-					for _, column := range columns {
-						order := services.SpannerTableIndexColumnOrder_ASC
-						switch column.Order.ValueString() {
-						case "asc":
-							order = services.SpannerTableIndexColumnOrder_ASC
-						case "desc":
-							order = services.SpannerTableIndexColumnOrder_DESC
-						}
-						idx.Columns = append(idx.Columns, &services.SpannerTableIndexColumn{
-							Name:  column.Name.ValueString(),
-							Order: order,
-						})
-					}
-				}
-
-				tableSchema.Indices = append(tableSchema.Indices, idx)
-			}
-		}
-
 		table.Schema = tableSchema
 	}
 
 	// Update table
 	_, err := r.config.SpannerService.UpdateSpannerTable(ctx, table, &fieldmaskpb.FieldMask{
-		Paths: []string{"schema.columns", "schema.indices"},
+		Paths: []string{"schema.columns"},
 	}, false)
 	if err != nil {
 		resp.Diagnostics.AddError(

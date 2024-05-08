@@ -193,35 +193,6 @@ func ParseSchemaToStruct(schema *SpannerTableSchema) (interface{}, error) {
 		Indices []*ColumnIndex
 	}
 
-	// Create a map of column indices
-	// Keys are column names
-	columnIndices := map[string]*ColumnIndices{}
-	if schema.Indices != nil && len(schema.Indices) > 0 {
-		// Iterate over the indices and add them to the map
-		for i, index := range schema.Indices {
-			if index.Columns != nil && len(index.Columns) > 0 {
-				for _, column := range index.Columns {
-					if _, ok := columnIndices[column.Name]; !ok {
-						columnIndices[column.Name] = &ColumnIndices{}
-					}
-
-					// Check if the index is unique
-					var unique bool
-					if index.Unique != nil {
-						unique = index.Unique.GetValue()
-					}
-					// Add the index to the column
-					columnIndices[column.Name].Indices = append(columnIndices[column.Name].Indices, &ColumnIndex{
-						Name:     index.Name,
-						Unique:   unique,
-						Priority: i + 1,
-						Order:    column.Order.String(),
-					})
-				}
-			}
-		}
-	}
-
 	// Iterate over the columns and add them to the struct
 	for _, column := range schema.Columns {
 		// `gorm:"column"`
@@ -271,17 +242,6 @@ func ParseSchemaToStruct(schema *SpannerTableSchema) (interface{}, error) {
 		// Check if the column is nullable
 		if column.Required != nil && column.Required.GetValue() {
 			gormTags = append(gormTags, "not null")
-		}
-		// Check if the column has any indices
-		if indices, ok := columnIndices[column.Name]; ok {
-			for _, index := range indices.Indices {
-				tag := fmt.Sprintf("index:%s,sort:%s,priority:%d", index.Name, index.Order, index.Priority)
-				// Check if the index is unique
-				if index.Unique {
-					tag += ",unique"
-				}
-				gormTags = append(gormTags, tag)
-			}
 		}
 
 		tags := strings.Join(gormTags, ";")
