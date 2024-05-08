@@ -180,5 +180,6 @@ func (p *googleProvider) Resources(_ context.Context) []func() resource.Resource
 		spanner.NewIamBindingResource,
 		spanner.NewIamMemberResource,
 		spanner.NewSpannerTableResource,
+		spanner.NewSpannerTableIndexResource,
 	}
 }

@@ -100,18 +100,6 @@ func (o spannerTableIndex) attrTypes() map[string]attr.Type {
 	}
 }
 
-type spannerTableIndexColumn struct {
-	Name  types.String `tfsdk:"name"`
-	Order types.String `tfsdk:"order"`
-}
-
-func (o spannerTableIndexColumn) attrTypes() map[string]attr.Type {
-	return map[string]attr.Type{
-		"name":  types.StringType,
-		"order": types.StringType,
-	}
-}
-
 // Metadata returns the resource type name.
 func (r *spannerTableResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_google_spanner_table"
@@ -827,21 +815,23 @@ func (r *spannerTableResource) Delete(ctx context.Context, req resource.DeleteRe
 
 func (r *spannerTableResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	// Split import ID to get project, instance, and database id
-	// projects/{project}/instances/{instance}/databases/{table}
+	// projects/{project}/instances/{instance}/databases/{database}/tables/{tables}
 	importIDParts := strings.Split(req.ID, "/")
-	if len(importIDParts) != 6 {
+	if len(importIDParts) != 8 {
 		resp.Diagnostics.AddError(
 			"Invalid Import ID",
-			"Import ID must be in the format projects/{project}/instances/{instance}/databases/{table}",
+			"Import ID must be in the format projects/{project}/instances/{instance}/databases/{database}/tables/{table}",
 		)
 	}
 	project := importIDParts[1]
 	instanceName := importIDParts[3]
 	databaseName := importIDParts[5]
+	tableName := importIDParts[7]
 
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("project"), project)...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("instance"), instanceName)...)
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("name"), databaseName)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("database"), databaseName)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("name"), tableName)...)
 }
 
 // Configure adds the provider configured client to the resource.

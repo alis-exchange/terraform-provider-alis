@@ -11,6 +11,7 @@ import (
 
 	"cloud.google.com/go/iam/apiv1/iampb"
 	"cloud.google.com/go/spanner/admin/database/apiv1/databasepb"
+	googleoauth "golang.org/x/oauth2/google"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -856,6 +857,186 @@ func TestTestSpannerDatabaseIamPermissions(t *testing.T) {
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("TestSpannerDatabaseIamPermissions() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSpannerService_CreateSpannerTableIndex(t *testing.T) {
+	type fields struct {
+	}
+	type args struct {
+		ctx    context.Context
+		parent string
+		index  *SpannerTableIndex
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    *SpannerTableIndex
+		wantErr bool
+	}{
+		{
+			name: "Test_CreateSpannerTableIndex",
+			args: args{
+				ctx:    context.Background(),
+				parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "tf-test", "tftest"),
+				index: &SpannerTableIndex{
+					Name: "test_idx",
+					Columns: []*SpannerTableIndexColumn{
+						{
+							Name: "name",
+						},
+						{
+							Name:  "display_name",
+							Order: SpannerTableIndexColumnOrder_DESC,
+						},
+						{
+							Name:  "state",
+							Order: SpannerTableIndexColumnOrder_ASC,
+						},
+					},
+					Unique: &wrapperspb.BoolValue{
+						Value: true,
+					},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := service.CreateSpannerTableIndex(tt.args.ctx, tt.args.parent, tt.args.index)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("CreateSpannerTableIndex() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("CreateSpannerTableIndex() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSpannerService_GetSpannerTableIndex(t *testing.T) {
+	type fields struct {
+	}
+	type args struct {
+		ctx    context.Context
+		parent string
+		name   string
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    *SpannerTableIndex
+		wantErr bool
+	}{
+		{
+			name: "Test_GetSpannerTableIndex",
+			args: args{
+				ctx:    context.Background(),
+				parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "tf-test", "tftest"),
+				name:   "test_idx",
+			},
+			want:    &SpannerTableIndex{},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+
+			got, err := service.GetSpannerTableIndex(tt.args.ctx, tt.args.parent, tt.args.name)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("GetSpannerTableIndex() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("GetSpannerTableIndex() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSpannerService_ListSpannerTableIndices(t *testing.T) {
+	type fields struct {
+	}
+	type args struct {
+		ctx    context.Context
+		parent string
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    []*SpannerTableIndex
+		wantErr bool
+	}{
+		{
+			name: "Test_ListSpannerTableIndices",
+			args: args{
+				ctx:    context.Background(),
+				parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "tf-test", "tftest"),
+			},
+			want:    []*SpannerTableIndex{},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+
+			got, err := service.ListSpannerTableIndices(tt.args.ctx, tt.args.parent)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ListSpannerTableIndices() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("ListSpannerTableIndices() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSpannerService_DeleteIndex(t *testing.T) {
+	type fields struct {
+		GoogleCredentials *googleoauth.Credentials
+	}
+	type args struct {
+		ctx       context.Context
+		parent    string
+		indexName string
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    *emptypb.Empty
+		wantErr bool
+	}{
+		{
+			name: "Test_DeleteSpannerTableIndex",
+			args: args{
+				ctx:       context.Background(),
+				parent:    fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "tf-test", "tftest"),
+				indexName: "test_idx",
+			},
+			want:    &emptypb.Empty{},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &SpannerService{
+				GoogleCredentials: tt.fields.GoogleCredentials,
+			}
+			got, err := s.DeleteSpannerTableIndex(tt.args.ctx, tt.args.parent, tt.args.indexName)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("DeleteSpannerTableIndex() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("DeleteSpannerTableIndex() got = %v, want %v", got, tt.want)
 			}
 		})
 	}

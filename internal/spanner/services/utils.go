@@ -1,7 +1,6 @@
 package services
 
 import (
-	"database/sql"
 	"errors"
 	"fmt"
 	"sort"
@@ -9,9 +8,9 @@ import (
 	"time"
 
 	dynamicstruct "github.com/ompluscator/dynamic-struct"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
-	"gorm.io/gorm/migrator"
 	"terraform-provider-alis/internal/utils"
 )
 
@@ -66,11 +65,12 @@ type Index struct {
 	IndexName       string
 	IndexType       string
 	ColumnName      string
+	ColumnOrdering  string
 	IsUnique        bool
 	OrdinalPosition int
 }
 
-func GetIndexes(db *gorm.DB, tableName string) ([]gorm.Index, error) {
+func GetIndexes(db *gorm.DB, tableName string) ([]*SpannerTableIndex, error) {
 
 	currentDatabase := db.Migrator().CurrentDatabase()
 	// Get the indexes for the table
@@ -79,6 +79,9 @@ func GetIndexes(db *gorm.DB, tableName string) ([]gorm.Index, error) {
 		"SELECT i.index_name,"+
 			"i.is_unique,"+
 			"i.index_type,"+
+			"ic.ordinal_position,"+
+			"ic.column_ordering,"+
+			"ic.is_nullable,"+
 			"col.column_name"+
 			" FROM information_schema.indexes i"+
 			" LEFT JOIN information_schema.index_columns ic ON ic.table_name = i.table_name AND ic.index_name = i.index_name"+
@@ -95,33 +98,39 @@ func GetIndexes(db *gorm.DB, tableName string) ([]gorm.Index, error) {
 		resultsMap[r.IndexName][r.ColumnName] = r
 	}
 
-	indexMap := make(map[string]*migrator.Index)
+	indexMap := make(map[string]*SpannerTableIndex)
 	for _, r := range results {
+		if r.IndexType == "PRIMARY_KEY" {
+			continue
+		}
+
 		idx, ok := indexMap[r.IndexName]
 		if !ok {
-			idx = &migrator.Index{
-				TableName:  r.IndexName,
-				NameValue:  r.IndexName,
-				ColumnList: nil,
-				PrimaryKeyValue: sql.NullBool{
-					Bool:  r.IndexType == "PRIMARY_KEY",
-					Valid: true,
-				},
-				UniqueValue: sql.NullBool{
-					Bool:  r.IsUnique,
-					Valid: true,
-				},
+			idx = &SpannerTableIndex{
+				Name:    r.IndexName,
+				Columns: []*SpannerTableIndexColumn{},
+				Unique:  wrapperspb.Bool(r.IsUnique),
 			}
 		}
-		idx.ColumnList = append(idx.ColumnList, r.ColumnName)
+		var order SpannerTableIndexColumnOrder
+		switch r.ColumnOrdering {
+		case "ASC":
+			order = SpannerTableIndexColumnOrder_ASC
+		case "DESC":
+			order = SpannerTableIndexColumnOrder_DESC
+		}
+		idx.Columns = append(idx.Columns, &SpannerTableIndexColumn{
+			Name:  r.ColumnName,
+			Order: order,
+		})
 		indexMap[r.IndexName] = idx
 	}
 
-	indexes := make([]gorm.Index, 0)
+	indexes := make([]*SpannerTableIndex, 0)
 	for _, idx := range indexMap {
 		// Sort the columns by ordinal position
-		sort.Slice(idx.ColumnList, func(i, j int) bool {
-			return resultsMap[idx.NameValue][idx.ColumnList[i]].OrdinalPosition < resultsMap[idx.NameValue][idx.ColumnList[j]].OrdinalPosition
+		sort.Slice(idx.Columns, func(i, j int) bool {
+			return resultsMap[idx.Name][idx.Columns[i].Name].OrdinalPosition < resultsMap[idx.Name][idx.Columns[j].Name].OrdinalPosition
 		})
 
 		// Append the index to the list
@@ -129,6 +138,34 @@ func GetIndexes(db *gorm.DB, tableName string) ([]gorm.Index, error) {
 	}
 
 	return indexes, nil
+}
+
+func CreateIndex(db *gorm.DB, tableName string, index *SpannerTableIndex) error {
+	unique := ""
+	if index.Unique != nil && index.Unique.GetValue() {
+		unique = "UNIQUE"
+	}
+	columns := make([]string, 0)
+	for _, column := range index.Columns {
+
+		if column.Order == SpannerTableIndexColumnOrder_UNSPECIFIED {
+			column.Order = SpannerTableIndexColumnOrder_ASC
+		}
+
+		columns = append(columns, fmt.Sprintf("%s %s", column.Name, column.Order.String()))
+	}
+
+	// Create the index
+	if err := db.Exec(fmt.Sprintf("CREATE %s INDEX %s ON %s (%s)",
+		unique,
+		index.Name,
+		tableName,
+		strings.Join(columns, ", "),
+	)).Error; err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // ParseSchemaToStruct parses a *v1.SpannerTable_Schema to a struct that can be used with gorm

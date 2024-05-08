@@ -1021,40 +1021,16 @@ func (s *SpannerService) GetSpannerTable(ctx context.Context, name string) (*Spa
 		columns[i] = column
 	}
 
-	var indices []*SpannerTableIndex
-
 	indexes, err := GetIndexes(db, tableId)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "Error getting table indices: %v", err)
-	}
-
-	for _, index := range indexes {
-		if primaryKey, _ := index.PrimaryKey(); primaryKey {
-			continue
-		}
-
-		indexColumns := make([]*SpannerTableIndexColumn, len(index.Columns()))
-		for i, indexColumn := range index.Columns() {
-			indexColumns[i] = &SpannerTableIndexColumn{
-				Name: indexColumn,
-			}
-		}
-		idx := &SpannerTableIndex{
-			Name:    index.Name(),
-			Columns: indexColumns,
-		}
-		if unique, ok := index.Unique(); ok {
-			idx.Unique = wrapperspb.Bool(unique)
-		}
-
-		indices = append(indices, idx)
 	}
 
 	table := &SpannerTable{
 		Name: name,
 		Schema: &SpannerTableSchema{
 			Columns: columns,
-			Indices: indices,
+			Indices: indexes,
 		},
 	}
 
@@ -1326,7 +1302,7 @@ func (s *SpannerService) DeleteSpannerTable(ctx context.Context, name string) (*
 	tableId := nameParts[7]
 
 	// Get table state
-	table, err := s.GetSpannerTable(ctx, name)
+	_, err := s.GetSpannerTable(ctx, name)
 	if err != nil {
 		return nil, err
 	}
@@ -1344,22 +1320,6 @@ func (s *SpannerService) DeleteSpannerTable(ctx context.Context, name string) (*
 	)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "Error connecting to database: %v", err)
-	}
-
-	// If table has any indices, drop them
-	if table.Schema != nil && table.Schema.Indices != nil && len(table.Schema.Indices) > 0 {
-		for _, index := range table.Schema.Indices {
-			err = db.Migrator().DropIndex(tableId, index.Name)
-			if err != nil {
-				return nil, status.Errorf(codes.Internal, "Error dropping index: %v", err)
-			}
-		}
-	}
-
-	// If table has any rows, delete them
-	result := db.Session(&gorm.Session{AllowGlobalUpdate: true}).Exec(fmt.Sprintf("DELETE FROM %s WHERE TRUE", tableId))
-	if result.Error != nil {
-		return nil, status.Errorf(codes.Internal, "Error deleting rows: %v", db.Error)
 	}
 
 	// Drop table
@@ -1433,33 +1393,13 @@ func (s *SpannerService) CreateSpannerTableIndex(ctx context.Context, parent str
 	}
 
 	// Get parent table
-	table, err := s.GetSpannerTable(ctx, parent)
+	_, err = s.GetSpannerTable(ctx, parent)
 	if err != nil {
 		return nil, err
 	}
 
-	// Convert schema to struct
-	structInstance, err := ParseSchemaToStruct(table.Schema)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "Error converting table.schema to struct: %v", err)
-	}
-
-	// Check if index already exists
-	indexExists := db.Table(tableId).Migrator().HasIndex(&structInstance, index.Name)
-	if indexExists {
-		return nil, status.Errorf(codes.AlreadyExists, "Index %s already exists", index.Name)
-	}
-
-	table.Schema.Indices = append(table.Schema.Indices, index)
-
-	// Construct a new dynamic struct with the updated schema
-	structInstance, err = ParseSchemaToStruct(table.Schema)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "Error converting table.schema to struct: %v", err)
-	}
-
 	// Create index
-	err = db.Table("").Migrator().CreateIndex(&structInstance, index.Name)
+	err = CreateIndex(db, tableId, index)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "Error creating index: %v", err)
 	}
@@ -1517,24 +1457,8 @@ func (s *SpannerService) GetSpannerTableIndex(ctx context.Context, parent string
 	}
 
 	for _, index := range indexes {
-		if index.Name() == name {
-
-			indexColumns := make([]*SpannerTableIndexColumn, len(index.Columns()))
-			for i, indexColumn := range index.Columns() {
-				indexColumns[i] = &SpannerTableIndexColumn{
-					Name: indexColumn,
-				}
-			}
-
-			idx := &SpannerTableIndex{
-				Name:    name,
-				Columns: indexColumns,
-			}
-			if unique, ok := index.Unique(); ok {
-				idx.Unique = wrapperspb.Bool(unique)
-			}
-
-			return idx, nil
+		if index.Name == name {
+			return index, nil
 		}
 	}
 
@@ -1583,28 +1507,7 @@ func (s *SpannerService) ListSpannerTableIndices(ctx context.Context, parent str
 		return nil, status.Errorf(codes.Internal, "Error getting table indices: %v", err)
 	}
 
-	res := make([]*SpannerTableIndex, len(indexes))
-
-	for i, index := range indexes {
-		indexColumns := make([]*SpannerTableIndexColumn, len(index.Columns()))
-		for j, indexColumn := range index.Columns() {
-			indexColumns[j] = &SpannerTableIndexColumn{
-				Name: indexColumn,
-			}
-		}
-
-		idx := &SpannerTableIndex{
-			Name:    index.Name(),
-			Columns: indexColumns,
-		}
-		if unique, ok := index.Unique(); ok {
-			idx.Unique = wrapperspb.Bool(unique)
-		}
-
-		res[i] = idx
-	}
-
-	return res, nil
+	return indexes, nil
 }
 
 // DeleteIndex deletes a Spanner table index.
@@ -1615,7 +1518,7 @@ func (s *SpannerService) ListSpannerTableIndices(ctx context.Context, parent str
 //   - indexName: string - Required. The name of the index to delete.
 //
 // Returns: *emptypb.Empty
-func (s *SpannerService) DeleteIndex(ctx context.Context, parent string, indexName string) (*emptypb.Empty, error) {
+func (s *SpannerService) DeleteSpannerTableIndex(ctx context.Context, parent string, indexName string) (*emptypb.Empty, error) {
 	// Validate arguments
 	// Validate parent
 	googleSqlParentValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlTableNameRegex)
