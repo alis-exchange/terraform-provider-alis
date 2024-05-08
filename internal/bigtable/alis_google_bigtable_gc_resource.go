@@ -16,6 +16,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"terraform-provider-alis/internal"
 	"terraform-provider-alis/internal/bigtable/services"
 	custom_types "terraform-provider-alis/internal/custom-types"
@@ -212,6 +214,12 @@ func (r *garbageCollectionPolicyResource) Read(ctx context.Context, req resource
 		columnFamilyId,
 	)
 	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			resp.State.RemoveResource(ctx)
+
+			return
+		}
+
 		resp.Diagnostics.AddError(
 			"Error Reading GC Policy",
 			"Could not read GC Policy for Table ("+tableId+") and Column Family ("+columnFamilyId+"): "+err.Error(),

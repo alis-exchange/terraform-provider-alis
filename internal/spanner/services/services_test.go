@@ -520,7 +520,7 @@ func TestDeleteSpannerTable(t *testing.T) {
 			name: "Test_DeleteSpannerTable",
 			args: args{
 				ctx:  context.Background(),
-				name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "tf-test", "tftest"),
+				name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "alis_px_dev_cmk", "holdings_commits_positions"),
 			},
 		},
 	}

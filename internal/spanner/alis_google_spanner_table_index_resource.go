@@ -14,6 +14,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 	"terraform-provider-alis/internal"
 	"terraform-provider-alis/internal/spanner/services"
@@ -267,6 +269,12 @@ func (r *spannerTableIndexResource) Read(ctx context.Context, req resource.ReadR
 		indexName,
 	)
 	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			resp.State.RemoveResource(ctx)
+
+			return
+		}
+
 		resp.Diagnostics.AddError(
 			"Error Reading Index",
 			"Could not read Index ("+state.Name.ValueString()+"): "+err.Error(),
@@ -341,24 +349,24 @@ func (r *spannerTableIndexResource) Delete(ctx context.Context, req resource.Del
 	}
 
 	// Get project and instance name
-	//project := state.Project.ValueString()
-	//instanceName := state.Instance.ValueString()
-	//databaseId := state.Database.ValueString()
-	//tableId := state.Table.ValueString()
-	//indexName := state.Name.ValueString()
+	project := state.Project.ValueString()
+	instanceName := state.Instance.ValueString()
+	databaseId := state.Database.ValueString()
+	tableId := state.Table.ValueString()
+	indexName := state.Name.ValueString()
 
-	//// Delete existing database
-	//_, err := r.config.SpannerService.DeleteSpannerTableIndex(ctx,
-	//	fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", project, instanceName, databaseId, tableId),
-	//	indexName,
-	//)
-	//if err != nil {
-	//	resp.Diagnostics.AddError(
-	//		"Error Deleting Index",
-	//		"Could not delete Index ("+state.Name.ValueString()+"): "+err.Error(),
-	//	)
-	//	return
-	//}
+	// Delete existing database
+	_, err := r.config.SpannerService.DeleteSpannerTableIndex(ctx,
+		fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", project, instanceName, databaseId, tableId),
+		indexName,
+	)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Error Deleting Index",
+			"Could not delete Index ("+state.Name.ValueString()+"): "+err.Error(),
+		)
+		return
+	}
 }
 
 // Configure adds the provider configured client to the resource.

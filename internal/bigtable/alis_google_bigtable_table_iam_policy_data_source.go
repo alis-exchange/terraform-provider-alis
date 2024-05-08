@@ -9,6 +9,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"terraform-provider-alis/internal"
 )
 
@@ -111,6 +113,12 @@ func (d *tableIamPolicyDataSource) Read(ctx context.Context, req datasource.Read
 		RequestedPolicyVersion: internal.IamPolicyVersion,
 	})
 	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			resp.State.RemoveResource(ctx)
+
+			return
+		}
+
 		resp.Diagnostics.AddError("Failed to get Bigtable Table IAM Policy", err.Error())
 		return
 	}

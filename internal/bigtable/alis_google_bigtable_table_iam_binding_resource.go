@@ -12,6 +12,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"terraform-provider-alis/internal"
 )
@@ -181,6 +183,12 @@ func (r *tableIamBindingResource) Read(ctx context.Context, req resource.ReadReq
 		RequestedPolicyVersion: internal.IamPolicyVersion,
 	})
 	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			resp.State.RemoveResource(ctx)
+
+			return
+		}
+
 		resp.Diagnostics.AddError(
 			"Error Reading IAM Policy",
 			"Could not read IAM Policy for Table ("+state.Table.ValueString()+"): "+err.Error(),

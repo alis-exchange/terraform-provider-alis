@@ -216,6 +216,12 @@ func (r *tableIamMemberResource) Read(ctx context.Context, req resource.ReadRequ
 		},
 	)
 	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			resp.State.RemoveResource(ctx)
+
+			return
+		}
+
 		resp.Diagnostics.AddError(
 			"Error Reading IAM Policy",
 			"Could not read IAM Policy for Member ("+member+") in Role ("+role+") in Table ("+table+"): "+err.Error(),

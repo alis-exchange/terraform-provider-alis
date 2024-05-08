@@ -19,6 +19,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"terraform-provider-alis/internal"
 	"terraform-provider-alis/internal/spanner/services"
@@ -366,6 +368,12 @@ func (r *spannerDatabaseResource) Read(ctx context.Context, req resource.ReadReq
 		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instanceName, databaseId),
 	)
 	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			resp.State.RemoveResource(ctx)
+
+			return
+		}
+
 		resp.Diagnostics.AddError(
 			"Error Reading Database",
 			"Could not read Database ("+state.Name.ValueString()+"): "+err.Error(),
