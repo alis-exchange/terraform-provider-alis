@@ -3,23 +3,23 @@ module terraform-provider-alis
 go 1.22
 
 require (
-	cloud.google.com/go/bigtable v1.22.0
-	cloud.google.com/go/iam v1.1.7
-	cloud.google.com/go/spanner v1.60.0
+	cloud.google.com/go/bigtable v1.23.0
+	cloud.google.com/go/iam v1.1.8
+	cloud.google.com/go/spanner v1.61.0
 	github.com/google/go-cmp v0.6.0
 	github.com/googleapis/go-gorm-spanner v1.2.1
 	github.com/googleapis/go-sql-spanner v1.3.1
-	github.com/hashicorp/terraform-plugin-docs v0.19.1
+	github.com/hashicorp/terraform-plugin-docs v0.19.2
 	github.com/hashicorp/terraform-plugin-framework v1.8.0
 	github.com/hashicorp/terraform-plugin-framework-validators v0.12.0
-	github.com/hashicorp/terraform-plugin-go v0.22.2
+	github.com/hashicorp/terraform-plugin-go v0.23.0
 	github.com/hashicorp/terraform-plugin-log v0.9.0
 	github.com/hashicorp/terraform-plugin-testing v1.7.0
 	github.com/ompluscator/dynamic-struct v1.4.0
-	golang.org/x/oauth2 v0.19.0
-	google.golang.org/api v0.176.1
+	golang.org/x/oauth2 v0.20.0
+	google.golang.org/api v0.178.0
 	google.golang.org/grpc v1.63.2
-	google.golang.org/protobuf v1.33.0
+	google.golang.org/protobuf v1.34.1
 	gorm.io/datatypes v1.2.0
 	gorm.io/gorm v1.25.10
 )
@@ -31,6 +31,7 @@ require (
 	cloud.google.com/go/compute/metadata v0.3.0 // indirect
 	cloud.google.com/go/longrunning v0.5.6 // indirect
 	github.com/BurntSushi/toml v1.2.1 // indirect
+	github.com/GoogleCloudPlatform/grpc-gcp-go/grpcgcp v1.5.0 // indirect
 	github.com/Kunde21/markdownfmt/v3 v3.1.0 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver/v3 v3.2.0 // indirect
@@ -57,7 +58,7 @@ require (
 	github.com/google/s2a-go v0.1.7 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.2 // indirect
-	github.com/googleapis/gax-go/v2 v2.12.3 // indirect
+	github.com/googleapis/gax-go/v2 v2.12.4 // indirect
 	github.com/hashicorp/cli v1.1.6 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-checkpoint v0.5.0 // indirect
@@ -99,7 +100,7 @@ require (
 	github.com/vmihailenco/msgpack v4.0.4+incompatible // indirect
 	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
-	github.com/yuin/goldmark v1.7.0 // indirect
+	github.com/yuin/goldmark v1.7.1 // indirect
 	github.com/yuin/goldmark-meta v1.1.0 // indirect
 	github.com/zclconf/go-cty v1.14.4 // indirect
 	go.abhg.dev/goldmark/frontmatter v0.2.0 // indirect
@@ -120,9 +121,9 @@ require (
 	golang.org/x/tools v0.13.0 // indirect
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028 // indirect
 	google.golang.org/appengine v1.6.8 // indirect
-	google.golang.org/genproto v0.0.0-20240308144416-29370a3891b7 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20240314234333-6e1732d8331c // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20240415180920-8c6c420018be // indirect
+	google.golang.org/genproto v0.0.0-20240401170217-c3f982113cda // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20240429193739-8cf5692501f6 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20240429193739-8cf5692501f6 // indirect
 	gopkg.in/yaml.v2 v2.3.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gorm.io/driver/mysql v1.4.7 // indirect
