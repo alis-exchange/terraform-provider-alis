@@ -29,15 +29,13 @@ resource "alis_google_bigtable_gc_policy" "simple" {
   instance      = var.ALIS_OS_BIGTABLE_INSTANCE
   table         = "tf-test"
   column_family = "0"
-  gc_rules      = <<EOF
-  {
-    "rules": [
+  gc_rules = jsonencode({
+    "rules" : [
       {
-        "max_version": 10
+        "max_version" : 10
       }
     ]
-  }
-  EOF
+  })
 }
 
 resource "alis_google_bigtable_gc_policy" "complex_union" {
@@ -45,19 +43,17 @@ resource "alis_google_bigtable_gc_policy" "complex_union" {
   instance      = var.ALIS_OS_BIGTABLE_INSTANCE
   table         = "tf-test"
   column_family = "1"
-  gc_rules      = <<EOF
-  {
-    "mode": "union",
-    "rules": [
+  gc_rules = jsonencode({
+    mode = "union",
+    rules = [
       {
-        "max_age": "168h"
+        max_age = "168h"
       },
       {
-        "max_version": 10
+        max_version = 10
       }
     ]
-  }
-  EOF
+  })
 }
 
 resource "alis_google_bigtable_gc_policy" "complex_intersection" {
@@ -65,19 +61,17 @@ resource "alis_google_bigtable_gc_policy" "complex_intersection" {
   instance      = var.ALIS_OS_BIGTABLE_INSTANCE
   table         = "tf-test"
   column_family = "2"
-  gc_rules      = <<EOF
-  {
-    "mode": "intersection",
-    "rules": [
+  gc_rules = jsonencode({
+    mode = "intersection",
+    rules = [
       {
-        "max_age": "168h"
+        max_age = "168h"
       },
       {
-        "max_version": 10
+        max_version = 10
       }
     ]
-  }
-  EOF
+  })
 }
 ```
 

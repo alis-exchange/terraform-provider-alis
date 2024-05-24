@@ -42,6 +42,13 @@ var (
 	SpannerPostgresSqlColumnIdRegex     = `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`
 	SpannerGoogleSqlIndexIdRegex        = `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`
 	SpannerPostgresSqlIndexIdRegex      = `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`
+
+	SpannerGoogleSqlConstraintIdRegex   = ``
+	SpannerPostgresSqlConstraintIdRegex = ``
+
+	DiscoveryEngineDatastoreNameRegex       = fmt.Sprintf(`^projects\/%s\/locations\/[a-zA-Z0-9-]*\/collections\/[a-zA-Z0-9-_]*\/dataStores\/[a-z0-9-_]*$`, CutPrefixAndSuffix(ProjectIdRegex, "^", "$"))
+	DiscoveryEngineDatastoreSchemaIdRegex   = `^[a-zA-Z0-9-_]*$`
+	DiscoveryEngineDatastoreSchemaNameRegex = fmt.Sprintf(`^projects\/%s\/locations\/[a-zA-Z0-9-]*\/collections\/[a-zA-Z0-9-_]*\/dataStores\/[a-z0-9-_]*\/schemas\/%s$`, CutPrefixAndSuffix(ProjectIdRegex, "^", "$"), CutPrefixAndSuffix(DiscoveryEngineDatastoreSchemaIdRegex, "^", "$"))
 )
 
 // ValidateArgument validates an argument against the provided regex and returns either true or false

@@ -44,6 +44,41 @@ func NewSpannerService(creds *googleoauth.Credentials) *SpannerService {
 	}
 }
 
+type SpannerTableIndexColumn struct {
+	// The name of the column
+	Name string
+	// The sort order of the column in the index
+	//
+	// Accepts either SpannerTableIndexColumnOrder_ASC or SpannerTableIndexColumnOrder_DESC
+	Order SpannerTableIndexColumnOrder
+}
+
+// SpannerTableIndex represents a Spanner table index.
+type SpannerTableIndex struct {
+	// The name of the index
+	Name string
+	// The columns that make up the index
+	Columns []*SpannerTableIndexColumn
+	// Whether the index is unique
+	Unique *wrapperspb.BoolValue
+}
+
+type SpannerTableForeignKey struct {
+	// Referenced table
+	ReferencedTable string
+	// Referenced column
+	ReferencedColumn string
+	// Referencing column
+	Column string
+}
+
+type SpannerTableForeignKeysConstraint struct {
+	// The name of the constraint
+	Name string
+	// Foreign keys
+	ForeignKeys []*SpannerTableForeignKey
+}
+
 // SpannerTableColumn represents a Spanner table column.
 type SpannerTableColumn struct {
 	// The name of the column.
@@ -77,25 +112,6 @@ type SpannerTableColumn struct {
 	//
 	// Accepts any type of value given that the value is valid for the column type.
 	DefaultValue *wrapperspb.StringValue
-}
-
-type SpannerTableIndexColumn struct {
-	// The name of the column
-	Name string
-	// The sort order of the column in the index
-	//
-	// Accepts either SpannerTableIndexColumnOrder_ASC or SpannerTableIndexColumnOrder_DESC
-	Order SpannerTableIndexColumnOrder
-}
-
-// SpannerTableIndex represents a Spanner table index.
-type SpannerTableIndex struct {
-	// The name of the index
-	Name string
-	// The columns that make up the index
-	Columns []*SpannerTableIndexColumn
-	// Whether the index is unique
-	Unique *wrapperspb.BoolValue
 }
 
 // SpannerTableSchema represents the schema of a Spanner table.
@@ -1515,4 +1531,90 @@ func (s *SpannerService) DeleteSpannerTableIndex(ctx context.Context, parent str
 	}
 
 	return &emptypb.Empty{}, nil
+}
+
+func (s *SpannerService) CreateSpannerTableForeignKeysConstraint(ctx context.Context, parent string, constraint *SpannerTableForeignKeysConstraint) (*SpannerTableForeignKeysConstraint, error) {
+	// Validate parent
+	googleSqlParentValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlTableNameRegex)
+	postgresSqlParentValid := utils.ValidateArgument(parent, utils.SpannerPostgresSqlTableNameRegex)
+	if !googleSqlParentValid && !postgresSqlParentValid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", parent, utils.SpannerGoogleSqlTableNameRegex, utils.SpannerPostgresSqlTableNameRegex)
+	}
+	// Ensure constraint is provided and has a name and foreign keys
+	if constraint == nil {
+		return nil, status.Error(codes.InvalidArgument, "Invalid argument constraint, field is required but not provided")
+	}
+	googleSqlConstraintIdValid := utils.ValidateArgument(constraint.Name, utils.SpannerGoogleSqlConstraintIdRegex)
+	postgresSqlConstraintIdValid := utils.ValidateArgument(constraint.Name, utils.SpannerPostgresSqlConstraintIdRegex)
+	if !googleSqlConstraintIdValid && !postgresSqlConstraintIdValid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument constraint.name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", constraint.Name, utils.SpannerGoogleSqlConstraintIdRegex, utils.SpannerPostgresSqlConstraintIdRegex)
+	}
+	if constraint.ForeignKeys == nil || len(constraint.ForeignKeys) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "Invalid argument constraint.foreign_keys, field is required but not provided")
+	}
+	// Validate foreign key fields
+	for i, foreignKey := range constraint.ForeignKeys {
+		if foreignKey == nil {
+			return nil, status.Errorf(codes.InvalidArgument, "Invalid argument constraint.foreign_keys[%d], field is required but not provided", i)
+		}
+		if foreignKey.ReferencedTable == "" {
+			return nil, status.Errorf(codes.InvalidArgument, "Invalid argument constraint.foreign_keys[%d].referenced_table, field is required but not provided", i)
+		}
+		googleSqlForeignKeyTableValid := utils.ValidateArgument(foreignKey.ReferencedTable, utils.SpannerGoogleSqlTableNameRegex)
+		postgresSqlForeignKeyTableValid := utils.ValidateArgument(foreignKey.ReferencedTable, utils.SpannerPostgresSqlTableNameRegex)
+		if !googleSqlForeignKeyTableValid && !postgresSqlForeignKeyTableValid {
+			return nil, status.Errorf(codes.InvalidArgument, "Invalid argument constraint.foreign_keys[%d].referenced_table (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", i, foreignKey.ReferencedTable, utils.SpannerGoogleSqlTableNameRegex, utils.SpannerPostgresSqlTableNameRegex)
+		}
+
+		if foreignKey.ReferencedColumn == "" {
+			return nil, status.Errorf(codes.InvalidArgument, "Invalid argument constraint.foreign_keys[%d].referenced_columns, field is required but not provided", i)
+		}
+		googleSqlForeignKeyColumnValid := utils.ValidateArgument(foreignKey.ReferencedColumn, utils.SpannerGoogleSqlColumnIdRegex)
+		postgresSqlForeignKeyColumnValid := utils.ValidateArgument(foreignKey.ReferencedColumn, utils.SpannerPostgresSqlColumnIdRegex)
+		if !googleSqlForeignKeyColumnValid && !postgresSqlForeignKeyColumnValid {
+			return nil, status.Errorf(codes.InvalidArgument, "Invalid argument constraint.foreign_keys[%d].referenced_columns (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", i, foreignKey.ReferencedColumn, utils.SpannerGoogleSqlColumnIdRegex, utils.SpannerPostgresSqlColumnIdRegex)
+		}
+
+		if foreignKey.Column == "" {
+			return nil, status.Errorf(codes.InvalidArgument, "Invalid argument constraint.foreign_keys[%d].column, field is required but not provided", i)
+		}
+		googleSqlColumnValid := utils.ValidateArgument(foreignKey.Column, utils.SpannerGoogleSqlColumnIdRegex)
+		postgresSqlColumnValid := utils.ValidateArgument(foreignKey.Column, utils.SpannerPostgresSqlColumnIdRegex)
+		if !googleSqlColumnValid && !postgresSqlColumnValid {
+			return nil, status.Errorf(codes.InvalidArgument, "Invalid argument constraint.foreign_keys[%d].column (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", i, foreignKey.Column, utils.SpannerGoogleSqlColumnIdRegex, utils.SpannerPostgresSqlColumnIdRegex)
+		}
+	}
+
+	// Deconstruct parent name to get project, instance, database and table
+	parentNameParts := strings.Split(parent, "/")
+	project := parentNameParts[1]
+	instance := parentNameParts[3]
+	databaseId := parentNameParts[5]
+	tableId := parentNameParts[7]
+
+	db, err := gorm.Open(
+		spannergorm.New(
+			spannergorm.Config{
+				DriverName: "spanner",
+				DSN:        fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId),
+			},
+		),
+		&gorm.Config{
+			PrepareStmt: true,
+		},
+	)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "Error connecting to database: %v", err)
+	}
+
+	sqlStatement := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s", tableId, constraint.Name)
+	for _, foreignKey := range constraint.ForeignKeys {
+		sqlStatement += fmt.Sprintf(" FOREIGN KEY (%s) REFERENCES %s(%s)", foreignKey.Column, foreignKey.ReferencedTable, foreignKey.ReferencedColumn)
+	}
+
+	if err := db.Exec(sqlStatement).Error; err != nil {
+		return nil, status.Errorf(codes.Internal, "Error creating foreign key constraint: %v", err)
+	}
+
+	return constraint, nil
 }

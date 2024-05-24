@@ -1,0 +1,2 @@
+variable "ALIS_OS_PROJECT" {}
+variable "ALIS_OS_DISCOVERY_ENGINE_DATASTORE" {}

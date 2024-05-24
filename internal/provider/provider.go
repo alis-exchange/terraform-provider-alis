@@ -15,6 +15,8 @@ import (
 	"terraform-provider-alis/internal"
 	"terraform-provider-alis/internal/bigtable"
 	bigtableservices "terraform-provider-alis/internal/bigtable/services"
+	"terraform-provider-alis/internal/discoveryengine"
+	discoveryengineservices "terraform-provider-alis/internal/discoveryengine/services"
 	"terraform-provider-alis/internal/spanner"
 	spannerservices "terraform-provider-alis/internal/spanner/services"
 	"terraform-provider-alis/internal/utils"
@@ -149,9 +151,10 @@ func (p *googleProvider) Configure(ctx context.Context, req provider.ConfigureRe
 	// Make the Bigtable and Spanner services available during DataSource and Resource
 	// type Configure methods.
 	providerConfig := &internal.ProviderConfig{
-		GoogleProjectId: config.Project.ValueString(),
-		BigtableService: bigtableservices.NewBigtableService(googleCreds),
-		SpannerService:  spannerservices.NewSpannerService(googleCreds),
+		GoogleProjectId:        config.Project.ValueString(),
+		BigtableService:        bigtableservices.NewBigtableService(googleCreds),
+		SpannerService:         spannerservices.NewSpannerService(googleCreds),
+		DiscoveryEngineService: discoveryengineservices.NewDiscoveryEngineService(googleCreds),
 	}
 	resp.DataSourceData = providerConfig
 	resp.ResourceData = providerConfig
@@ -164,6 +167,7 @@ func (p *googleProvider) DataSources(_ context.Context) []func() datasource.Data
 	return []func() datasource.DataSource{
 		bigtable.NewIamPolicyDataSource,
 		spanner.NewIamPolicyDataSource,
+		discoveryengine.NewDiscoveryEngineDataStoreSchemasDataSource,
 	}
 }
 
@@ -181,5 +185,6 @@ func (p *googleProvider) Resources(_ context.Context) []func() resource.Resource
 		spanner.NewIamMemberResource,
 		spanner.NewSpannerTableResource,
 		spanner.NewSpannerTableIndexResource,
+		discoveryengine.NewDiscoveryEngineDataSourceSchemaResource,
 	}
 }
