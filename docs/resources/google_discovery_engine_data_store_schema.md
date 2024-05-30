@@ -89,3 +89,17 @@ resource "alis_google_discovery_engine_data_store_schema" "schema" {
 	User-defined fields are not searchable by default, except for fields containing the keyPropertyMapping field. To make a field searchable, include `"searchable": true` with the field.
 	- `completable` Indicates whether this field can be returned as an autocomplete suggestion. This can only be set for fields of type string. To make a field completable, include "completable": true with the field.
 - `schema_id` (String) The unique id of the schema.
+
+## Import
+
+Schema can be imported using the following format:
+
+- `projects/{project}/locations/{location}/collections/{collection}/dataStores/{datastore}/schemas/{schema}`
+
+### Example
+
+```terraform
+# Schema can be imported by specifying the fully qualified name of the schema
+# projects/{project}/locations/{location}/collections/{collection}/dataStores/{datastore}/schemas/{schema}
+terraform import alis_google_discovery_engine_data_store_schema.schema "projects/{project}/locations/{location}/collections/{collection}/dataStores/{datastore}/schemas/{schema}"
+```
