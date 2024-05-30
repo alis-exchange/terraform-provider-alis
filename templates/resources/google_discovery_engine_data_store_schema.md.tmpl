@@ -14,3 +14,13 @@ description: |-
 {{ tffile (printf "examples/resources/%s/main.tf" .Name) }}
 
 {{ .SchemaMarkdown | trimspace }}
+
+## Import
+
+Schema can be imported using the following format:
+
+- `projects/{project}/locations/{location}/collections/{collection}/dataStores/{datastore}/schemas/{schema}`
+
+### Example
+
+{{ tffile .ImportFile }}
