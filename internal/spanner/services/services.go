@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"cloud.google.com/go/iam/apiv1/iampb"
@@ -15,6 +16,8 @@ import (
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -79,6 +82,21 @@ type SpannerTableForeignKeysConstraint struct {
 	ForeignKeys []*SpannerTableForeignKey
 }
 
+// ProtoFileDescriptorSet represents a Proto File Descriptor Set.
+type ProtoFileDescriptorSet struct {
+	// Proto package.
+	// Typically paired with PROTO columns.
+	ProtoPackage *wrapperspb.StringValue
+	// Proto File Descriptor Set file path.
+	// Typically paired with PROTO columns.
+	FileDescriptorSetPath *wrapperspb.StringValue
+	// Proto File Descriptor Set file source.
+	// Typically paired with PROTO columns.
+	FileDescriptorSetPathSource ProtoFileDescriptorSetSource
+	// Proto File Descriptor Set bytes.
+	fileDescriptorSet *descriptorpb.FileDescriptorSet
+}
+
 // SpannerTableColumn represents a Spanner table column.
 type SpannerTableColumn struct {
 	// The name of the column.
@@ -112,6 +130,10 @@ type SpannerTableColumn struct {
 	//
 	// Accepts any type of value given that the value is valid for the column type.
 	DefaultValue *wrapperspb.StringValue
+	// The proto file descriptor set for the column.
+	//
+	// This is typically paired with PROTO columns.
+	ProtoFileDescriptorSet *ProtoFileDescriptorSet
 }
 
 // SpannerTableSchema represents the schema of a Spanner table.
@@ -898,6 +920,25 @@ func (s *SpannerService) CreateSpannerTable(ctx context.Context, parent string, 
 		if column.Type == "" {
 			return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.schema.columns[%d].type, field is required but not provided", i)
 		}
+
+		// If column type is PROTO ensure proto file descriptor set is provided
+		if column.Type == SpannerTableDataType_PROTO.String() {
+			if column.ProtoFileDescriptorSet == nil {
+				return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.schema.columns[%d].proto_file_descriptor_set, field is required but not provided", i)
+			}
+
+			if column.ProtoFileDescriptorSet.ProtoPackage == nil {
+				return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.schema.columns[%d].proto_file_descriptor_set.proto_package, field is required but not provided", i)
+			}
+
+			if column.ProtoFileDescriptorSet.FileDescriptorSetPath == nil {
+				return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.schema.columns[%d].proto_file_descriptor_set.file_descriptor_set_path, field is required but not provided", i)
+			}
+
+			if column.ProtoFileDescriptorSet.FileDescriptorSetPathSource == ProtoFileDescriptorSetSourceUNSPECIFIED {
+				return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.schema.columns[%d].proto_file_descriptor_set.file_descriptor_set_path_source, field is required but not not provided", i)
+			}
+		}
 	}
 
 	// Set table name
@@ -924,6 +965,33 @@ func (s *SpannerService) CreateSpannerTable(ctx context.Context, parent string, 
 		return nil, status.Errorf(codes.Internal, "Error connecting to database: %v", err)
 	}
 
+	// Check if we have any PROTO columns and create the necessary proto bundles
+	for _, column := range table.Schema.Columns {
+		if column.Type != SpannerTableDataType_PROTO.String() {
+			continue
+		}
+
+		fdsBytes, err := fetchDescriptorSet(ctx, column.ProtoFileDescriptorSet)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "Error fetching proto file descriptor set: %v", err)
+		}
+
+		// Unmarshal the proto file descriptor set
+		fds := &descriptorpb.FileDescriptorSet{}
+		if err := proto.Unmarshal(fdsBytes, fds); err != nil {
+			return nil, status.Errorf(codes.Internal, "Error unmarshalling proto file descriptor set: %v", err)
+		}
+
+		// Update the column proto file descriptor set with the fds
+		column.ProtoFileDescriptorSet.fileDescriptorSet = fds
+
+		// Create proto bundle
+		if err := CreateProtoBundle(ctx, fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId), column.ProtoFileDescriptorSet.ProtoPackage.GetValue(), fdsBytes); err != nil {
+			return nil, status.Errorf(codes.Internal, "Error creating proto bundle: %v", err)
+		}
+
+	}
+
 	// Convert schema to struct
 	structInstance, err := ParseSchemaToStruct(table.Schema)
 	if err != nil {
@@ -934,6 +1002,27 @@ func (s *SpannerService) CreateSpannerTable(ctx context.Context, parent string, 
 	err = db.Table(tableId).Migrator().CreateTable(&structInstance)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "Error creating table: %v", err)
+	}
+
+	// Add proto columns
+	for _, column := range table.Schema.Columns {
+		if column.Type != SpannerTableDataType_PROTO.String() {
+			continue
+		}
+
+		resExec := db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", tableId, column.Name, column.ProtoFileDescriptorSet.ProtoPackage.GetValue()))
+		if resExec.Error != nil {
+			// Drop table if error occurs
+			if _, err := s.DeleteSpannerTable(ctx, table.Name); err != nil {
+				return nil, status.Errorf(codes.Internal, "Error adding proto column: %v", resExec.Error)
+			}
+
+			return nil, status.Errorf(codes.Internal, "Error adding proto column: %v", resExec.Error)
+		}
+	}
+
+	if err := UpdateColumnMetadata(db, tableId, table.Schema.Columns); err != nil {
+		return nil, status.Errorf(codes.Internal, "Error updating column metadata table: %v", err)
 	}
 
 	// Get created table
@@ -993,6 +1082,16 @@ func (s *SpannerService) GetSpannerTable(ctx context.Context, name string) (*Spa
 		return nil, status.Errorf(codes.NotFound, "Table %s not found", name)
 	}
 
+	// Get column metadata
+	columnMetadata, err := GetColumnMetadata(db, tableId)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "Error getting column metadata: %v", err)
+	}
+	columnMetadataMap := map[string]*ColumnMetadata{}
+	for _, metadata := range columnMetadata {
+		columnMetadataMap[metadata.ColumnName] = metadata
+	}
+
 	// Iterate over columns and add them to the schema
 	columns := make([]*SpannerTableColumn, len(columnTypes))
 	for i, columnType := range columnTypes {
@@ -1000,37 +1099,161 @@ func (s *SpannerService) GetSpannerTable(ctx context.Context, name string) (*Spa
 			Name: columnType.Name(),
 		}
 
-		// Populate primary keys if present
-		if isPrimaryKey, ok := columnType.PrimaryKey(); ok {
-			column.IsPrimaryKey = wrapperspb.Bool(isPrimaryKey)
-		}
-		// Populate auto increment
-		if isAutoIncrement, ok := columnType.AutoIncrement(); ok {
-			column.AutoIncrement = wrapperspb.Bool(isAutoIncrement)
-		}
-		// Populate unique if present
-		if isUnique, ok := columnType.Unique(); ok {
-			column.Unique = wrapperspb.Bool(isUnique)
-		}
-		// Populate size if present
-		if size, ok := columnType.Length(); ok {
-			column.Size = wrapperspb.Int64(size)
-		}
-		// Populate precision and scale if present
-		if precision, scale, ok := columnType.DecimalSize(); ok {
-			column.Precision = wrapperspb.Int64(precision)
-			column.Scale = wrapperspb.Int64(scale)
-		}
-		// Populate nullable if present
-		if nullable, ok := columnType.Nullable(); ok {
-			column.Required = wrapperspb.Bool(!nullable)
-		}
-		//Populate default value if present
-		if defaultValue, ok := columnType.DefaultValue(); ok {
-			column.DefaultValue = wrapperspb.String(defaultValue)
+		if metadata, ok := columnMetadataMap[column.Name]; ok && metadata.Metadata != nil {
+
+			// Populate primary keys if present
+			switch metadata.Metadata.IsPrimaryKey {
+			case "true":
+				column.IsPrimaryKey = wrapperspb.Bool(true)
+			case "false":
+				column.IsPrimaryKey = wrapperspb.Bool(false)
+			}
+
+			// Populate auto increment
+			switch metadata.Metadata.AutoIncrement {
+			case "true":
+				column.AutoIncrement = wrapperspb.Bool(true)
+			case "false":
+				column.AutoIncrement = wrapperspb.Bool(false)
+			}
+
+			// Populate unique if present
+			switch metadata.Metadata.Unique {
+			case "true":
+				column.Unique = wrapperspb.Bool(true)
+			case "false":
+				column.Unique = wrapperspb.Bool(false)
+			}
+
+			// Populate size if present
+			switch metadata.Metadata.Size {
+			case "nil":
+			default:
+				// Convert string to int64
+				size, err := strconv.ParseInt(metadata.Metadata.Size, 10, 64)
+				if err != nil {
+					return nil, status.Errorf(codes.Internal, "Error converting size to int64: %v", err)
+				}
+
+				column.Size = wrapperspb.Int64(size)
+			}
+
+			// Populate precision and scale if present
+			switch metadata.Metadata.Precision {
+			case "nil":
+			default:
+				// Convert string to int64
+				precision, err := strconv.ParseInt(metadata.Metadata.Precision, 10, 64)
+				if err != nil {
+					return nil, status.Errorf(codes.Internal, "Error converting precision to int64: %v", err)
+				}
+
+				column.Precision = wrapperspb.Int64(precision)
+			}
+
+			switch metadata.Metadata.Scale {
+			case "nil":
+			default:
+				// Convert string to int64
+				scale, err := strconv.ParseInt(metadata.Metadata.Scale, 10, 64)
+				if err != nil {
+					return nil, status.Errorf(codes.Internal, "Error converting scale to int64: %v", err)
+				}
+
+				column.Scale = wrapperspb.Int64(scale)
+			}
+
+			// Populate nullable if present
+			switch metadata.Metadata.Required {
+			case "true":
+				column.Required = wrapperspb.Bool(true)
+			case "false":
+				column.Required = wrapperspb.Bool(false)
+			}
+
+			// Populate default value if present
+			switch metadata.Metadata.DefaultValue {
+			case "nil":
+			default:
+				column.DefaultValue = wrapperspb.String(metadata.Metadata.DefaultValue)
+			}
+
+			// Populate proto package
+			var protoPackage string
+			switch metadata.Metadata.ProtoPackage {
+			case "nil":
+			default:
+				protoPackage = metadata.Metadata.ProtoPackage
+			}
+
+			// Populate proto file descriptor set
+			var fileDescriptorSetPath string
+			switch metadata.Metadata.FileDescriptorSetPath {
+			case "nil":
+			default:
+				fileDescriptorSetPath = metadata.Metadata.FileDescriptorSetPath
+			}
+
+			// Populate ProtoFileDescriptorSet
+			if protoPackage != "" || fileDescriptorSetPath != "" {
+				column.ProtoFileDescriptorSet = &ProtoFileDescriptorSet{}
+
+				if protoPackage != "" {
+					column.ProtoFileDescriptorSet.ProtoPackage = wrapperspb.String(protoPackage)
+				}
+
+				if fileDescriptorSetPath != "" {
+					column.ProtoFileDescriptorSet.FileDescriptorSetPath = wrapperspb.String(fileDescriptorSetPath)
+				}
+			}
+		} else {
+			// Populate primary keys if present
+			if isPrimaryKey, ok := columnType.PrimaryKey(); ok {
+				column.IsPrimaryKey = wrapperspb.Bool(isPrimaryKey)
+			}
+			// Populate auto increment
+			if isAutoIncrement, ok := columnType.AutoIncrement(); ok {
+				column.AutoIncrement = wrapperspb.Bool(isAutoIncrement)
+			}
+			// Populate unique if present
+			if isUnique, ok := columnType.Unique(); ok {
+				column.Unique = wrapperspb.Bool(isUnique)
+			}
+			// Populate size if present
+			if size, ok := columnType.Length(); ok {
+				column.Size = wrapperspb.Int64(size)
+			}
+			// Populate precision and scale if present
+			if precision, scale, ok := columnType.DecimalSize(); ok {
+				column.Precision = wrapperspb.Int64(precision)
+				column.Scale = wrapperspb.Int64(scale)
+			}
+			// Populate nullable if present
+			if nullable, ok := columnType.Nullable(); ok {
+				column.Required = wrapperspb.Bool(!nullable)
+			}
+			//Populate default value if present
+			if defaultValue, ok := columnType.DefaultValue(); ok {
+				column.DefaultValue = wrapperspb.String(defaultValue)
+			}
+
+			if strings.HasPrefix(columnType.DatabaseTypeName(), "PROTO<") {
+				// Set the proto file descriptor set
+				column.ProtoFileDescriptorSet = &ProtoFileDescriptorSet{
+					ProtoPackage:                wrapperspb.String(strings.TrimSuffix(strings.TrimPrefix(columnType.DatabaseTypeName(), "PROTO<"), ">")),
+					FileDescriptorSetPath:       nil,
+					FileDescriptorSetPathSource: 0,
+					fileDescriptorSet:           nil,
+				}
+			}
 		}
 
 		column.Type = columnType.DatabaseTypeName()
+		if strings.HasPrefix(columnType.DatabaseTypeName(), "PROTO<") {
+			// Set the correct column type
+			// PROTO<my_package.MyMessage>
+			column.Type = SpannerTableDataType_PROTO.String()
+		}
 
 		columns[i] = column
 	}
@@ -1138,6 +1361,39 @@ func (s *SpannerService) UpdateSpannerTable(ctx context.Context, table *SpannerT
 		for _, path := range updateMask.GetPaths() {
 			switch path {
 			case "schema.columns":
+
+				// Validate columns
+				for i, column := range table.Schema.Columns {
+					// Validate column name
+					if valid := utils.ValidateArgument(column.Name, utils.SpannerGoogleSqlColumnIdRegex); !valid {
+						return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.schema.columns[%d].name (%s), must match `%s`", i, column.Name, utils.SpannerGoogleSqlColumnIdRegex)
+					}
+
+					// Ensure a type is provided
+					if column.Type == "" {
+						return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.schema.columns[%d].type, field is required but not provided", i)
+					}
+
+					// If column type is PROTO ensure proto file descriptor set is provided
+					if column.Type == SpannerTableDataType_PROTO.String() {
+						if column.ProtoFileDescriptorSet == nil {
+							return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.schema.columns[%d].proto_file_descriptor_set, field is required but not provided", i)
+						}
+
+						if column.ProtoFileDescriptorSet.ProtoPackage == nil {
+							return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.schema.columns[%d].proto_file_descriptor_set.proto_package, field is required but not provided", i)
+						}
+
+						if column.ProtoFileDescriptorSet.FileDescriptorSetPath == nil {
+							return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.schema.columns[%d].proto_file_descriptor_set.file_descriptor_set_path, field is required but not provided", i)
+						}
+
+						if column.ProtoFileDescriptorSet.FileDescriptorSetPathSource == ProtoFileDescriptorSetSourceUNSPECIFIED {
+							return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.schema.columns[%d].proto_file_descriptor_set.file_descriptor_set_path_source, field is required but not not provided", i)
+						}
+					}
+				}
+
 			default:
 				return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("Invalid argument update_mask, only field `schema.columns` is allowed, got `%s`", path))
 			}
@@ -1191,6 +1447,32 @@ func (s *SpannerService) UpdateSpannerTable(ctx context.Context, table *SpannerT
 		return nil, status.Errorf(codes.Internal, "Error connecting to database: %v", err)
 	}
 
+	// Check if we have any PROTO columns and create the necessary proto bundles
+	for _, column := range table.Schema.Columns {
+		if column.Type != SpannerTableDataType_PROTO.String() {
+			continue
+		}
+
+		fdsBytes, err := fetchDescriptorSet(ctx, column.ProtoFileDescriptorSet)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "Error fetching proto file descriptor set: %v", err)
+		}
+
+		// Unmarshal the proto file descriptor set
+		fds := &descriptorpb.FileDescriptorSet{}
+		if err := proto.Unmarshal(fdsBytes, fds); err != nil {
+			return nil, status.Errorf(codes.Internal, "Error unmarshalling proto file descriptor set: %v", err)
+		}
+
+		// Update the column proto file descriptor set with the fds
+		column.ProtoFileDescriptorSet.fileDescriptorSet = fds
+
+		// Create proto bundle
+		if err := CreateProtoBundle(ctx, fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId), column.ProtoFileDescriptorSet.ProtoPackage.GetValue(), fdsBytes); err != nil {
+			return nil, status.Errorf(codes.Internal, "Error creating proto bundle: %v", err)
+		}
+	}
+
 	// Convert schema to struct
 	structInstance, err := ParseSchemaToStruct(table.Schema)
 	if err != nil {
@@ -1198,45 +1480,78 @@ func (s *SpannerService) UpdateSpannerTable(ctx context.Context, table *SpannerT
 	}
 
 	// Iterate over update mask and update columns
-	for _, path := range updateMask.GetPaths() {
-		switch path {
-		case "schema.columns":
-			var removedColumns []*SpannerTableColumn
+	var addedColumns []*SpannerTableColumn
+	var removedColumns []*SpannerTableColumn
+	var updatedColumns []*SpannerTableColumn
 
-			// Get existing columns
-			existingColumns := existingTable.Schema.Columns
-			newColumns := map[string]*SpannerTableColumn{}
-			for _, column := range table.Schema.Columns {
-				newColumns[column.Name] = column
-			}
+	// Get existing columns
+	existingColumns := map[string]*SpannerTableColumn{}
+	for _, column := range existingTable.Schema.Columns {
+		existingColumns[column.Name] = column
+	}
+	newColumns := map[string]*SpannerTableColumn{}
+	for _, column := range table.Schema.Columns {
+		newColumns[column.Name] = column
+	}
 
-			// If there are existing columns, but no new columns are provided, remove all existing columns
-			if (existingColumns != nil && len(existingColumns) > 0) && (newColumns == nil || len(newColumns) == 0) {
-				for _, column := range existingColumns {
-					removedColumns = append(removedColumns, column)
-				}
-			}
+	// If there are no existing columns, but new columns are provided, add all new columns
+	if (existingColumns == nil || len(existingColumns) == 0) && (newColumns != nil && len(newColumns) > 0) {
+		for _, column := range newColumns {
+			addedColumns = append(addedColumns, column)
+		}
+	}
 
-			// If there are existing columns and new columns are provided, compare and update
-			if (existingColumns != nil && len(existingColumns) > 0) && (newColumns != nil && len(newColumns) > 0) {
-				// Iterate over the existing column families and compare with the new column families
-				for _, existingColumn := range existingColumns {
-					if _, exists := newColumns[existingColumn.Name]; !exists {
-						// Column family does not exist in new column families, remove it
-						removedColumns = append(removedColumns, existingColumn)
-					}
-				}
+	// If there are existing columns and new columns are provided, compare and update
+	if (existingColumns != nil && len(existingColumns) > 0) && (newColumns != nil && len(newColumns) > 0) {
+		// Iterate over the new columns and compare with the existing column families
+		for _, newColumn := range newColumns {
+			if _, exists := existingColumns[newColumn.Name]; !exists {
+				// Column does not exist in existing columns, add it
+				addedColumns = append(addedColumns, newColumn)
 			}
+		}
+	}
 
-			// If there are removed columns, drop them
-			if len(removedColumns) > 0 {
-				for _, column := range removedColumns {
-					err = db.Table(tableId).Migrator().DropColumn(&structInstance, column.Name)
-					if err != nil {
-						return nil, status.Errorf(codes.Internal, "Error dropping column: %v", err)
-					}
-				}
+	// If there are existing columns, but no new columns are provided, remove all existing columns
+	if (existingColumns != nil && len(existingColumns) > 0) && (newColumns == nil || len(newColumns) == 0) {
+		for _, column := range existingColumns {
+			removedColumns = append(removedColumns, column)
+		}
+	}
+
+	// If there are existing columns and new columns are provided, compare and update
+	if (existingColumns != nil && len(existingColumns) > 0) && (newColumns != nil && len(newColumns) > 0) {
+		// Iterate over the existing columns and compare with the new column families
+		for _, existingColumn := range existingColumns {
+			if _, exists := newColumns[existingColumn.Name]; !exists {
+				// Column does not exist in new columns, remove it
+				removedColumns = append(removedColumns, existingColumn)
 			}
+		}
+	}
+
+	// If there are existing columns and new columns are provided, compare and update
+	if (existingColumns != nil && len(existingColumns) > 0) && (newColumns != nil && len(newColumns) > 0) {
+		// Iterate over the existing columns and compare with the new column families
+		for _, existingColumn := range existingColumns {
+			if newColumn, exists := newColumns[existingColumn.Name]; exists {
+				// Column exists in new columns, update it
+				updatedColumns = append(updatedColumns, newColumn)
+			}
+		}
+	}
+
+	// If there are removed columns, drop them
+	if len(removedColumns) > 0 {
+		for _, column := range removedColumns {
+			err = db.Table(tableId).Migrator().DropColumn(&structInstance, column.Name)
+			if err != nil {
+				return nil, status.Errorf(codes.Internal, "Error dropping column: %v", err)
+			}
+		}
+
+		if err := DeleteColumnMetadata(db, tableId, removedColumns); err != nil {
+			return nil, status.Errorf(codes.Internal, "Error deleting column metadata: %v", err)
 		}
 	}
 
@@ -1244,6 +1559,34 @@ func (s *SpannerService) UpdateSpannerTable(ctx context.Context, table *SpannerT
 	err = db.Table(tableId).Migrator().AutoMigrate(&structInstance)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "Error updating table: %v", err)
+	}
+
+	// Add new proto columns
+	for _, column := range addedColumns {
+		if column.Type != SpannerTableDataType_PROTO.String() {
+			continue
+		}
+
+		resExec := db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", tableId, column.Name, column.ProtoFileDescriptorSet.ProtoPackage.GetValue()))
+		if resExec.Error != nil {
+			return nil, status.Errorf(codes.Internal, "Error adding proto column: %v", resExec.Error)
+		}
+	}
+
+	// Update existing proto columns
+	for _, column := range updatedColumns {
+		if column.Type != SpannerTableDataType_PROTO.String() {
+			continue
+		}
+
+		resExec := db.Exec(fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s %s", tableId, column.Name, column.ProtoFileDescriptorSet.ProtoPackage.GetValue()))
+		if resExec.Error != nil {
+			return nil, status.Errorf(codes.Internal, "Error updating proto column: %v", resExec.Error)
+		}
+	}
+
+	if err := UpdateColumnMetadata(db, tableId, table.Schema.Columns); err != nil {
+		return nil, status.Errorf(codes.Internal, "Error updating column metadata table: %v", err)
 	}
 
 	return table, nil
@@ -1296,6 +1639,11 @@ func (s *SpannerService) DeleteSpannerTable(ctx context.Context, name string) (*
 	err = db.Migrator().DropTable(tableId)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "Error dropping table: %v", err)
+	}
+
+	// Delete column metadata
+	if err := DeleteColumnMetadata(db, tableId, []*SpannerTableColumn{}); err != nil {
+		return nil, status.Errorf(codes.Internal, "Error deleting column metadata: %v", err)
 	}
 
 	return &emptypb.Empty{}, nil

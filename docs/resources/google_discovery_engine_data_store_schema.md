@@ -18,7 +18,7 @@ terraform {
   required_providers {
     alis = {
       source  = "alis-exchange/alis"
-      version = "0.0.6"
+      version = "0.0.7"
     }
   }
 }
@@ -95,6 +95,8 @@ resource "alis_google_discovery_engine_data_store_schema" "schema" {
 Schema can be imported using the following format:
 
 - `projects/{project}/locations/{location}/collections/{collection}/dataStores/{datastore}/schemas/{schema}`
+
+> Note: Imported resources must be kept in sync with the Terraform configuration. If you modify the resource, the changes must also be applied to the Terraform configuration. Failure to do so can result in a Terraform plan that does not reflect the actual resource configuration.
 
 ### Example
 

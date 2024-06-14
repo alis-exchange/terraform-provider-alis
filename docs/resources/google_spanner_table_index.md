@@ -18,7 +18,7 @@ terraform {
   required_providers {
     alis = {
       source  = "alis-exchange/alis"
-      version = "0.0.2-alpha8"
+      version = "0.0.7"
     }
   }
 }

@@ -18,7 +18,7 @@ terraform {
   required_providers {
     alis = {
       source  = "alis-exchange/alis"
-      version = "0.0.2-alpha8"
+      version = "0.0.7"
     }
   }
 }
@@ -75,6 +75,12 @@ resource "alis_google_spanner_table" "test" {
       {
         name = "data",
         type = "BYTES",
+      },
+      {
+        name            = "proto_test",
+        type            = "PROTO",
+        proto_package   = "com.example.Message",
+        file_descriptor = "gcs:gs://path/to/my/descriptorset.pb",
       }
     ]
   }
@@ -113,7 +119,7 @@ Required:
 The name must contain only letters (a-z, A-Z), numbers (0-9), or underscores (_), and must start with a letter and not end in an underscore.
 The maximum length is 128 characters.
 - `type` (String) The data type of the column.
-Valid types are: `BOOL`, `INT64`, `FLOAT64`, `STRING`, `BYTES`, `DATE`, `TIMESTAMP`, `JSON`.
+Valid types are: `BOOL`, `INT64`, `FLOAT64`, `STRING`, `BYTES`, `DATE`, `TIMESTAMP`, `JSON`, `PROTO`.
 
 Optional:
 
@@ -122,12 +128,26 @@ The column must be of type `INT64` or `FLOAT64`.
 - `default_value` (String) The default value of the column.
 The default value must be compatible with the column type.
 For example, a default value of "true" is valid for a `BOOL` or `STRING` column, but not for an `INT64` column.
+- `file_descriptor` (String) The url/path to the file descriptor set of the column.
+The file descriptor set must be a valid file descriptor set containing the specified `proto_package`.
+The path must point to a valid `.pb` file.
+You can generate one using the `protoc` compiler. See https://cloud.google.com/spanner/docs/reference/standard-sql/protocol-buffers#create_a_protocol_buffer.
+This field is only required for columns of type `PROTO`.
+One of the following prefixes must be used to indicate the location of the file descriptor set:
+	- **gcs:** - Indicates the file is stored in a Google Cloud Storage Bucket.
+	Example: "gcs:gs://path/to/your/file.pb".
+	- **url:** - **Experimental**. Indicates the file is stored on a remote server accessible via HTTPS.
+	Example: "url:https://path/to/your/file.pb".
 - `is_primary_key` (Boolean) Indicates if the column is part of the primary key.
 Multiple columns can be specified as primary keys to create a composite primary key.
 Primary key columns must be non-null.
 - `precision` (Number) The maximum number of digits in the column.
 This is only applicable to columns of type `FLOAT64`.
 The maximum is 17
+- `proto_package` (String) The full name of the proto message to be used in the column.
+The name must be a valid package name including the message name.
+This field is only required for columns of type `PROTO`
+Example: "com.example.Message", where `com.example` is the package name and `Message` is the message name.
 - `required` (Boolean) Indicates if the column is required.
 - `scale` (Number) The maximum number of digits after the decimal point in the column.
 This is only applicable to columns of type `FLOAT64`.
