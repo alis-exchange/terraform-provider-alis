@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"cloud.google.com/go/discoveryengine/apiv1beta/discoveryenginepb"
+	"cloud.google.com/go/discoveryengine/apiv1/discoveryenginepb"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"

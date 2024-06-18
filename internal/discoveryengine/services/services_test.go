@@ -9,7 +9,7 @@ import (
 	"reflect"
 	"testing"
 
-	discoveryenginepb "cloud.google.com/go/discoveryengine/apiv1beta/discoveryenginepb"
+	discoveryenginepb "cloud.google.com/go/discoveryengine/apiv1/discoveryenginepb"
 	googleoauth "golang.org/x/oauth2/google"
 )
 

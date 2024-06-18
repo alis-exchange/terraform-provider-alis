@@ -4,7 +4,6 @@ go 1.22
 
 require (
 	cloud.google.com/go/bigtable v1.24.0
-	cloud.google.com/go/discoveryengine v1.8.0
 	cloud.google.com/go/iam v1.1.8
 	cloud.google.com/go/spanner v1.63.0
 	cloud.google.com/go/storage v1.40.0
@@ -25,6 +24,8 @@ require (
 	gorm.io/datatypes v1.2.0
 	gorm.io/gorm v1.25.10
 )
+
+require cloud.google.com/go/discoveryengine v1.8.0
 
 require (
 	cloud.google.com/go v0.114.0 // indirect
