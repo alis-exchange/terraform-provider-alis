@@ -25,7 +25,10 @@ require (
 	gorm.io/gorm v1.25.10
 )
 
-require cloud.google.com/go/discoveryengine v1.8.0
+require (
+	cloud.google.com/go/discoveryengine v1.8.0
+	go.alis.build/utils v0.0.4
+)
 
 require (
 	cloud.google.com/go v0.114.0 // indirect

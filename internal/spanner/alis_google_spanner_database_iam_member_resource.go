@@ -12,6 +12,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	alUtils "go.alis.build/utils"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
@@ -228,26 +229,18 @@ func (r *databaseIamMemberResource) Read(ctx context.Context, req resource.ReadR
 		return
 	}
 
-	exists := false
-
 	// Check if the role exists in the policy
-	for _, binding := range policy.GetBindings() {
-		if binding.GetRole() == role {
-			// Check if the member exists in the role
-			for _, m := range binding.GetMembers() {
-				if m == member {
-					exists = true
-					return
-				}
-			}
-		}
+	roleBinding, _, found := alUtils.Find(policy.GetBindings(), func(binding *iampb.Binding) bool {
+		return binding.GetRole() == role
+	})
+	if !found || roleBinding == nil {
+		resp.State.RemoveResource(ctx)
+		return
 	}
 
-	if !exists {
-		resp.Diagnostics.AddError(
-			"Member Not Found",
-			"Member ("+member+") not found in Role ("+role+") for Database ("+database+")",
-		)
+	if !alUtils.Contains(roleBinding.GetMembers(), member) {
+		resp.State.RemoveResource(ctx)
+		return
 	}
 
 	// Set refreshed state
