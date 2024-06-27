@@ -2,7 +2,7 @@ terraform {
   required_providers {
     alis = {
       source  = "alis-exchange/alis"
-      version = "0.0.7"
+      version = "1.1.0"
     }
   }
 }
@@ -65,6 +65,22 @@ resource "alis_google_spanner_table" "test" {
         type            = "PROTO",
         proto_package   = "com.example.Message",
         file_descriptor = "gcs:gs://path/to/my/descriptorset.pb",
+      },
+      {
+        name = "arr_str",
+        type = "ARRAY<STRING>",
+      },
+      {
+        name = "arr_int64",
+        type = "ARRAY<INT64>",
+      },
+      {
+        name = "arr_float32",
+        type = "ARRAY<FLOAT32>",
+      },
+      {
+        name = "arr_float64",
+        type = "ARRAY<FLOAT64>",
       }
     ]
   }

@@ -18,7 +18,7 @@ terraform {
   required_providers {
     alis = {
       source  = "alis-exchange/alis"
-      version = "0.0.7"
+      version = "1.1.0"
     }
   }
 }
@@ -81,6 +81,22 @@ resource "alis_google_spanner_table" "test" {
         type            = "PROTO",
         proto_package   = "com.example.Message",
         file_descriptor = "gcs:gs://path/to/my/descriptorset.pb",
+      },
+      {
+        name = "arr_str",
+        type = "ARRAY<STRING>",
+      },
+      {
+        name = "arr_int64",
+        type = "ARRAY<INT64>",
+      },
+      {
+        name = "arr_float32",
+        type = "ARRAY<FLOAT32>",
+      },
+      {
+        name = "arr_float64",
+        type = "ARRAY<FLOAT64>",
       }
     ]
   }
@@ -119,7 +135,7 @@ Required:
 The name must contain only letters (a-z, A-Z), numbers (0-9), or underscores (_), and must start with a letter and not end in an underscore.
 The maximum length is 128 characters.
 - `type` (String) The data type of the column.
-Valid types are: `BOOL`, `INT64`, `FLOAT64`, `STRING`, `BYTES`, `DATE`, `TIMESTAMP`, `JSON`, `PROTO`.
+Valid types are: `BOOL`, `INT64`, `FLOAT64`, `STRING`, `BYTES`, `DATE`, `TIMESTAMP`, `JSON`, `PROTO`, `ARRAY<STRING>`, `ARRAY<INT64>`, `ARRAY<FLOAT32>`, `ARRAY<FLOAT64>`.
 
 Optional:
 

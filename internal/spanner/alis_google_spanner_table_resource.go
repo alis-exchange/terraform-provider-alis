@@ -161,7 +161,7 @@ func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaReques
 										stringvalidator.OneOf(services.SpannerTableDataTypes...),
 									},
 									Description: "The data type of the column.\n" +
-										"Valid types are: `BOOL`, `INT64`, `FLOAT64`, `STRING`, `BYTES`, `DATE`, `TIMESTAMP`, `JSON`, `PROTO`.",
+										"Valid types are: `BOOL`, `INT64`, `FLOAT64`, `STRING`, `BYTES`, `DATE`, `TIMESTAMP`, `JSON`, `PROTO`, `ARRAY<STRING>`, `ARRAY<INT64>`, `ARRAY<FLOAT32>`, `ARRAY<FLOAT64>`.",
 								},
 								"size": schema.Int64Attribute{
 									Optional:    true,

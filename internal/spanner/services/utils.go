@@ -10,7 +10,8 @@ import (
 	"strings"
 	"time"
 
-	spanner "cloud.google.com/go/spanner/admin/database/apiv1"
+	"cloud.google.com/go/spanner"
+	spannerAdmin "cloud.google.com/go/spanner/admin/database/apiv1"
 	"cloud.google.com/go/spanner/admin/database/apiv1/databasepb"
 	_ "github.com/googleapis/go-sql-spanner"
 	dynamicstruct "github.com/ompluscator/dynamic-struct"
@@ -21,9 +22,9 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
-	"gorm.io/datatypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	customdatatypes "terraform-provider-alis/internal/spanner/datatypes"
 	"terraform-provider-alis/internal/utils"
 )
 
@@ -40,10 +41,15 @@ const (
 	SpannerTableDataType_TIMESTAMP
 	SpannerTableDataType_JSON
 	SpannerTableDataType_PROTO
+	SpannerTableDataType_STRING_ARRAY
+	SpannerTableDataType_INT64_ARRAY
+	SpannerTableDataType_FLOAT32_ARRAY
+	SpannerTableDataType_FLOAT64_ARRAY
 )
 
 func (t SpannerTableDataType) String() string {
-	return [...]string{"BOOL", "INT64", "FLOAT64", "STRING", "BYTES", "DATE", "TIMESTAMP", "JSON", "PROTO"}[t-1]
+	return [...]string{"BOOL", "INT64", "FLOAT64", "STRING", "BYTES", "DATE", "TIMESTAMP", "JSON", "PROTO",
+		"ARRAY<STRING>", "ARRAY<INT64>", "ARRAY<FLOAT32>", "ARRAY<FLOAT64>"}[t-1]
 }
 
 // SpannerTableDataTypes is a list of all Spanner table column data types.
@@ -57,6 +63,10 @@ var SpannerTableDataTypes = []string{
 	SpannerTableDataType_TIMESTAMP.String(),
 	SpannerTableDataType_JSON.String(),
 	SpannerTableDataType_PROTO.String(),
+	SpannerTableDataType_STRING_ARRAY.String(),
+	SpannerTableDataType_INT64_ARRAY.String(),
+	SpannerTableDataType_FLOAT32_ARRAY.String(),
+	SpannerTableDataType_FLOAT64_ARRAY.String(),
 }
 
 type SpannerTableIndexColumnOrder int64
@@ -508,11 +518,11 @@ func ParseSchemaToStruct(schema *SpannerTableSchema) (interface{}, error) {
 		case SpannerTableDataType_BYTES.String():
 			instance.AddField(pascalCaseColumnName, []byte{}, fmt.Sprintf("gorm:\"%s\"", tags))
 		case SpannerTableDataType_DATE.String():
-			instance.AddField(pascalCaseColumnName, datatypes.Date{}, fmt.Sprintf("gorm:\"%s\"", tags))
+			instance.AddField(pascalCaseColumnName, spanner.NullDate{}, fmt.Sprintf("gorm:\"%s\"", tags))
 		case SpannerTableDataType_TIMESTAMP.String():
 			instance.AddField(pascalCaseColumnName, time.Time{}, fmt.Sprintf("gorm:\"%s\"", tags))
 		case SpannerTableDataType_JSON.String():
-			instance.AddField(pascalCaseColumnName, datatypes.JSON{}, fmt.Sprintf("gorm:\"%s\"", tags))
+			instance.AddField(pascalCaseColumnName, spanner.NullJSON{}, fmt.Sprintf("gorm:\"%s\"", tags))
 		case SpannerTableDataType_PROTO.String():
 			// TODO: Implement this when support for proto is added
 			//	msg, err := utils.MessageFromFileDescriptorSet(column.ProtoFileDescriptorSet.ProtoPackage.GetValue(), column.ProtoFileDescriptorSet.fileDescriptorSet)
@@ -521,9 +531,18 @@ func ParseSchemaToStruct(schema *SpannerTableSchema) (interface{}, error) {
 			//	}
 			//
 			//	instance.AddField(pascalCaseColumnName, msg, fmt.Sprintf("gorm:\"%s\"", tags))
+		case SpannerTableDataType_STRING_ARRAY.String():
+			instance.AddField(pascalCaseColumnName, customdatatypes.StringArray{}, fmt.Sprintf("gorm:\"%s\"", tags))
+		case SpannerTableDataType_INT64_ARRAY.String():
+			instance.AddField(pascalCaseColumnName, customdatatypes.Int64Array{}, fmt.Sprintf("gorm:\"%s\"", tags))
+		case SpannerTableDataType_FLOAT32_ARRAY.String():
+			instance.AddField(pascalCaseColumnName, customdatatypes.Float32Array{}, fmt.Sprintf("gorm:\"%s\"", tags))
+		case SpannerTableDataType_FLOAT64_ARRAY.String():
+			instance.AddField(pascalCaseColumnName, customdatatypes.Float64Array{}, fmt.Sprintf("gorm:\"%s\"", tags))
 		default:
 			return nil, errors.New("unknown column type")
 		}
+
 	}
 
 	return instance.Build().New(), nil
@@ -555,7 +574,7 @@ func fetchDescriptorSet(ctx context.Context, fds *ProtoFileDescriptorSet) ([]byt
 // CreateProtoBundle creates a proto bundle in a Spanner database.
 func CreateProtoBundle(ctx context.Context, databaseName string, protoPackageName string, descriptorSet []byte) error {
 	// "projects/my-project/instances/my-instance/database/my-db"
-	client, err := spanner.NewDatabaseAdminClient(ctx)
+	client, err := spannerAdmin.NewDatabaseAdminClient(ctx)
 	if err != nil {
 		return err
 	}
