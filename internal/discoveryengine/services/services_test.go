@@ -272,7 +272,7 @@ func TestDiscoveryEngineService_DeleteDiscoveryEngineDatastoreSchema(t *testing.
 			name: "Test DeleteDiscoveryEngineDatastoreSchema",
 			args: args{
 				ctx:  context.Background(),
-				name: fmt.Sprintf("projects/%s/locations/%s/collections/%s/dataStores/%s/schemas/%s", TestProject, "global", "default_collection", TestDatastore, "default_schema"),
+				name: fmt.Sprintf("projects/%s/locations/%s/collections/%s/dataStores/%s/schemas/%s", TestProject, "global", "default_collection", TestDatastore, "test_schema"),
 			},
 		},
 	}
