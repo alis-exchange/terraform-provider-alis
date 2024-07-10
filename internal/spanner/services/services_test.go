@@ -62,7 +62,7 @@ func TestCreateSpannerDatabase(t *testing.T) {
 				databaseId: "tf-test",
 				database: &databasepb.Database{
 					VersionRetentionPeriod: "4h",
-					DatabaseDialect:        databasepb.DatabaseDialect_POSTGRESQL,
+					DatabaseDialect:        databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL,
 					EnableDropProtection:   false,
 				},
 			},
@@ -238,6 +238,95 @@ func TestDeleteSpannerDatabase(t *testing.T) {
 	}
 }
 
+func TestSpannerService_CreateDatabaseRole(t *testing.T) {
+	type fields struct {
+		GoogleCredentials *googleoauth.Credentials
+	}
+	type args struct {
+		ctx    context.Context
+		parent string
+		roleId string
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    *databasepb.DatabaseRole
+		wantErr bool
+	}{
+		{
+			name: "Test_CreateDatabaseRole",
+			args: args{
+				ctx:    context.Background(),
+				parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s", TestProject, TestInstance, "tf-test"),
+				roleId: "admin",
+			},
+			want: &databasepb.DatabaseRole{
+				Name: "admin",
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &SpannerService{
+				GoogleCredentials: tt.fields.GoogleCredentials,
+			}
+			got, err := s.CreateDatabaseRole(tt.args.ctx, tt.args.parent, tt.args.roleId)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("CreateDatabaseRole() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("CreateDatabaseRole() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+func TestSpannerService_GetDatabaseRole(t *testing.T) {
+	type fields struct {
+		GoogleCredentials *googleoauth.Credentials
+	}
+	type args struct {
+		ctx  context.Context
+		name string
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    *databasepb.DatabaseRole
+		wantErr bool
+	}{
+		{
+			name: "Test_GetDatabaseRole",
+			args: args{
+				ctx:  context.Background(),
+				name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/databaseRoles/%s", TestProject, TestInstance, "tf-test", "admin"),
+			},
+			want: &databasepb.DatabaseRole{
+				Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/databaseRoles/%s", TestProject, TestInstance, "tf-test", "admin"),
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &SpannerService{
+				GoogleCredentials: tt.fields.GoogleCredentials,
+			}
+			got, err := s.GetDatabaseRole(tt.args.ctx, tt.args.name)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("GetDatabaseRole() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("GetDatabaseRole() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestCreateSpannerTable(t *testing.T) {
 	type args struct {
 		ctx     context.Context
@@ -255,10 +344,10 @@ func TestCreateSpannerTable(t *testing.T) {
 			name: "Test_CreateSpannerTable",
 			args: args{
 				ctx:     context.Background(),
-				parent:  fmt.Sprintf("projects/%s/instances/%s/databases/%s", TestProject, TestInstance, "alis_px_dev_cmk"),
-				tableId: "tftestarr",
+				parent:  fmt.Sprintf("projects/%s/instances/%s/databases/%s", TestProject, TestInstance, "tf-test"),
+				tableId: "tftest",
 				table: &SpannerTable{
-					Name: "tftestarr",
+					Name: "tftest",
 					Schema: &SpannerTableSchema{
 						Columns: []*SpannerTableColumn{
 							{
@@ -474,17 +563,17 @@ func TestUpdateSpannerTable(t *testing.T) {
 								Unique:       wrapperspb.Bool(false),
 								Type:         "BYTES",
 							},
-							//{
-							//	Name:         "proto_test",
-							//	IsPrimaryKey: wrapperspb.Bool(false),
-							//	Unique:       wrapperspb.Bool(false),
-							//	Type:         "PROTO",
-							//	ProtoFileDescriptorSet: &ProtoFileDescriptorSet{
-							//		ProtoPackage:                wrapperspb.String("alis.px.resources.portfolios.v1.NAVCommit"),
-							//		FileDescriptorSetPath:       wrapperspb.String("gcs:gs://internal.descriptorset.alis-px-product-g51dmvo.alis.services/descriptorset.pb"),
-							//		FileDescriptorSetPathSource: ProtoFileDescriptorSetSourceGcs,
-							//	},
-							//},
+							{
+								Name:         "proto_test",
+								IsPrimaryKey: wrapperspb.Bool(false),
+								Unique:       wrapperspb.Bool(false),
+								Type:         "PROTO",
+								ProtoFileDescriptorSet: &ProtoFileDescriptorSet{
+									ProtoPackage: wrapperspb.String("alis.px.resources.portfolios.v1.NAVCommit"),
+									//FileDescriptorSetPath:       wrapperspb.String("gcs:gs://internal.descriptorset.alis-px-product-g51dmvo.alis.services/descriptorset.pb"),
+									//FileDescriptorSetPathSource: ProtoFileDescriptorSetSourceGcs,
+								},
+							},
 							//{
 							//	Name:         "proto_test_again",
 							//	IsPrimaryKey: wrapperspb.Bool(false),
@@ -496,17 +585,17 @@ func TestUpdateSpannerTable(t *testing.T) {
 							//		FileDescriptorSetPathSource: ProtoFileDescriptorSetSourceGcs,
 							//	},
 							//},
-							{
-								Name:         "proto_test_branch",
-								IsPrimaryKey: wrapperspb.Bool(false),
-								Unique:       wrapperspb.Bool(false),
-								Type:         "PROTO",
-								ProtoFileDescriptorSet: &ProtoFileDescriptorSet{
-									ProtoPackage:                wrapperspb.String("alis.px.resources.portfolios.v1.Branch"),
-									FileDescriptorSetPath:       wrapperspb.String("gcs:gs://internal.descriptorset.alis-px-product-g51dmvo.alis.services/descriptorset.pb"),
-									FileDescriptorSetPathSource: ProtoFileDescriptorSetSourceGcs,
-								},
-							},
+							//{
+							//	Name:         "proto_test_branch",
+							//	IsPrimaryKey: wrapperspb.Bool(false),
+							//	Unique:       wrapperspb.Bool(false),
+							//	Type:         "PROTO",
+							//	ProtoFileDescriptorSet: &ProtoFileDescriptorSet{
+							//		ProtoPackage:                wrapperspb.String("alis.px.resources.portfolios.v1.Branch"),
+							//		//FileDescriptorSetPath:       wrapperspb.String("gcs:gs://internal.descriptorset.alis-px-product-g51dmvo.alis.services/descriptorset.pb"),
+							//		//FileDescriptorSetPathSource: ProtoFileDescriptorSetSourceGcs,
+							//	},
+							//},
 						},
 					},
 				},
@@ -1098,6 +1187,223 @@ func TestSpannerService_DeleteIndex(t *testing.T) {
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("DeleteSpannerTableIndex() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSpannerService_SetTableIamBinding(t *testing.T) {
+	type fields struct {
+		GoogleCredentials *googleoauth.Credentials
+	}
+	type args struct {
+		ctx     context.Context
+		parent  string
+		binding *TablePolicyBinding
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    *TablePolicyBinding
+		wantErr bool
+	}{
+		{
+			name: "Test_SetTableIamBinding",
+			args: args{
+				ctx:    context.Background(),
+				parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "tf-test", "tftest"),
+				binding: &TablePolicyBinding{
+					Role: "admin",
+					Permissions: []TablePolicyBindingPermission{
+						TablePolicyBindingPermission_SELECT,
+						TablePolicyBindingPermission_INSERT,
+						TablePolicyBindingPermission_UPDATE,
+						TablePolicyBindingPermission_DELETE,
+					},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &SpannerService{
+				GoogleCredentials: tt.fields.GoogleCredentials,
+			}
+			got, err := s.SetTableIamBinding(tt.args.ctx, tt.args.parent, tt.args.binding)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("SetTableIamBinding() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("SetTableIamBinding() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSpannerService_GetTableIamBinding(t *testing.T) {
+	type fields struct {
+		GoogleCredentials *googleoauth.Credentials
+	}
+	type args struct {
+		ctx    context.Context
+		parent string
+		role   string
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    *TablePolicyBinding
+		wantErr bool
+	}{
+		{
+			name: "Test_GetTableIamBinding",
+			args: args{
+				ctx:    context.Background(),
+				parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "tf-test", "tftest"),
+				role:   "admin",
+			},
+			want:    &TablePolicyBinding{},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &SpannerService{
+				GoogleCredentials: tt.fields.GoogleCredentials,
+			}
+			got, err := s.GetTableIamBinding(tt.args.ctx, tt.args.parent, tt.args.role)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("GetTableIamBinding() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("GetTableIamBinding() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSpannerService_DeleteTableIamBinding(t *testing.T) {
+	type fields struct {
+		GoogleCredentials *googleoauth.Credentials
+	}
+	type args struct {
+		ctx    context.Context
+		parent string
+		role   string
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "Test_DeleteTableIamBinding",
+			args: args{
+				ctx:    context.Background(),
+				parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "tf-test", "tftest"),
+				role:   "admin",
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &SpannerService{
+				GoogleCredentials: tt.fields.GoogleCredentials,
+			}
+			if err := s.DeleteTableIamBinding(tt.args.ctx, tt.args.parent, tt.args.role); (err != nil) != tt.wantErr {
+				t.Errorf("DeleteTableIamBinding() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestSpannerService_ListDatabaseRoles(t *testing.T) {
+	type fields struct {
+		GoogleCredentials *googleoauth.Credentials
+	}
+	type args struct {
+		ctx       context.Context
+		parent    string
+		pageSize  int32
+		pageToken string
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    []*databasepb.DatabaseRole
+		want1   string
+		wantErr bool
+	}{
+		{
+			name: "Test_ListDatabaseRoles",
+			args: args{
+				ctx:       context.Background(),
+				parent:    fmt.Sprintf("projects/%s/instances/%s/databases/%s", TestProject, TestInstance, "tf-test"),
+				pageSize:  100,
+				pageToken: "",
+			},
+			want:    []*databasepb.DatabaseRole{},
+			want1:   "",
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &SpannerService{
+				GoogleCredentials: tt.fields.GoogleCredentials,
+			}
+			got, got1, err := s.ListDatabaseRoles(tt.args.ctx, tt.args.parent, tt.args.pageSize, tt.args.pageToken)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ListDatabaseRoles() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("ListDatabaseRoles() got = %v, want %v", got, tt.want)
+			}
+			if got1 != tt.want1 {
+				t.Errorf("ListDatabaseRoles() got1 = %v, want %v", got1, tt.want1)
+			}
+		})
+	}
+}
+
+func TestSpannerService_DeleteDatabaseRole(t *testing.T) {
+	type fields struct {
+		GoogleCredentials *googleoauth.Credentials
+	}
+	type args struct {
+		ctx  context.Context
+		name string
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "Test_DeleteDatabaseRole",
+			args: args{
+				ctx:  context.Background(),
+				name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/databaseRoles/%s", TestProject, TestInstance, "tf-test", "admin"),
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &SpannerService{
+				GoogleCredentials: tt.fields.GoogleCredentials,
+			}
+			if err := s.DeleteDatabaseRole(tt.args.ctx, tt.args.name); (err != nil) != tt.wantErr {
+				t.Errorf("DeleteDatabaseRole() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}

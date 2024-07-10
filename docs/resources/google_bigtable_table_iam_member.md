@@ -9,6 +9,8 @@ description: |-
 
 Non-authoritative. Updates the IAM policy to grant a role to a new member. Other members for the role for the table are preserved.
 
+> NOTE: This resource at the moment offers nothing beyond the standard Google provider. It is recommended to use the standard Google provider for now.
+
 ## Example Usage
 
 ```terraform

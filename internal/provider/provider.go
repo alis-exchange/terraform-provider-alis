@@ -167,6 +167,8 @@ func (p *googleProvider) DataSources(_ context.Context) []func() datasource.Data
 	return []func() datasource.DataSource{
 		bigtable.NewIamPolicyDataSource,
 		spanner.NewIamPolicyDataSource,
+		spanner.NewDatabaseRolesDataSource,
+		spanner.NewTableIamBindingDataSource,
 		discoveryengine.NewDiscoveryEngineDataStoreSchemasDataSource,
 	}
 }
@@ -185,6 +187,8 @@ func (p *googleProvider) Resources(_ context.Context) []func() resource.Resource
 		spanner.NewIamMemberResource,
 		spanner.NewSpannerTableResource,
 		spanner.NewSpannerTableIndexResource,
+		spanner.NewDatabaseRoleResource,
+		spanner.NewTableIamBindingResource,
 		discoveryengine.NewDiscoveryEngineDataSourceSchemaResource,
 	}
 }

@@ -11,6 +11,8 @@ description: |-
 Authoritative for a given role. Updates the IAM policy to grant a role to a list of members.
 Other roles within the IAM policy for the table are preserved.
 
+> NOTE: This resource at the moment offers nothing beyond the standard Google provider. It is recommended to use the standard Google provider for now.
+
 ## Example Usage
 
 ```terraform

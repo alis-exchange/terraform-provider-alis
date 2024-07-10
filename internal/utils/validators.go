@@ -26,22 +26,24 @@ var (
 
 // Spanner regex
 var (
-	SpannerGoogleSqlDatabaseIdRegex     = `^[a-z][a-z0-9_\-]*[a-z0-9]{2,30}$`
-	SpannerPostgresSqlDatabaseIdRegex   = `^[a-zA-Z][a-zA-Z0-9_]{2,30}$`
-	SpannerGoogleSqlDatabaseNameRegex   = fmt.Sprintf(`^projects\/%s\/instances\/%s\/databases\/%s$`, CutPrefixAndSuffix(ProjectIdRegex, "^", "$"), CutPrefixAndSuffix(InstanceIdRegex, "^", "$"), CutPrefixAndSuffix(SpannerGoogleSqlDatabaseIdRegex, "^", "$"))
-	SpannerPostgresSqlDatabaseNameRegex = fmt.Sprintf(`^projects\/%s\/instances\/%s\/databases\/%s$`, CutPrefixAndSuffix(ProjectIdRegex, "^", "$"), CutPrefixAndSuffix(InstanceIdRegex, "^", "$"), CutPrefixAndSuffix(SpannerPostgresSqlDatabaseIdRegex, "^", "$"))
-	SpannerGoogleSqlTableIdRegex        = `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`
-	SpannerPostgresSqlTableIdRegex      = `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`
-	SpannerGoogleSqlTableNameRegex      = fmt.Sprintf(`^projects\/%s\/instances\/%s\/databases\/%s\/tables\/%s$`, CutPrefixAndSuffix(ProjectIdRegex, "^", "$"), CutPrefixAndSuffix(InstanceIdRegex, "^", "$"), CutPrefixAndSuffix(SpannerGoogleSqlDatabaseIdRegex, "^", "$"), CutPrefixAndSuffix(SpannerGoogleSqlTableIdRegex, "^", "$"))
-	SpannerPostgresSqlTableNameRegex    = fmt.Sprintf(`^projects\/%s\/instances\/%s\/databases\/%s\/tables\/%s$`, CutPrefixAndSuffix(ProjectIdRegex, "^", "$"), CutPrefixAndSuffix(InstanceIdRegex, "^", "$"), CutPrefixAndSuffix(SpannerPostgresSqlDatabaseIdRegex, "^", "$"), CutPrefixAndSuffix(SpannerPostgresSqlTableIdRegex, "^", "$"))
-	SpannerGoogleSqlBackupIdRegex       = `^[a-z][a-z0-9_\-]*[a-z0-9]{2,30}$`
-	SpannerPostgresSqlBackupIdRegex     = `^[a-zA-Z][a-zA-Z0-9_]{2,30}$`
-	SpannerGoogleSqlBackupNameRegex     = fmt.Sprintf(`^projects\/%s\/instances\/%s\/backups\/%s$`, CutPrefixAndSuffix(ProjectIdRegex, "^", "$"), CutPrefixAndSuffix(InstanceIdRegex, "^", "$"), CutPrefixAndSuffix(SpannerGoogleSqlBackupIdRegex, "^", "$"))
-	SpannerPostgresSqlBackupNameRegex   = fmt.Sprintf(`^projects\/%s\/instances\/%s\/backups\/%s$`, CutPrefixAndSuffix(ProjectIdRegex, "^", "$"), CutPrefixAndSuffix(InstanceIdRegex, "^", "$"), CutPrefixAndSuffix(SpannerPostgresSqlBackupIdRegex, "^", "$"))
-	SpannerGoogleSqlColumnIdRegex       = `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`
-	SpannerPostgresSqlColumnIdRegex     = `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`
-	SpannerGoogleSqlIndexIdRegex        = `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`
-	SpannerPostgresSqlIndexIdRegex      = `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`
+	SpannerGoogleSqlDatabaseIdRegex         = `^[a-z][a-z0-9_\-]*[a-z0-9]{2,30}$`
+	SpannerPostgresSqlDatabaseIdRegex       = `^[a-zA-Z][a-zA-Z0-9_]{2,30}$`
+	SpannerGoogleSqlDatabaseNameRegex       = fmt.Sprintf(`^projects\/%s\/instances\/%s\/databases\/%s$`, CutPrefixAndSuffix(ProjectIdRegex, "^", "$"), CutPrefixAndSuffix(InstanceIdRegex, "^", "$"), CutPrefixAndSuffix(SpannerGoogleSqlDatabaseIdRegex, "^", "$"))
+	SpannerPostgresSqlDatabaseNameRegex     = fmt.Sprintf(`^projects\/%s\/instances\/%s\/databases\/%s$`, CutPrefixAndSuffix(ProjectIdRegex, "^", "$"), CutPrefixAndSuffix(InstanceIdRegex, "^", "$"), CutPrefixAndSuffix(SpannerPostgresSqlDatabaseIdRegex, "^", "$"))
+	SpannerGoogleSqlDatabaseRoleNameRegex   = fmt.Sprintf(`^projects\/%s\/instances\/%s\/databases\/%s\/databaseRoles\/[a-zA-Z0-9_]{1,64}$`, CutPrefixAndSuffix(ProjectIdRegex, "^", "$"), CutPrefixAndSuffix(InstanceIdRegex, "^", "$"), CutPrefixAndSuffix(SpannerGoogleSqlDatabaseIdRegex, "^", "$"))
+	SpannerPostgresSqlDatabaseRoleNameRegex = fmt.Sprintf(`^projects\/%s\/instances\/%s\/databases\/%s\/databaseRoles\/[a-zA-Z0-9_]{1,64}$`, CutPrefixAndSuffix(ProjectIdRegex, "^", "$"), CutPrefixAndSuffix(InstanceIdRegex, "^", "$"), CutPrefixAndSuffix(SpannerGoogleSqlDatabaseIdRegex, "^", "$"))
+	SpannerGoogleSqlTableIdRegex            = `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`
+	SpannerPostgresSqlTableIdRegex          = `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`
+	SpannerGoogleSqlTableNameRegex          = fmt.Sprintf(`^projects\/%s\/instances\/%s\/databases\/%s\/tables\/%s$`, CutPrefixAndSuffix(ProjectIdRegex, "^", "$"), CutPrefixAndSuffix(InstanceIdRegex, "^", "$"), CutPrefixAndSuffix(SpannerGoogleSqlDatabaseIdRegex, "^", "$"), CutPrefixAndSuffix(SpannerGoogleSqlTableIdRegex, "^", "$"))
+	SpannerPostgresSqlTableNameRegex        = fmt.Sprintf(`^projects\/%s\/instances\/%s\/databases\/%s\/tables\/%s$`, CutPrefixAndSuffix(ProjectIdRegex, "^", "$"), CutPrefixAndSuffix(InstanceIdRegex, "^", "$"), CutPrefixAndSuffix(SpannerPostgresSqlDatabaseIdRegex, "^", "$"), CutPrefixAndSuffix(SpannerPostgresSqlTableIdRegex, "^", "$"))
+	SpannerGoogleSqlBackupIdRegex           = `^[a-z][a-z0-9_\-]*[a-z0-9]{2,30}$`
+	SpannerPostgresSqlBackupIdRegex         = `^[a-zA-Z][a-zA-Z0-9_]{2,30}$`
+	SpannerGoogleSqlBackupNameRegex         = fmt.Sprintf(`^projects\/%s\/instances\/%s\/backups\/%s$`, CutPrefixAndSuffix(ProjectIdRegex, "^", "$"), CutPrefixAndSuffix(InstanceIdRegex, "^", "$"), CutPrefixAndSuffix(SpannerGoogleSqlBackupIdRegex, "^", "$"))
+	SpannerPostgresSqlBackupNameRegex       = fmt.Sprintf(`^projects\/%s\/instances\/%s\/backups\/%s$`, CutPrefixAndSuffix(ProjectIdRegex, "^", "$"), CutPrefixAndSuffix(InstanceIdRegex, "^", "$"), CutPrefixAndSuffix(SpannerPostgresSqlBackupIdRegex, "^", "$"))
+	SpannerGoogleSqlColumnIdRegex           = `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`
+	SpannerPostgresSqlColumnIdRegex         = `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`
+	SpannerGoogleSqlIndexIdRegex            = `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`
+	SpannerPostgresSqlIndexIdRegex          = `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`
 
 	SpannerGoogleSqlConstraintIdRegex   = ``
 	SpannerPostgresSqlConstraintIdRegex = ``

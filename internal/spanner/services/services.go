@@ -47,110 +47,6 @@ func NewSpannerService(creds *googleoauth.Credentials) *SpannerService {
 	}
 }
 
-type SpannerTableIndexColumn struct {
-	// The name of the column
-	Name string
-	// The sort order of the column in the index
-	//
-	// Accepts either SpannerTableIndexColumnOrder_ASC or SpannerTableIndexColumnOrder_DESC
-	Order SpannerTableIndexColumnOrder
-}
-
-// SpannerTableIndex represents a Spanner table index.
-type SpannerTableIndex struct {
-	// The name of the index
-	Name string
-	// The columns that make up the index
-	Columns []*SpannerTableIndexColumn
-	// Whether the index is unique
-	Unique *wrapperspb.BoolValue
-}
-
-type SpannerTableForeignKey struct {
-	// Referenced table
-	ReferencedTable string
-	// Referenced column
-	ReferencedColumn string
-	// Referencing column
-	Column string
-}
-
-type SpannerTableForeignKeysConstraint struct {
-	// The name of the constraint
-	Name string
-	// Foreign keys
-	ForeignKeys []*SpannerTableForeignKey
-}
-
-// ProtoFileDescriptorSet represents a Proto File Descriptor Set.
-type ProtoFileDescriptorSet struct {
-	// Proto package.
-	// Typically paired with PROTO columns.
-	ProtoPackage *wrapperspb.StringValue
-	// Proto File Descriptor Set file path.
-	// Typically paired with PROTO columns.
-	FileDescriptorSetPath *wrapperspb.StringValue
-	// Proto File Descriptor Set file source.
-	// Typically paired with PROTO columns.
-	FileDescriptorSetPathSource ProtoFileDescriptorSetSource
-	// Proto File Descriptor Set bytes.
-	fileDescriptorSet *descriptorpb.FileDescriptorSet
-}
-
-// SpannerTableColumn represents a Spanner table column.
-type SpannerTableColumn struct {
-	// The name of the column.
-	//
-	// Must be unique within the table.
-	Name string
-	// Whether the column is a primary key
-	IsPrimaryKey *wrapperspb.BoolValue
-	// Whether the column is auto-incrementing
-	// This is typically paired with is_primary_key=true
-	// This is only valid for numeric columns i.e. INT64, FLOAT64
-	AutoIncrement *wrapperspb.BoolValue
-	// Whether the values in the column are unique
-	Unique *wrapperspb.BoolValue
-	// The type of the column
-	Type string
-	// The maximum size of the column.
-	//
-	// For STRING columns, this is the maximum length of the column in characters.
-	// For BYTES columns, this is the maximum length of the column in bytes.
-	Size *wrapperspb.Int64Value
-	// The precision of the column.
-	// This is typically paired with numeric columns i.e. INT64, FLOAT64
-	Precision *wrapperspb.Int64Value
-	// The scale of the column.
-	// This is typically paired with numeric columns i.e. INT64, FLOAT64
-	Scale *wrapperspb.Int64Value
-	// Whether the column is nullable
-	Required *wrapperspb.BoolValue
-	// The default value of the column.
-	//
-	// Accepts any type of value given that the value is valid for the column type.
-	DefaultValue *wrapperspb.StringValue
-	// The proto file descriptor set for the column.
-	//
-	// This is typically paired with PROTO columns.
-	ProtoFileDescriptorSet *ProtoFileDescriptorSet
-}
-
-// SpannerTableSchema represents the schema of a Spanner table.
-type SpannerTableSchema struct {
-	// The columns that make up the table schema.
-	Columns []*SpannerTableColumn
-}
-
-// SpannerTable represents a Spanner table.
-type SpannerTable struct {
-	// Fully qualified name of the table.
-	// Format: projects/{project}/instances/{instance}/databases/{database}/tables/{table}
-	Name string
-	// The schema of the table.
-	Schema *SpannerTableSchema
-}
-
 // CreateSpannerDatabase creates a new Spanner database.
 //
 // Params:
@@ -496,6 +392,208 @@ func (s *SpannerService) DeleteSpannerDatabase(ctx context.Context, name string)
 	}
 
 	return &emptypb.Empty{}, nil
+}
+
+func (s *SpannerService) CreateDatabaseRole(ctx context.Context, parent string, roleId string) (*databasepb.DatabaseRole, error) {
+	// Validate arguments
+	// Validate parent
+	googleSqlParentValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlDatabaseNameRegex)
+	postgresSqlParentValid := utils.ValidateArgument(parent, utils.SpannerPostgresSqlDatabaseNameRegex)
+	if !googleSqlParentValid && !postgresSqlParentValid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", parent, utils.SpannerGoogleSqlTableNameRegex, utils.SpannerPostgresSqlTableNameRegex)
+	}
+
+	// Ensure role is provided
+	if roleId == "" {
+		return nil, status.Error(codes.InvalidArgument, "Invalid argument roleId, field is required but not provided")
+	}
+
+	// "projects/my-project/instances/my-instance/database/my-db"
+	client, err := spanner.NewDatabaseAdminClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer client.Close()
+
+	// Get database state
+	database, err := client.GetDatabase(ctx, &databasepb.GetDatabaseRequest{
+		Name: parent,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// CREATE ROLE inventory_admin;
+	var ddlStatements []string
+	if database.GetDatabaseDialect() == databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL {
+		ddlStatements = append(ddlStatements, fmt.Sprintf("CREATE ROLE %s", roleId))
+	}
+	if database.GetDatabaseDialect() == databasepb.DatabaseDialect_POSTGRESQL {
+		ddlStatements = append(ddlStatements, fmt.Sprintf("CREATE ROLE %s", roleId))
+	}
+	updateDatabaseDdlOperation, err := client.UpdateDatabaseDdl(ctx, &databasepb.UpdateDatabaseDdlRequest{
+		Database:   database.GetName(),
+		Statements: ddlStatements,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Wait for LRO to complete
+	err = updateDatabaseDdlOperation.Wait(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return &databasepb.DatabaseRole{
+		Name: fmt.Sprintf("%s/databaseRoles/%s", parent, roleId),
+	}, nil
+}
+
+func (s *SpannerService) GetDatabaseRole(ctx context.Context, name string) (*databasepb.DatabaseRole, error) {
+	// Validate name
+	googleSqlValid := utils.ValidateArgument(name, utils.SpannerGoogleSqlDatabaseRoleNameRegex)
+	postgresSqlValid := utils.ValidateArgument(name, utils.SpannerPostgresSqlDatabaseRoleNameRegex)
+	if !googleSqlValid && !postgresSqlValid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", name, utils.SpannerGoogleSqlDatabaseNameRegex, utils.SpannerPostgresSqlDatabaseNameRegex)
+	}
+
+	// "projects/my-project/instances/my-instance/database/my-db"
+	client, err := spanner.NewDatabaseAdminClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer client.Close()
+
+	// Decompose name to get project, instance, database
+	nameParts := strings.Split(name, "/")
+	project := nameParts[1]
+	instance := nameParts[3]
+	databaseId := nameParts[5]
+
+	var role *databasepb.DatabaseRole
+	it := client.ListDatabaseRoles(ctx, &databasepb.ListDatabaseRolesRequest{
+		Parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId),
+	})
+	for {
+		r, err := it.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		if r.GetName() == name {
+			role = r
+			break
+		}
+	}
+
+	if role == nil {
+		return nil, status.Errorf(codes.NotFound, "Database role (%s) not found", name)
+	}
+
+	return role, nil
+}
+
+func (s *SpannerService) ListDatabaseRoles(ctx context.Context, parent string, pageSize int32, pageToken string) ([]*databasepb.DatabaseRole, string, error) {
+	// Validate parent
+	googleSqlValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlDatabaseNameRegex)
+	postgresSqlValid := utils.ValidateArgument(parent, utils.SpannerPostgresSqlDatabaseNameRegex)
+	if !googleSqlValid && !postgresSqlValid {
+		return nil, "", status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", parent, utils.SpannerGoogleSqlDatabaseNameRegex, utils.SpannerPostgresSqlDatabaseNameRegex)
+	}
+
+	// "projects/my-project/instances/my-instance/database/my-db"
+	client, err := spanner.NewDatabaseAdminClient(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	defer client.Close()
+
+	var res []*databasepb.DatabaseRole
+	var nextPageToken string
+
+	it := client.ListDatabaseRoles(ctx, &databasepb.ListDatabaseRolesRequest{
+		Parent:    parent,
+		PageSize:  pageSize,
+		PageToken: pageToken,
+	})
+	for {
+		r, err := it.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
+		if err != nil {
+			return nil, "", err
+		}
+
+		res = append(res, r)
+
+		// Check if page size is reached
+		if pageSize > 0 && len(res) >= int(pageSize) {
+			nextPageToken = it.PageInfo().Token
+			break
+		}
+	}
+
+	return res, nextPageToken, nil
+}
+
+func (s *SpannerService) DeleteDatabaseRole(ctx context.Context, name string) error {
+	// Validate name
+	googleSqlValid := utils.ValidateArgument(name, utils.SpannerGoogleSqlDatabaseRoleNameRegex)
+	postgresSqlValid := utils.ValidateArgument(name, utils.SpannerPostgresSqlDatabaseRoleNameRegex)
+	if !googleSqlValid && !postgresSqlValid {
+		return status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", name, utils.SpannerGoogleSqlDatabaseNameRegex, utils.SpannerPostgresSqlDatabaseNameRegex)
+	}
+
+	// "projects/my-project/instances/my-instance/database/my-db"
+	client, err := spanner.NewDatabaseAdminClient(ctx)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+
+	// Decompose name to get project, instance, database
+	nameParts := strings.Split(name, "/")
+	project := nameParts[1]
+	instance := nameParts[3]
+	databaseId := nameParts[5]
+	roleId := nameParts[7]
+
+	// Get database state
+	database, err := client.GetDatabase(ctx, &databasepb.GetDatabaseRequest{
+		Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId),
+	})
+	if err != nil {
+		return err
+	}
+
+	// CREATE ROLE inventory_admin;
+	var ddlStatements []string
+	if database.GetDatabaseDialect() == databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL {
+		ddlStatements = append(ddlStatements, fmt.Sprintf("DROP ROLE %s", roleId))
+	}
+	if database.GetDatabaseDialect() == databasepb.DatabaseDialect_POSTGRESQL {
+		ddlStatements = append(ddlStatements, fmt.Sprintf("DROP ROLE %s", roleId))
+	}
+	updateDatabaseDdlOperation, err := client.UpdateDatabaseDdl(ctx, &databasepb.UpdateDatabaseDdlRequest{
+		Database:   database.GetName(),
+		Statements: ddlStatements,
+	})
+	if err != nil {
+		return err
+	}
+
+	// Wait for LRO to complete
+	err = updateDatabaseDdlOperation.Wait(ctx)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // GetSpannerDatabaseIamPolicy gets the IAM policy for a Spanner database.
@@ -931,13 +1029,13 @@ func (s *SpannerService) CreateSpannerTable(ctx context.Context, parent string, 
 				return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.schema.columns[%d].proto_file_descriptor_set.proto_package, field is required but not provided", i)
 			}
 
-			if column.ProtoFileDescriptorSet.FileDescriptorSetPath == nil {
-				return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.schema.columns[%d].proto_file_descriptor_set.file_descriptor_set_path, field is required but not provided", i)
-			}
+			//if column.ProtoFileDescriptorSet.FileDescriptorSetPath == nil {
+			//	return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.schema.columns[%d].proto_file_descriptor_set.file_descriptor_set_path, field is required but not provided", i)
+			//}
 
-			if column.ProtoFileDescriptorSet.FileDescriptorSetPathSource == ProtoFileDescriptorSetSourceUNSPECIFIED {
-				return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.schema.columns[%d].proto_file_descriptor_set.file_descriptor_set_path_source, field is required but not not provided", i)
-			}
+			//if column.ProtoFileDescriptorSet.FileDescriptorSetPathSource == ProtoFileDescriptorSetSourceUNSPECIFIED {
+			//	return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.schema.columns[%d].proto_file_descriptor_set.file_descriptor_set_path_source, field is required but not not provided", i)
+			//}
 		}
 	}
 
@@ -968,6 +1066,12 @@ func (s *SpannerService) CreateSpannerTable(ctx context.Context, parent string, 
 	// Check if we have any PROTO columns and create the necessary proto bundles
 	for _, column := range table.Schema.Columns {
 		if column.Type != SpannerTableDataType_PROTO.String() {
+			continue
+		}
+
+		// If file descriptor set path is not provided, skip
+		// In such cases, we assume the user has already created the proto bundle(s)
+		if column.ProtoFileDescriptorSet.FileDescriptorSetPath == nil || column.ProtoFileDescriptorSet.FileDescriptorSetPath.GetValue() == "" {
 			continue
 		}
 
@@ -1384,13 +1488,13 @@ func (s *SpannerService) UpdateSpannerTable(ctx context.Context, table *SpannerT
 							return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.schema.columns[%d].proto_file_descriptor_set.proto_package, field is required but not provided", i)
 						}
 
-						if column.ProtoFileDescriptorSet.FileDescriptorSetPath == nil {
-							return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.schema.columns[%d].proto_file_descriptor_set.file_descriptor_set_path, field is required but not provided", i)
-						}
+						//if column.ProtoFileDescriptorSet.FileDescriptorSetPath == nil {
+						//	return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.schema.columns[%d].proto_file_descriptor_set.file_descriptor_set_path, field is required but not provided", i)
+						//}
 
-						if column.ProtoFileDescriptorSet.FileDescriptorSetPathSource == ProtoFileDescriptorSetSourceUNSPECIFIED {
-							return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.schema.columns[%d].proto_file_descriptor_set.file_descriptor_set_path_source, field is required but not not provided", i)
-						}
+						//if column.ProtoFileDescriptorSet.FileDescriptorSetPathSource == ProtoFileDescriptorSetSourceUNSPECIFIED {
+						//	return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.schema.columns[%d].proto_file_descriptor_set.file_descriptor_set_path_source, field is required but not not provided", i)
+						//}
 					}
 				}
 
@@ -1450,6 +1554,12 @@ func (s *SpannerService) UpdateSpannerTable(ctx context.Context, table *SpannerT
 	// Check if we have any PROTO columns and create the necessary proto bundles
 	for _, column := range table.Schema.Columns {
 		if column.Type != SpannerTableDataType_PROTO.String() {
+			continue
+		}
+
+		// If file descriptor set path is not provided, skip
+		// In such cases, we assume the user has already created the proto bundle(s)
+		if column.ProtoFileDescriptorSet.FileDescriptorSetPath == nil || column.ProtoFileDescriptorSet.FileDescriptorSetPath.GetValue() == "" {
 			continue
 		}
 
@@ -1647,6 +1757,214 @@ func (s *SpannerService) DeleteSpannerTable(ctx context.Context, name string) (*
 	}
 
 	return &emptypb.Empty{}, nil
+}
+
+func (s *SpannerService) SetTableIamBinding(ctx context.Context, parent string, binding *TablePolicyBinding) (*TablePolicyBinding, error) {
+	// Validate arguments
+	// Validate parent
+	googleSqlParentValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlTableNameRegex)
+	postgresSqlParentValid := utils.ValidateArgument(parent, utils.SpannerPostgresSqlTableNameRegex)
+	if !googleSqlParentValid && !postgresSqlParentValid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", parent, utils.SpannerGoogleSqlTableNameRegex, utils.SpannerPostgresSqlTableNameRegex)
+	}
+
+	// Ensure binding is provided
+	if binding == nil {
+		return nil, status.Error(codes.InvalidArgument, "Invalid argument binding, field is required but not provided")
+	}
+
+	// Ensure role is provided
+	if binding.Role == "" {
+		return nil, status.Error(codes.InvalidArgument, "Invalid argument binding.role, field is required but not provided")
+	}
+
+	// Ensure permissions are provided
+	if binding.Permissions == nil || len(binding.Permissions) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "Invalid argument binding.permissions, field is required but not provided")
+	}
+
+	// "projects/my-project/instances/my-instance/database/my-db"
+	client, err := spanner.NewDatabaseAdminClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer client.Close()
+
+	// Deconstruct parent name to get project, instance, database and table
+	parentNameParts := strings.Split(parent, "/")
+	project := parentNameParts[1]
+	instance := parentNameParts[3]
+	databaseId := parentNameParts[5]
+	tableId := parentNameParts[7]
+
+	// Get database state
+	database, err := client.GetDatabase(ctx, &databasepb.GetDatabaseRequest{
+		Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var permissions []string
+	for _, permission := range binding.Permissions {
+		permissions = append(permissions, permission.String())
+	}
+
+	// CREATE ROLE inventory_admin;
+	var ddlStatements []string
+	if database.GetDatabaseDialect() == databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL {
+		ddlStatements = append(ddlStatements, fmt.Sprintf("GRANT %s ON TABLE %s TO ROLE %s", strings.Join(permissions, ", "), tableId, binding.Role))
+	}
+	if database.GetDatabaseDialect() == databasepb.DatabaseDialect_POSTGRESQL {
+		ddlStatements = append(ddlStatements, fmt.Sprintf("GRANT %s ON TABLE %s TO ROLE %s", strings.Join(permissions, ", "), tableId, binding.Role))
+	}
+	updateDatabaseDdlOperation, err := client.UpdateDatabaseDdl(ctx, &databasepb.UpdateDatabaseDdlRequest{
+		Database:   database.GetName(),
+		Statements: ddlStatements,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Wait for LRO to complete
+	err = updateDatabaseDdlOperation.Wait(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return binding, nil
+}
+
+func (s *SpannerService) GetTableIamBinding(ctx context.Context, parent string, role string) (*TablePolicyBinding, error) {
+	// Validate arguments
+	// Validate parent
+	googleSqlParentValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlTableNameRegex)
+	postgresSqlParentValid := utils.ValidateArgument(parent, utils.SpannerPostgresSqlTableNameRegex)
+	if !googleSqlParentValid && !postgresSqlParentValid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", parent, utils.SpannerGoogleSqlTableNameRegex, utils.SpannerPostgresSqlTableNameRegex)
+	}
+
+	// Ensure role is provided
+	if role == "" {
+		return nil, status.Error(codes.InvalidArgument, "Invalid argument role, field is required but not provided")
+	}
+
+	// Deconstruct parent name to get project, instance and database id
+	parentNameParts := strings.Split(parent, "/")
+	project := parentNameParts[1]
+	instance := parentNameParts[3]
+	databaseId := parentNameParts[5]
+	tableId := parentNameParts[7]
+
+	db, err := gorm.Open(
+		spannergorm.New(
+			spannergorm.Config{
+				DriverName: "spanner",
+				DSN:        fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId),
+			},
+		),
+		&gorm.Config{
+			PrepareStmt: true,
+		},
+	)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "Error connecting to database: %v", err)
+	}
+
+	var rows []*TablePermissionsRow
+	res := db.Raw("SELECT * FROM INFORMATION_SCHEMA.TABLE_PRIVILEGES WHERE table_name = ? AND grantee = ?", tableId, role).Scan(&rows)
+	if res.Error != nil {
+		return nil, status.Errorf(codes.Internal, "Error getting table IAM binding: %v", res.Error)
+	}
+
+	if len(rows) == 0 {
+		return nil, status.Errorf(codes.NotFound, "Table IAM binding %s not found", role)
+	}
+
+	binding := &TablePolicyBinding{
+		Role: role,
+	}
+	for _, row := range rows {
+		if row.GetPermission() == TablePolicyBindingPermission_UNSPECIFIED {
+			continue
+		}
+
+		binding.Permissions = append(binding.Permissions, row.GetPermission())
+	}
+
+	return binding, nil
+}
+
+func (s *SpannerService) DeleteTableIamBinding(ctx context.Context, parent string, role string) error {
+	// Validate arguments
+	// Validate parent
+	googleSqlParentValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlTableNameRegex)
+	postgresSqlParentValid := utils.ValidateArgument(parent, utils.SpannerPostgresSqlTableNameRegex)
+	if !googleSqlParentValid && !postgresSqlParentValid {
+		return status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", parent, utils.SpannerGoogleSqlTableNameRegex, utils.SpannerPostgresSqlTableNameRegex)
+	}
+
+	// Ensure role is provided
+	if role == "" {
+		return status.Error(codes.InvalidArgument, "Invalid argument role, field is required but not provided")
+	}
+
+	// Deconstruct parent name to get project, instance and database id
+	parentNameParts := strings.Split(parent, "/")
+	project := parentNameParts[1]
+	instance := parentNameParts[3]
+	databaseId := parentNameParts[5]
+	tableId := parentNameParts[7]
+
+	// "projects/my-project/instances/my-instance/database/my-db"
+	client, err := spanner.NewDatabaseAdminClient(ctx)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+
+	// Get database state
+	database, err := client.GetDatabase(ctx, &databasepb.GetDatabaseRequest{
+		Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId),
+	})
+	if err != nil {
+		return err
+	}
+
+	// Get binding
+	binding, err := s.GetTableIamBinding(ctx, parent, role)
+	if err != nil {
+		return err
+	}
+
+	var permissions []string
+	for _, permission := range binding.Permissions {
+		permissions = append(permissions, permission.String())
+	}
+
+	// CREATE ROLE inventory_admin;
+	var ddlStatements []string
+	if database.GetDatabaseDialect() == databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL {
+		ddlStatements = append(ddlStatements, fmt.Sprintf("REVOKE %s ON TABLE %s FROM ROLE %s", strings.Join(permissions, ", "), tableId, role))
+	}
+	if database.GetDatabaseDialect() == databasepb.DatabaseDialect_POSTGRESQL {
+		ddlStatements = append(ddlStatements, fmt.Sprintf("REVOKE %s ON TABLE %s FROM ROLE %s", strings.Join(permissions, ", "), tableId, role))
+	}
+	updateDatabaseDdlOperation, err := client.UpdateDatabaseDdl(ctx, &databasepb.UpdateDatabaseDdlRequest{
+		Database:   database.GetName(),
+		Statements: ddlStatements,
+	})
+	if err != nil {
+		return err
+	}
+
+	// Wait for LRO to complete
+	err = updateDatabaseDdlOperation.Wait(ctx)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // CreateSpannerTableIndex creates a new Spanner table index.

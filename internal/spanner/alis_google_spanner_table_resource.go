@@ -767,14 +767,15 @@ func (r *spannerTableResource) ValidateConfig(ctx context.Context, req resource.
 				)
 			}
 
-			if column.FileDescriptor.IsNull() {
-				resp.Diagnostics.AddAttributeWarning(
-					path.Root("schema.columns").AtListIndex(i).AtName("file_descriptor"),
-					"Missing Column Configuration",
-					"Expected file_descriptor to be configured for columns of type PROTO. "+
-						"The resource may return unexpected results.",
-				)
-			}
+			// TODO: Uncomment when file_descriptor is required
+			//if column.FileDescriptor.IsNull() {
+			//	resp.Diagnostics.AddAttributeWarning(
+			//		path.Root("schema.columns").AtListIndex(i).AtName("file_descriptor"),
+			//		"Missing Column Configuration",
+			//		"Expected file_descriptor to be configured for columns of type PROTO. "+
+			//			"The resource may return unexpected results.",
+			//	)
+			//}
 		}
 	}
 

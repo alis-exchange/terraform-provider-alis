@@ -9,6 +9,8 @@ description: |-
 
 Authoritative. Sets the IAM policy for the databases and replaces any existing policy already attached.
 
+> NOTE: This resource at the moment offers nothing beyond the standard Google provider. It is recommended to use the standard Google provider for now.
+
 ## Example Usage
 
 ```terraform
