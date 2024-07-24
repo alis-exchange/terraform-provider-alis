@@ -11,7 +11,6 @@ import (
 	"google.golang.org/api/option"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/timestamppb"
 	"terraform-provider-alis/internal/utils"
 )
 
@@ -75,41 +74,6 @@ func (s *DiscoveryEngineService) CreateDiscoveryEngineDatastoreSchema(ctx contex
 		return nil, status.Errorf(codes.Internal, "Error creating Discovery Engine Schema client: %v", err)
 	}
 	defer client.Close()
-
-	ds, err := discoveryengine.NewDataStoreClient(ctx, opts...)
-	ds.CreateDataStore(ctx, &discoveryenginepb.CreateDataStoreRequest{
-		Parent: "",
-		DataStore: &discoveryenginepb.DataStore{
-			Name:             "",
-			DisplayName:      "",
-			IndustryVertical: 0,
-			SolutionTypes:    nil,
-			DefaultSchemaId:  "",
-			ContentConfig:    0,
-			CreateTime: &timestamppb.Timestamp{
-				Seconds: 0,
-				Nanos:   0,
-			},
-			DocumentProcessingConfig: &discoveryenginepb.DocumentProcessingConfig{
-				Name: "",
-				DefaultParsingConfig: &discoveryenginepb.DocumentProcessingConfig_ParsingConfig{
-					TypeDedicatedConfig: &discoveryenginepb.DocumentProcessingConfig_ParsingConfig_OcrParsingConfig_{
-						OcrParsingConfig: &discoveryenginepb.DocumentProcessingConfig_ParsingConfig_OcrParsingConfig{
-							EnhancedDocumentElements: nil,
-							UseNativeText:            false,
-						},
-					},
-				},
-				ParsingConfigOverrides: nil,
-			},
-			StartingSchema: &discoveryenginepb.Schema{
-				Schema: nil,
-				Name:   "",
-			},
-		},
-		DataStoreId:              "",
-		CreateAdvancedSiteSearch: false,
-	})
 
 	createSchemaOperation, err := client.CreateSchema(ctx, &discoveryenginepb.CreateSchemaRequest{
 		// projects/{project}/ locations/{location}/ collections/{collection}/ dataStores/{data_store}

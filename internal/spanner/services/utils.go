@@ -2,10 +2,9 @@ package services
 
 import (
 	"context"
-	"database/sql/driver"
-	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"time"
@@ -15,6 +14,7 @@ import (
 	"cloud.google.com/go/spanner/admin/database/apiv1/databasepb"
 	_ "github.com/googleapis/go-sql-spanner"
 	dynamicstruct "github.com/ompluscator/dynamic-struct"
+	alUtils "go.alis.build/utils"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -27,118 +27,6 @@ import (
 	customdatatypes "terraform-provider-alis/internal/spanner/datatypes"
 	"terraform-provider-alis/internal/utils"
 )
-
-// SpannerTableDataType is a type for Spanner table column data types.
-type SpannerTableDataType int64
-
-const (
-	SpannerTableDataType_BOOL SpannerTableDataType = iota + 1
-	SpannerTableDataType_INT64
-	SpannerTableDataType_FLOAT64
-	SpannerTableDataType_STRING
-	SpannerTableDataType_BYTES
-	SpannerTableDataType_DATE
-	SpannerTableDataType_TIMESTAMP
-	SpannerTableDataType_JSON
-	SpannerTableDataType_PROTO
-	SpannerTableDataType_STRING_ARRAY
-	SpannerTableDataType_INT64_ARRAY
-	SpannerTableDataType_FLOAT32_ARRAY
-	SpannerTableDataType_FLOAT64_ARRAY
-)
-
-func (t SpannerTableDataType) String() string {
-	return [...]string{"BOOL", "INT64", "FLOAT64", "STRING", "BYTES", "DATE", "TIMESTAMP", "JSON", "PROTO",
-		"ARRAY<STRING>", "ARRAY<INT64>", "ARRAY<FLOAT32>", "ARRAY<FLOAT64>"}[t-1]
-}
-
-// SpannerTableDataTypes is a list of all Spanner table column data types.
-var SpannerTableDataTypes = []string{
-	SpannerTableDataType_BOOL.String(),
-	SpannerTableDataType_INT64.String(),
-	SpannerTableDataType_FLOAT64.String(),
-	SpannerTableDataType_STRING.String(),
-	SpannerTableDataType_BYTES.String(),
-	SpannerTableDataType_DATE.String(),
-	SpannerTableDataType_TIMESTAMP.String(),
-	SpannerTableDataType_JSON.String(),
-	SpannerTableDataType_PROTO.String(),
-	SpannerTableDataType_STRING_ARRAY.String(),
-	SpannerTableDataType_INT64_ARRAY.String(),
-	SpannerTableDataType_FLOAT32_ARRAY.String(),
-	SpannerTableDataType_FLOAT64_ARRAY.String(),
-}
-
-type SpannerTableIndexColumnOrder int64
-
-const (
-	SpannerTableIndexColumnOrder_UNSPECIFIED SpannerTableIndexColumnOrder = iota
-	SpannerTableIndexColumnOrder_ASC
-	SpannerTableIndexColumnOrder_DESC
-)
-
-type ProtoFileDescriptorSetSource int64
-
-const (
-	ProtoFileDescriptorSetSourceUNSPECIFIED ProtoFileDescriptorSetSource = iota
-	ProtoFileDescriptorSetSourceGcs
-	ProtoFileDescriptorSetSourceUrl
-)
-
-func (s SpannerTableIndexColumnOrder) String() string {
-	return [...]string{"unspecified", "asc", "desc"}[s]
-}
-
-var SpannerTableIndexColumnOrders = []string{
-	SpannerTableIndexColumnOrder_ASC.String(),
-	SpannerTableIndexColumnOrder_DESC.String(),
-}
-
-type ColumnMetadataMeta struct {
-	Type                        string `json:"type"`
-	Size                        string `json:"size"`
-	Precision                   string `json:"precision"`
-	Scale                       string `json:"scale"`
-	Required                    string `json:"required"`
-	AutoIncrement               string `json:"auto_increment"`
-	Unique                      string `json:"unique"`
-	DefaultValue                string `json:"default_value"`
-	IsPrimaryKey                string `json:"is_primary_key"`
-	ProtoPackage                string `json:"proto_package"`
-	FileDescriptorSetPath       string `json:"file_descriptor_set_path"`
-	FileDescriptorSetPathSource string `json:"file_descriptor_set_path_source"`
-}
-
-// Value returns value of CustomerInfo struct and implements driver.Valuer interface
-func (c *ColumnMetadataMeta) Value() (driver.Value, error) {
-	return json.Marshal(c)
-}
-
-// Scan scans value into Jsonb and implements sql.Scanner interface
-func (c *ColumnMetadataMeta) Scan(value interface{}) error {
-	b, ok := value.([]byte)
-	if !ok {
-		return errors.New("type assertion to []byte failed")
-	}
-	return json.Unmarshal(b, &c)
-}
-
-type ColumnMetadata struct {
-	TableName  string `gorm:"primaryKey"`
-	ColumnName string `gorm:"primaryKey"`
-	Metadata   *ColumnMetadataMeta
-	CreatedAt  time.Time // Automatically managed by GORM for creation time
-	UpdatedAt  time.Time // Automatically managed by GORM for update time
-}
-
-type Index struct {
-	IndexName       string
-	IndexType       string
-	ColumnName      string
-	ColumnOrdering  string
-	IsUnique        bool
-	OrdinalPosition int
-}
 
 func GetIndexes(db *gorm.DB, tableName string) ([]*SpannerTableIndex, error) {
 
@@ -262,64 +150,6 @@ func UpdateColumnMetadata(db *gorm.DB, tableName string, columns []*SpannerTable
 	for _, column := range columns {
 
 		meta := &ColumnMetadataMeta{}
-		//meta["type"] = column.Type
-		//if column.Size != nil {
-		//	meta["size"] = fmt.Sprintf("%d", column.Size.GetValue())
-		//} else {
-		//	meta["size"] = "nil"
-		//}
-		//if column.Precision != nil {
-		//	meta["precision"] = fmt.Sprintf("%d", column.Precision.GetValue())
-		//} else {
-		//	meta["precision"] = "nil"
-		//}
-		//if column.Scale != nil {
-		//	meta["scale"] = fmt.Sprintf("%d", column.Scale.GetValue())
-		//} else {
-		//	meta["scale"] = "nil"
-		//}
-		//if column.Required != nil {
-		//	meta["required"] = fmt.Sprintf("%t", column.Required.GetValue())
-		//} else {
-		//	meta["required"] = "nil"
-		//}
-		//if column.AutoIncrement != nil {
-		//	meta["auto_increment"] = fmt.Sprintf("%t", column.AutoIncrement.GetValue())
-		//} else {
-		//	meta["auto_increment"] = "nil"
-		//}
-		//if column.Unique != nil {
-		//	meta["unique"] = fmt.Sprintf("%t", column.Unique.GetValue())
-		//} else {
-		//	meta["unique"] = "nil"
-		//}
-		//if column.DefaultValue != nil {
-		//	meta["default_value"] = column.DefaultValue.GetValue()
-		//} else {
-		//	meta["default_value"] = "nil"
-		//}
-		//if column.IsPrimaryKey != nil {
-		//	meta["is_primary_key"] = fmt.Sprintf("%t", column.IsPrimaryKey.GetValue())
-		//} else {
-		//	meta["is_primary_key"] = "nil"
-		//}
-		//if column.ProtoFileDescriptorSet != nil {
-		//	if column.ProtoFileDescriptorSet.ProtoPackage != nil {
-		//		meta["proto_package"] = column.ProtoFileDescriptorSet.ProtoPackage.GetValue()
-		//	} else {
-		//		meta["proto_package"] = "nil"
-		//	}
-		//	if column.ProtoFileDescriptorSet.FileDescriptorSetPath != nil {
-		//		meta["file_descriptor_set_path"] = column.ProtoFileDescriptorSet.FileDescriptorSetPath.GetValue()
-		//	} else {
-		//		meta["file_descriptor_set_path"] = "nil"
-		//	}
-		//	if column.ProtoFileDescriptorSet.FileDescriptorSetPathSource != ProtoFileDescriptorSetSourceUNSPECIFIED {
-		//		meta["file_descriptor_set_path_source"] = fmt.Sprintf("%d", column.ProtoFileDescriptorSet.FileDescriptorSetPathSource)
-		//	} else {
-		//		meta["file_descriptor_set_path_source"] = "nil"
-		//	}
-		//}
 		meta.Type = column.Type
 		if column.Size != nil {
 			meta.Size = fmt.Sprintf("%d", column.Size.GetValue())
@@ -351,6 +181,16 @@ func UpdateColumnMetadata(db *gorm.DB, tableName string, columns []*SpannerTable
 		} else {
 			meta.Unique = "nil"
 		}
+		if column.AutoCreateTime != nil {
+			meta.AutoCreateTime = fmt.Sprintf("%t", column.AutoCreateTime.GetValue())
+		} else {
+			meta.AutoCreateTime = "nil"
+		}
+		if column.AutoUpdateTime != nil {
+			meta.AutoUpdateTime = fmt.Sprintf("%t", column.AutoUpdateTime.GetValue())
+		} else {
+			meta.AutoUpdateTime = "nil"
+		}
 		if column.DefaultValue != nil {
 			meta.DefaultValue = column.DefaultValue.GetValue()
 		} else {
@@ -360,6 +200,16 @@ func UpdateColumnMetadata(db *gorm.DB, tableName string, columns []*SpannerTable
 			meta.IsPrimaryKey = fmt.Sprintf("%t", column.IsPrimaryKey.GetValue())
 		} else {
 			meta.IsPrimaryKey = "nil"
+		}
+		if column.IsComputed != nil {
+			meta.IsComputed = fmt.Sprintf("%t", column.IsComputed.GetValue())
+		} else {
+			meta.IsComputed = "nil"
+		}
+		if column.ComputationDdl != nil {
+			meta.ComputationDdl = column.ComputationDdl.GetValue()
+		} else {
+			meta.ComputationDdl = "nil"
 		}
 		if column.ProtoFileDescriptorSet != nil {
 			if column.ProtoFileDescriptorSet.ProtoPackage != nil {
@@ -441,17 +291,6 @@ func ParseSchemaToStruct(schema *SpannerTableSchema) (interface{}, error) {
 	// Create a new dynamic struct
 	instance := dynamicstruct.NewStruct()
 
-	type ColumnIndex struct {
-		Name     string
-		Unique   bool
-		Priority int
-		Order    string
-	}
-
-	type ColumnIndices struct {
-		Indices []*ColumnIndex
-	}
-
 	// Iterate over the columns and add them to the struct
 	for _, column := range schema.Columns {
 		// `gorm:"column"`
@@ -472,35 +311,112 @@ func ParseSchemaToStruct(schema *SpannerTableSchema) (interface{}, error) {
 		if column.IsPrimaryKey != nil && column.IsPrimaryKey.GetValue() {
 			gormTags = append(gormTags, "primaryKey")
 		}
-		// Set auto increment
-		if column.AutoIncrement != nil && column.AutoIncrement.GetValue() {
-			gormTags = append(gormTags, "autoIncrement:true")
+
+		// Check if the column is a PROTO type column
+		// Since we override the column type, the gorm generated DDL gets a bit distorted,
+		// for this reason, we'll set the column type and other arguments manually using the `type` gorm tag
+		if column.Type == SpannerTableDataType_PROTO.String() &&
+			column.ProtoFileDescriptorSet != nil &&
+			column.ProtoFileDescriptorSet.ProtoPackage != nil &&
+			column.ProtoFileDescriptorSet.ProtoPackage.GetValue() != "" {
+			// Set the column type manually since we'll be overriding it using the `type` gorm tag
+			columnTypeArgs := ""
+
+			{
+				// Set the appropriate column type
+				columnTypeArgs += column.ProtoFileDescriptorSet.ProtoPackage.GetValue()
+			}
+
+			{
+				// Set nullable
+				if column.Required != nil && column.Required.GetValue() {
+					columnTypeArgs += " NOT NULL"
+				}
+			}
+
+			gormTags = append(gormTags, fmt.Sprintf("type: %s", columnTypeArgs))
+		} else if column.IsComputed != nil && column.IsComputed.GetValue() && column.ComputationDdl != nil && column.ComputationDdl.GetValue() != "" {
+			// Check if the column is computed
+			// Since we override the column type, the gorm generated DDL gets a bit distorted,
+			// for this reason, we'll set the column type and other arguments manually using the `type` gorm tag
+
+			// Set the column type manually since we'll be overriding it using the `type` gorm tag
+			columnTypeArgs := ""
+
+			{
+				// Set the appropriate column type
+				switch column.Type {
+				// For PROTO column types we need to set the type as the proto package name
+				case SpannerTableDataType_PROTO.String():
+					if column.ProtoFileDescriptorSet != nil && column.ProtoFileDescriptorSet.ProtoPackage != nil {
+						columnTypeArgs += column.ProtoFileDescriptorSet.ProtoPackage.GetValue()
+					}
+				default:
+					columnTypeArgs += column.Type
+				}
+			}
+
+			{
+				// Set size for STRING and BYTES columns
+				size := "MAX"
+				if column.Size != nil {
+					size = fmt.Sprintf("%d", column.Size.GetValue())
+				}
+				switch columnTypeArgs {
+				case SpannerTableDataType_STRING.String(), SpannerTableDataType_BYTES.String():
+					columnTypeArgs += fmt.Sprintf("(%s)", size)
+				}
+			}
+
+			{
+				// Set nullable
+				if column.Required != nil && column.Required.GetValue() {
+					columnTypeArgs += " NOT NULL"
+				}
+			}
+
+			// TODO: Should we support default values for computed columns?
+
+			gormTags = append(gormTags, fmt.Sprintf("type: %s AS (%s) STORED", columnTypeArgs, column.ComputationDdl.GetValue()))
 		} else {
-			gormTags = append(gormTags, "autoIncrement:false")
-		}
-		// Check if unique is set
-		if column.Unique != nil && column.Unique.GetValue() {
-			gormTags = append(gormTags, "unique")
-		}
-		// Check if a default value is set
-		if column.DefaultValue != nil && column.DefaultValue.GetValue() != "" {
-			gormTags = append(gormTags, fmt.Sprintf("default:%v", column.DefaultValue.GetValue()))
-		}
-		// Check if size is specified
-		if column.Size != nil {
-			gormTags = append(gormTags, fmt.Sprintf("size:%v", column.Size.GetValue()))
-		}
-		// Check if precision is specified
-		if column.Precision != nil {
-			gormTags = append(gormTags, fmt.Sprintf("precision:%v", column.Precision.GetValue()))
-		}
-		// Check if scale is specified
-		if column.Scale != nil {
-			gormTags = append(gormTags, fmt.Sprintf("scale:%v", column.Scale.GetValue()))
-		}
-		// Check if the column is nullable
-		if column.Required != nil && column.Required.GetValue() {
-			gormTags = append(gormTags, "not null")
+			// Set auto increment
+			if column.AutoIncrement != nil && column.AutoIncrement.GetValue() {
+				gormTags = append(gormTags, "autoIncrement:true")
+			} else {
+				gormTags = append(gormTags, "autoIncrement:false")
+			}
+			// Check if unique is set
+			if column.Unique != nil && column.Unique.GetValue() {
+				gormTags = append(gormTags, "unique")
+			}
+			// Set auto create
+			if column.AutoCreateTime != nil && column.AutoCreateTime.GetValue() {
+				gormTags = append(gormTags, "autoCreateTime:nano")
+			}
+			// Set auto update
+			if column.AutoUpdateTime != nil && column.AutoUpdateTime.GetValue() {
+				gormTags = append(gormTags, "autoUpdateTime:nano")
+			}
+			// Check if a default value is set
+			if column.DefaultValue != nil && column.DefaultValue.GetValue() != "" {
+				gormTags = append(gormTags, fmt.Sprintf("default:%v", column.DefaultValue.GetValue()))
+			}
+			// Check if size is specified
+			if column.Size != nil {
+				gormTags = append(gormTags, fmt.Sprintf("size:%v", column.Size.GetValue()))
+			}
+			// Check if precision is specified
+			if column.Precision != nil {
+				gormTags = append(gormTags, fmt.Sprintf("precision:%v", column.Precision.GetValue()))
+			}
+			// Check if scale is specified
+			if column.Scale != nil {
+				gormTags = append(gormTags, fmt.Sprintf("scale:%v", column.Scale.GetValue()))
+			}
+			// Check if the column is nullable
+			if column.Required != nil && column.Required.GetValue() {
+				gormTags = append(gormTags, "not null")
+			}
 		}
 
 		tags := strings.Join(gormTags, ";")
@@ -524,13 +440,13 @@ func ParseSchemaToStruct(schema *SpannerTableSchema) (interface{}, error) {
 		case SpannerTableDataType_JSON.String():
 			instance.AddField(pascalCaseColumnName, spanner.NullJSON{}, fmt.Sprintf("gorm:\"%s\"", tags))
 		case SpannerTableDataType_PROTO.String():
-			// TODO: Implement this when support for proto is added
-			//	msg, err := utils.MessageFromFileDescriptorSet(column.ProtoFileDescriptorSet.ProtoPackage.GetValue(), column.ProtoFileDescriptorSet.fileDescriptorSet)
-			//	if err != nil {
-			//		return nil, status.Errorf(codes.Internal, "Error getting message from file descriptor set: %v", err)
-			//	}
+			// TODO: Revisit implementation later
+			//msg, err := utils.MessageFromFileDescriptorSet(column.ProtoFileDescriptorSet.ProtoPackage.GetValue(), column.ProtoFileDescriptorSet.fileDescriptorSet)
+			//if err != nil {
+			//	return nil, status.Errorf(codes.Internal, "Error getting message from file descriptor set: %v", err)
+			//}
 			//
-			//	instance.AddField(pascalCaseColumnName, msg, fmt.Sprintf("gorm:\"%s\"", tags))
+			instance.AddField(pascalCaseColumnName, customdatatypes.ProtoMessage{}, fmt.Sprintf("gorm:\"%s\"", tags))
 		case SpannerTableDataType_STRING_ARRAY.String():
 			instance.AddField(pascalCaseColumnName, customdatatypes.StringArray{}, fmt.Sprintf("gorm:\"%s\"", tags))
 		case SpannerTableDataType_INT64_ARRAY.String():
@@ -588,6 +504,33 @@ func CreateProtoBundle(ctx context.Context, databaseName string, protoPackageNam
 		return err
 	}
 
+	var getNestedProtoPackageNames func(ctx context.Context, desc protoreflect.Descriptor) ([]string, error)
+	getNestedProtoPackageNames = func(ctx context.Context, desc protoreflect.Descriptor) ([]string, error) {
+		var protoPackageNames []string
+		switch d := desc.(type) {
+		case protoreflect.MessageDescriptor:
+			// Add the proto package name
+			protoPackageNames = append(protoPackageNames, fmt.Sprintf("%s", d.FullName()))
+
+			// Add the proto package names for the enums
+			for i := 0; i < d.Enums().Len(); i++ {
+				protoPackageNames = append(protoPackageNames, fmt.Sprintf("%s", d.Enums().Get(i).FullName()))
+			}
+
+			// Add the proto package names for the nested messages
+			for i := 0; i < d.Messages().Len(); i++ {
+				nestedProtoPackageNames, err := getNestedProtoPackageNames(ctx, d.Messages().Get(i))
+				if err != nil {
+					return nil, err
+				}
+
+				protoPackageNames = append(protoPackageNames, nestedProtoPackageNames...)
+			}
+		}
+
+		return protoPackageNames, nil
+	}
+
 	// Unmarshal the proto file descriptor set
 	fds := &descriptorpb.FileDescriptorSet{}
 	if err := proto.Unmarshal(descriptorSet, fds); err != nil {
@@ -605,21 +548,12 @@ func CreateProtoBundle(ctx context.Context, databaseName string, protoPackageNam
 	}
 
 	// TODO: Revisit later
-	switch d := desc.(type) {
-	case protoreflect.MessageDescriptor:
-		_ = d
-		//enums := d.Enums()
-		//for i := 0; i < enums.Len(); i++ {
-		//	if err := CreateProtoBundle(ctx, databaseName, fmt.Sprintf("%s", enums.Get(i).FullName()), descriptorSet); err != nil {
-		//		return err
-		//	}
-		//}
-
-		//messages := d.Messages()
-		//for i := 0; i < messages.Len(); i++ {
-		//
-		//}
+	nestedProtoPackageNames, err := getNestedProtoPackageNames(ctx, desc)
+	if err != nil {
+		return err
 	}
+
+	log.Printf("nestedProtoPackageNames: %v", nestedProtoPackageNames)
 
 	updateDatabaseDdl := func(ctx context.Context, databaseName string, statements []string, descriptorSet []byte) error {
 		// Create the proto bundle
@@ -635,7 +569,11 @@ func CreateProtoBundle(ctx context.Context, databaseName string, protoPackageNam
 		return updateDdlOp.Wait(ctx)
 	}
 
-	createStatement := fmt.Sprintf("CREATE PROTO BUNDLE (`%s`)", protoPackageName)
+	formattedNestedProtoPackageNames := alUtils.Transform(nestedProtoPackageNames, func(name string) string {
+		return fmt.Sprintf("`%s`", name)
+	})
+
+	createStatement := fmt.Sprintf("CREATE PROTO BUNDLE (%s)", strings.Join(formattedNestedProtoPackageNames, ", "))
 	err = updateDatabaseDdl(ctx, databaseName, []string{createStatement}, descriptorSet)
 	if err != nil {
 		if status.Code(err) != codes.AlreadyExists && status.Code(err) != codes.InvalidArgument {
@@ -643,7 +581,7 @@ func CreateProtoBundle(ctx context.Context, databaseName string, protoPackageNam
 		}
 
 		// Try to insert the proto bundle
-		insertStatement := fmt.Sprintf("ALTER PROTO BUNDLE INSERT (%s)", protoPackageName)
+		insertStatement := fmt.Sprintf("ALTER PROTO BUNDLE INSERT (%s)", strings.Join(formattedNestedProtoPackageNames, ", "))
 		err = updateDatabaseDdl(ctx, databaseName, []string{insertStatement}, descriptorSet)
 		if err != nil {
 			if status.Code(err) != codes.AlreadyExists && status.Code(err) != codes.InvalidArgument {
@@ -651,7 +589,7 @@ func CreateProtoBundle(ctx context.Context, databaseName string, protoPackageNam
 			}
 
 			// Try to update the proto bundle
-			updateStatement := fmt.Sprintf("ALTER PROTO BUNDLE UPDATE (`%s`)", protoPackageName)
+			updateStatement := fmt.Sprintf("ALTER PROTO BUNDLE UPDATE (%s)", strings.Join(formattedNestedProtoPackageNames, ", "))
 			err = updateDatabaseDdl(ctx, databaseName, []string{updateStatement}, descriptorSet)
 			if err != nil {
 				return err

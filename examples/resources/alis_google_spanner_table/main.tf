@@ -67,6 +67,12 @@ resource "alis_google_spanner_table" "test" {
         file_descriptor = "gcs:gs://path/to/my/descriptorset.pb",
       },
       {
+        name            = "computed_column",
+        type            = "STRING",
+        is_computed     = true,
+        computation_ddl = "proto_test.example_field",
+      },
+      {
         name = "arr_str",
         type = "ARRAY<STRING>",
       },

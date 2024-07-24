@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -22,6 +23,8 @@ import (
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
+	custom_loggers "terraform-provider-alis/internal/spanner/logger"
 	"terraform-provider-alis/internal/utils"
 )
 
@@ -1057,6 +1060,7 @@ func (s *SpannerService) CreateSpannerTable(ctx context.Context, parent string, 
 		),
 		&gorm.Config{
 			PrepareStmt: true,
+			Logger:      custom_loggers.New(logger.Info),
 		},
 	)
 	if err != nil {
@@ -1108,23 +1112,6 @@ func (s *SpannerService) CreateSpannerTable(ctx context.Context, parent string, 
 		return nil, status.Errorf(codes.Internal, "Error creating table: %v", err)
 	}
 
-	// Add proto columns
-	for _, column := range table.Schema.Columns {
-		if column.Type != SpannerTableDataType_PROTO.String() {
-			continue
-		}
-
-		resExec := db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", tableId, column.Name, column.ProtoFileDescriptorSet.ProtoPackage.GetValue()))
-		if resExec.Error != nil {
-			// Drop table if error occurs
-			if _, err := s.DeleteSpannerTable(ctx, table.Name); err != nil {
-				return nil, status.Errorf(codes.Internal, "Error adding proto column: %v", resExec.Error)
-			}
-
-			return nil, status.Errorf(codes.Internal, "Error adding proto column: %v", resExec.Error)
-		}
-	}
-
 	if err := UpdateColumnMetadata(db, tableId, table.Schema.Columns); err != nil {
 		return nil, status.Errorf(codes.Internal, "Error updating column metadata table: %v", err)
 	}
@@ -1169,6 +1156,7 @@ func (s *SpannerService) GetSpannerTable(ctx context.Context, name string) (*Spa
 		),
 		&gorm.Config{
 			PrepareStmt: true,
+			Logger:      custom_loggers.New(logger.Info),
 		},
 	)
 	if err != nil {
@@ -1213,6 +1201,21 @@ func (s *SpannerService) GetSpannerTable(ctx context.Context, name string) (*Spa
 				column.IsPrimaryKey = wrapperspb.Bool(false)
 			}
 
+			// Populate computed if present
+			switch metadata.Metadata.IsComputed {
+			case "true":
+				column.IsComputed = wrapperspb.Bool(true)
+			case "false":
+				column.IsComputed = wrapperspb.Bool(false)
+			}
+
+			// Populate computation ddl if present
+			switch metadata.Metadata.ComputationDdl {
+			case "nil":
+			default:
+				column.ComputationDdl = wrapperspb.String(metadata.Metadata.ComputationDdl)
+			}
+
 			// Populate auto increment
 			switch metadata.Metadata.AutoIncrement {
 			case "true":
@@ -1227,6 +1230,22 @@ func (s *SpannerService) GetSpannerTable(ctx context.Context, name string) (*Spa
 				column.Unique = wrapperspb.Bool(true)
 			case "false":
 				column.Unique = wrapperspb.Bool(false)
+			}
+
+			// Populate auto create time if present
+			switch metadata.Metadata.AutoCreateTime {
+			case "true":
+				column.AutoCreateTime = wrapperspb.Bool(true)
+			case "false":
+				column.AutoCreateTime = wrapperspb.Bool(false)
+			}
+
+			// Populate auto update time if present
+			switch metadata.Metadata.AutoUpdateTime {
+			case "true":
+				column.AutoUpdateTime = wrapperspb.Bool(true)
+			case "false":
+				column.AutoUpdateTime = wrapperspb.Bool(false)
 			}
 
 			// Populate size if present
@@ -1403,6 +1422,7 @@ func (s *SpannerService) ListSpannerTables(ctx context.Context, parent string) (
 		),
 		&gorm.Config{
 			PrepareStmt: true,
+			Logger:      custom_loggers.New(logger.Info),
 		},
 	)
 	if err != nil {
@@ -1545,6 +1565,7 @@ func (s *SpannerService) UpdateSpannerTable(ctx context.Context, table *SpannerT
 		),
 		&gorm.Config{
 			PrepareStmt: true,
+			Logger:      custom_loggers.New(logger.Info),
 		},
 	)
 	if err != nil {
@@ -1653,6 +1674,15 @@ func (s *SpannerService) UpdateSpannerTable(ctx context.Context, table *SpannerT
 
 	// If there are removed columns, drop them
 	if len(removedColumns) > 0 {
+		// Sort removedColumns so that computed columns are deleted first
+		sort.SliceStable(removedColumns, func(i, j int) bool {
+			if removedColumns[i].IsComputed == nil {
+				return false
+			}
+
+			return removedColumns[i].IsComputed.GetValue()
+		})
+
 		for _, column := range removedColumns {
 			err = db.Table(tableId).Migrator().DropColumn(&structInstance, column.Name)
 			if err != nil {
@@ -1669,30 +1699,6 @@ func (s *SpannerService) UpdateSpannerTable(ctx context.Context, table *SpannerT
 	err = db.Table(tableId).Migrator().AutoMigrate(&structInstance)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "Error updating table: %v", err)
-	}
-
-	// Add new proto columns
-	for _, column := range addedColumns {
-		if column.Type != SpannerTableDataType_PROTO.String() {
-			continue
-		}
-
-		resExec := db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", tableId, column.Name, column.ProtoFileDescriptorSet.ProtoPackage.GetValue()))
-		if resExec.Error != nil {
-			return nil, status.Errorf(codes.Internal, "Error adding proto column: %v", resExec.Error)
-		}
-	}
-
-	// Update existing proto columns
-	for _, column := range updatedColumns {
-		if column.Type != SpannerTableDataType_PROTO.String() {
-			continue
-		}
-
-		resExec := db.Exec(fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s %s", tableId, column.Name, column.ProtoFileDescriptorSet.ProtoPackage.GetValue()))
-		if resExec.Error != nil {
-			return nil, status.Errorf(codes.Internal, "Error updating proto column: %v", resExec.Error)
-		}
 	}
 
 	if err := UpdateColumnMetadata(db, tableId, table.Schema.Columns); err != nil {
@@ -1739,6 +1745,7 @@ func (s *SpannerService) DeleteSpannerTable(ctx context.Context, name string) (*
 		),
 		&gorm.Config{
 			PrepareStmt: true,
+			Logger:      custom_loggers.New(logger.Info),
 		},
 	)
 	if err != nil {
@@ -1865,6 +1872,7 @@ func (s *SpannerService) GetTableIamBinding(ctx context.Context, parent string, 
 		),
 		&gorm.Config{
 			PrepareStmt: true,
+			Logger:      custom_loggers.New(logger.Info),
 		},
 	)
 	if err != nil {
@@ -2022,6 +2030,7 @@ func (s *SpannerService) CreateSpannerTableIndex(ctx context.Context, parent str
 		),
 		&gorm.Config{
 			PrepareStmt: true,
+			Logger:      custom_loggers.New(logger.Info),
 		},
 	)
 	if err != nil {
@@ -2081,6 +2090,7 @@ func (s *SpannerService) GetSpannerTableIndex(ctx context.Context, parent string
 		),
 		&gorm.Config{
 			PrepareStmt: true,
+			Logger:      custom_loggers.New(logger.Info),
 		},
 	)
 	if err != nil {
@@ -2132,6 +2142,7 @@ func (s *SpannerService) ListSpannerTableIndices(ctx context.Context, parent str
 		),
 		&gorm.Config{
 			PrepareStmt: true,
+			Logger:      custom_loggers.New(logger.Info),
 		},
 	)
 	if err != nil {
@@ -2185,6 +2196,7 @@ func (s *SpannerService) DeleteSpannerTableIndex(ctx context.Context, parent str
 		),
 		&gorm.Config{
 			PrepareStmt: true,
+			Logger:      custom_loggers.New(logger.Info),
 		},
 	)
 	if err != nil {
@@ -2267,6 +2279,7 @@ func (s *SpannerService) CreateSpannerTableForeignKeysConstraint(ctx context.Con
 		),
 		&gorm.Config{
 			PrepareStmt: true,
+			Logger:      custom_loggers.New(logger.Info),
 		},
 	)
 	if err != nil {

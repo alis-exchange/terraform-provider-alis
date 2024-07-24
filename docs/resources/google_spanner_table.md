@@ -83,6 +83,12 @@ resource "alis_google_spanner_table" "test" {
         file_descriptor = "gcs:gs://path/to/my/descriptorset.pb",
       },
       {
+        name            = "computed_column",
+        type            = "STRING",
+        is_computed     = true,
+        computation_ddl = "proto_test.example_field",
+      },
+      {
         name = "arr_str",
         type = "ARRAY<STRING>",
       },
@@ -141,6 +147,10 @@ Optional:
 
 - `auto_increment` (Boolean) Indicates if the column is auto-incrementing.
 The column must be of type `INT64` or `FLOAT64`.
+- `computation_ddl` (String) The DDL expression for the computed column.
+This is only applicable to columns where `is_computed` is true.
+The expression must be a valid SQL expression that generates a value for the column.
+Example: `column1 + column2`, or `proto_column.field`.
 - `default_value` (String) The default value of the column.
 The default value must be compatible with the column type.
 For example, a default value of "true" is valid for a `BOOL` or `STRING` column, but not for an `INT64` column.
@@ -148,12 +158,17 @@ For example, a default value of "true" is valid for a `BOOL` or `STRING` column,
 The file descriptor set must be a valid file descriptor set containing the specified `proto_package`.
 The path must point to a valid `.pb` file.
 You can generate one using the `protoc` compiler. See https://cloud.google.com/spanner/docs/reference/standard-sql/protocol-buffers#create_a_protocol_buffer.
-This field is only required for columns of type `PROTO`.
+This field is only compatible for columns of type `PROTO`.
+**This field is not required if the database is already populated with the necessary proto bundles.**
 One of the following prefixes must be used to indicate the location of the file descriptor set:
 	- **gcs:** - Indicates the file is stored in a Google Cloud Storage Bucket.
 	Example: "gcs:gs://path/to/your/file.pb".
 	- **url:** - **Experimental**. Indicates the file is stored on a remote server accessible via HTTPS.
 	Example: "url:https://path/to/your/file.pb".
+- `is_computed` (Boolean) Indicates if the column is a computed column.
+Computed columns are generated values based on other columns in the table.
+A common use case is to generate a column from a PROTO column field.
+This should be accompanied by a `computation_ddl` field.
 - `is_primary_key` (Boolean) Indicates if the column is part of the primary key.
 Multiple columns can be specified as primary keys to create a composite primary key.
 Primary key columns must be non-null.

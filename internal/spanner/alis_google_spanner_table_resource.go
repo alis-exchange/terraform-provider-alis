@@ -57,6 +57,8 @@ type spannerTableSchema struct {
 type spannerTableColumn struct {
 	Name           types.String `tfsdk:"name"`
 	IsPrimaryKey   types.Bool   `tfsdk:"is_primary_key"`
+	IsComputed     types.Bool   `tfsdk:"is_computed"`
+	ComputationDdl types.String `tfsdk:"computation_ddl"`
 	AutoIncrement  types.Bool   `tfsdk:"auto_increment"`
 	Unique         types.Bool   `tfsdk:"unique"`
 	Type           types.String `tfsdk:"type"`
@@ -73,6 +75,8 @@ func (o spannerTableColumn) attrTypes() map[string]attr.Type {
 	return map[string]attr.Type{
 		"name":            types.StringType,
 		"is_primary_key":  types.BoolType,
+		"is_computed":     types.BoolType,
+		"computation_ddl": types.StringType,
 		"auto_increment":  types.BoolType,
 		"unique":          types.BoolType,
 		"type":            types.StringType,
@@ -160,6 +164,20 @@ func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaReques
 										"Multiple columns can be specified as primary keys to create a composite primary key.\n" +
 										"Primary key columns must be non-null.",
 								},
+								"is_computed": schema.BoolAttribute{
+									Optional: true,
+									Description: "Indicates if the column is a computed column.\n" +
+										"Computed columns are generated values based on other columns in the table.\n" +
+										"A common use case is to generate a column from a PROTO column field.\n" +
+										"This should be accompanied by a `computation_ddl` field.",
+								},
+								"computation_ddl": schema.StringAttribute{
+									Optional: true,
+									Description: "The DDL expression for the computed column.\n" +
+										"This is only applicable to columns where `is_computed` is true.\n" +
+										"The expression must be a valid SQL expression that generates a value for the column.\n" +
+										"Example: `column1 + column2`, or `proto_column.field`.",
+								},
 								"auto_increment": schema.BoolAttribute{
 									Optional: true,
 									Description: "Indicates if the column is auto-incrementing.\n" +
@@ -215,7 +233,8 @@ func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaReques
 										"The file descriptor set must be a valid file descriptor set containing the specified `proto_package`.\n" +
 										"The path must point to a valid `.pb` file.\n" +
 										"You can generate one using the `protoc` compiler. See https://cloud.google.com/spanner/docs/reference/standard-sql/protocol-buffers#create_a_protocol_buffer.\n" +
-										"This field is only required for columns of type `PROTO`.\n" +
+										"This field is only compatible for columns of type `PROTO`.\n" +
+										"**This field is not required if the database is already populated with the necessary proto bundles.**\n" +
 										"One of the following prefixes must be used to indicate the location of the file descriptor set:\n" +
 										"	- **gcs:** - Indicates the file is stored in a Google Cloud Storage Bucket.\n" +
 										"	Example: \"gcs:gs://path/to/your/file.pb\".\n" +
@@ -288,6 +307,16 @@ func (r *spannerTableResource) Create(ctx context.Context, req resource.CreateRe
 				// Populate is primary key
 				if !column.IsPrimaryKey.IsNull() {
 					col.IsPrimaryKey = wrapperspb.Bool(column.IsPrimaryKey.ValueBool())
+				}
+
+				// Populate is computed
+				if !column.IsComputed.IsNull() {
+					col.IsComputed = wrapperspb.Bool(column.IsComputed.ValueBool())
+				}
+
+				// Populate computation ddl
+				if !column.ComputationDdl.IsNull() {
+					col.ComputationDdl = wrapperspb.String(column.ComputationDdl.ValueString())
 				}
 
 				// Populate auto increment
@@ -443,6 +472,16 @@ func (r *spannerTableResource) Read(ctx context.Context, req resource.ReadReques
 					col.IsPrimaryKey = types.BoolValue(column.IsPrimaryKey.GetValue())
 				}
 
+				// Get computed
+				if column.IsComputed != nil {
+					col.IsComputed = types.BoolValue(column.IsComputed.GetValue())
+				}
+
+				// Get computation ddl
+				if column.ComputationDdl != nil {
+					col.ComputationDdl = types.StringValue(column.ComputationDdl.GetValue())
+				}
+
 				// Get auto increment
 				if column.AutoIncrement != nil {
 					col.AutoIncrement = types.BoolValue(column.AutoIncrement.GetValue())
@@ -569,6 +608,16 @@ func (r *spannerTableResource) Update(ctx context.Context, req resource.UpdateRe
 				// Populate is primary key
 				if !column.IsPrimaryKey.IsNull() {
 					col.IsPrimaryKey = wrapperspb.Bool(column.IsPrimaryKey.ValueBool())
+				}
+
+				// Populate is computed
+				if !column.IsComputed.IsNull() {
+					col.IsComputed = wrapperspb.Bool(column.IsComputed.ValueBool())
+				}
+
+				// Populate computation ddl
+				if !column.ComputationDdl.IsNull() {
+					col.ComputationDdl = wrapperspb.String(column.ComputationDdl.ValueString())
 				}
 
 				// Populate auto increment
@@ -762,7 +811,6 @@ func (r *spannerTableResource) ValidateConfig(ctx context.Context, req resource.
 		return
 	}
 
-	// If column type is PROTO, check if proto_package and file_descriptor are provided
 	columns := make([]spannerTableColumn, 0, len(data.Schema.Columns.Elements()))
 	d := data.Schema.Columns.ElementsAs(ctx, &columns, false)
 	resp.Diagnostics.Append(d...)
@@ -771,6 +819,7 @@ func (r *spannerTableResource) ValidateConfig(ctx context.Context, req resource.
 	}
 
 	for i, column := range columns {
+		// If column type is PROTO, check if proto_package and file_descriptor are provided
 		if column.Type.ValueString() == "PROTO" {
 			if column.ProtoPackage.IsNull() {
 				resp.Diagnostics.AddAttributeWarning(
@@ -790,6 +839,18 @@ func (r *spannerTableResource) ValidateConfig(ctx context.Context, req resource.
 			//			"The resource may return unexpected results.",
 			//	)
 			//}
+		}
+
+		// If column is computed, check if computation_ddl is provided
+		if !column.IsComputed.IsNull() && column.IsComputed.ValueBool() {
+			if column.ComputationDdl.IsNull() || column.ComputationDdl.ValueString() == "" {
+				resp.Diagnostics.AddAttributeWarning(
+					path.Root("schema.columns").AtListIndex(i).AtName("computation_ddl"),
+					"Missing Column Configuration",
+					"Expected computation_ddl to be configured for computed columns. "+
+						"The resource may return unexpected results.",
+				)
+			}
 		}
 	}
 

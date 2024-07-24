@@ -344,7 +344,7 @@ func TestCreateSpannerTable(t *testing.T) {
 			name: "Test_CreateSpannerTable",
 			args: args{
 				ctx:     context.Background(),
-				parent:  fmt.Sprintf("projects/%s/instances/%s/databases/%s", TestProject, TestInstance, "tf-test"),
+				parent:  fmt.Sprintf("projects/%s/instances/%s/databases/%s", TestProject, TestInstance, "alis_px_dev_cmk"),
 				tableId: "tftest",
 				table: &SpannerTable{
 					Name: "tftest",
@@ -352,90 +352,33 @@ func TestCreateSpannerTable(t *testing.T) {
 						Columns: []*SpannerTableColumn{
 							{
 								Name:         "id",
-								IsPrimaryKey: wrapperspb.Bool(false),
+								IsPrimaryKey: wrapperspb.Bool(true),
 								Unique:       wrapperspb.Bool(false),
 								Type:         "INT64",
 								Size:         wrapperspb.Int64(255),
 								Required:     wrapperspb.Bool(true),
 							},
-							//{
-							//	Name:         "display_name",
-							//	IsPrimaryKey: wrapperspb.Bool(false),
-							//	Unique:       wrapperspb.Bool(false),
-							//	Type:         "STRING",
-							//	Size:         wrapperspb.Int64(255),
-							//},
-							//{
-							//	Name:         "is_active",
-							//	IsPrimaryKey: wrapperspb.Bool(false),
-							//	Unique:       wrapperspb.Bool(false),
-							//	Type:         "BOOL",
-							//},
-							//{
-							//	Name:         "latest_return",
-							//	IsPrimaryKey: wrapperspb.Bool(false),
-							//	Unique:       wrapperspb.Bool(false),
-							//	Type:         "FLOAT64",
-							//	DefaultValue: wrapperspb.String("0.0"),
-							//},
 							{
-								Name:         "inception_date",
+								Name:         "portfolio",
 								IsPrimaryKey: wrapperspb.Bool(false),
 								Unique:       wrapperspb.Bool(false),
-								Type:         "DATE",
-							},
-							//{
-							//	Name:         "last_refreshed_at",
-							//	IsPrimaryKey: wrapperspb.Bool(false),
-							//	Unique:       wrapperspb.Bool(false),
-							//	Type:         "TIMESTAMP",
-							//},
-							{
-								Name:         "metadata",
-								IsPrimaryKey: wrapperspb.Bool(false),
-								Unique:       wrapperspb.Bool(false),
-								Type:         "JSON",
-							},
-							//{
-							//	Name:         "data",
-							//	IsPrimaryKey: wrapperspb.Bool(false),
-							//	Unique:       wrapperspb.Bool(false),
-							//	Type:         "BYTES",
-							//},
-							//{
-							//	Name:         "proto_test",
-							//	IsPrimaryKey: wrapperspb.Bool(false),
-							//	Unique:       wrapperspb.Bool(false),
-							//	Type:         "PROTO",
-							//	ProtoFileDescriptorSet: &ProtoFileDescriptorSet{
-							//		ProtoPackage:                wrapperspb.String("alis.px.resources.portfolios.v1.NAVCommit"),
-							//		FileDescriptorSetPath:       wrapperspb.String("gcs:gs://internal.descriptorset.alis-px-product-g51dmvo.alis.services/descriptorset.pb"),
-							//		FileDescriptorSetPathSource: ProtoFileDescriptorSetSourceGcs,
-							//	},
-							//},
-							{
-								Name:         "arr_test",
-								IsPrimaryKey: wrapperspb.Bool(false),
-								Unique:       wrapperspb.Bool(false),
-								Type:         "ARRAY<STRING>",
+								Type:         "PROTO",
+								ProtoFileDescriptorSet: &ProtoFileDescriptorSet{
+									ProtoPackage:                wrapperspb.String("alis.px.resources.portfolios.v1.Portfolio"),
+									FileDescriptorSetPath:       wrapperspb.String("gcs:gs://internal.descriptorset.alis-px-product-g51dmvo.alis.services/descriptorset.pb"),
+									FileDescriptorSetPathSource: ProtoFileDescriptorSetSourceGcs,
+								},
 							},
 							{
-								Name:         "arr_test_fl32",
-								IsPrimaryKey: wrapperspb.Bool(false),
-								Unique:       wrapperspb.Bool(false),
-								Type:         "ARRAY<FLOAT32>",
-							},
-							{
-								Name:         "arr_test_fl64",
-								IsPrimaryKey: wrapperspb.Bool(false),
-								Unique:       wrapperspb.Bool(false),
-								Type:         "ARRAY<FLOAT64>",
-							},
-							{
-								Name:         "arr_test_int64",
-								IsPrimaryKey: wrapperspb.Bool(false),
-								Unique:       wrapperspb.Bool(false),
-								Type:         "ARRAY<INT64>",
+								Name:           "portfolio_name",
+								IsPrimaryKey:   wrapperspb.Bool(true),
+								Unique:         wrapperspb.Bool(false),
+								Type:           "STRING",
+								IsComputed:     wrapperspb.Bool(true),
+								ComputationDdl: wrapperspb.String("portfolio.name"),
+								Required:       wrapperspb.Bool(true),
+								Size:           wrapperspb.Int64(255),
+								DefaultValue:   wrapperspb.String("default"),
 							},
 						},
 					},
@@ -471,7 +414,7 @@ func TestGetSpannerTable(t *testing.T) {
 			name: "Test_GetSpannerTable",
 			args: args{
 				ctx:  context.Background(),
-				name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "tf-test", "tftest"),
+				name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "alis_px_dev_cmk", "tftest"),
 			},
 			want:    &SpannerTable{},
 			wantErr: false,
@@ -508,93 +451,38 @@ func TestUpdateSpannerTable(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				table: &SpannerTable{
-					Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "tf-test", "tftest"),
+					Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "alis_px_dev_cmk", "tftest"),
 					Schema: &SpannerTableSchema{
 						Columns: []*SpannerTableColumn{
 							{
 								Name:         "id",
-								IsPrimaryKey: wrapperspb.Bool(false),
+								IsPrimaryKey: wrapperspb.Bool(true),
 								Unique:       wrapperspb.Bool(false),
 								Type:         "INT64",
 								Size:         wrapperspb.Int64(255),
 								Required:     wrapperspb.Bool(true),
 							},
 							{
-								Name:         "display_name",
-								IsPrimaryKey: wrapperspb.Bool(false),
-								Unique:       wrapperspb.Bool(false),
-								Type:         "STRING",
-								Size:         wrapperspb.Int64(255),
-							},
-							{
-								Name:         "is_active",
-								IsPrimaryKey: wrapperspb.Bool(false),
-								Unique:       wrapperspb.Bool(false),
-								Type:         "BOOL",
-							},
-							{
-								Name:         "latest_return",
-								IsPrimaryKey: wrapperspb.Bool(false),
-								Unique:       wrapperspb.Bool(false),
-								Type:         "FLOAT64",
-								DefaultValue: wrapperspb.String("0.0"),
-							},
-							{
-								Name:         "inception_date",
-								IsPrimaryKey: wrapperspb.Bool(false),
-								Unique:       wrapperspb.Bool(false),
-								Type:         "DATE",
-							},
-							{
-								Name:         "last_refreshed_at",
-								IsPrimaryKey: wrapperspb.Bool(false),
-								Unique:       wrapperspb.Bool(false),
-								Type:         "TIMESTAMP",
-							},
-							{
-								Name:         "metadata",
-								IsPrimaryKey: wrapperspb.Bool(false),
-								Unique:       wrapperspb.Bool(false),
-								Type:         "JSON",
-							},
-							{
-								Name:         "data",
-								IsPrimaryKey: wrapperspb.Bool(false),
-								Unique:       wrapperspb.Bool(false),
-								Type:         "BYTES",
-							},
-							{
-								Name:         "proto_test",
+								Name:         "portfolio",
 								IsPrimaryKey: wrapperspb.Bool(false),
 								Unique:       wrapperspb.Bool(false),
 								Type:         "PROTO",
 								ProtoFileDescriptorSet: &ProtoFileDescriptorSet{
-									ProtoPackage: wrapperspb.String("alis.px.resources.portfolios.v1.NAVCommit"),
+									ProtoPackage: wrapperspb.String("alis.px.resources.portfolios.v1.Portfolio"),
 									//FileDescriptorSetPath:       wrapperspb.String("gcs:gs://internal.descriptorset.alis-px-product-g51dmvo.alis.services/descriptorset.pb"),
 									//FileDescriptorSetPathSource: ProtoFileDescriptorSetSourceGcs,
 								},
 							},
 							//{
-							//	Name:         "proto_test_again",
-							//	IsPrimaryKey: wrapperspb.Bool(false),
-							//	Unique:       wrapperspb.Bool(false),
-							//	Type:         "PROTO",
-							//	ProtoFileDescriptorSet: &ProtoFileDescriptorSet{
-							//		ProtoPackage:                wrapperspb.String("alis.px.resources.portfolios.v1.NAVCommit"),
-							//		FileDescriptorSetPath:       wrapperspb.String("gcs:gs://internal.descriptorset.alis-px-product-g51dmvo.alis.services/descriptorset.pb"),
-							//		FileDescriptorSetPathSource: ProtoFileDescriptorSetSourceGcs,
-							//	},
-							//},
-							//{
-							//	Name:         "proto_test_branch",
-							//	IsPrimaryKey: wrapperspb.Bool(false),
-							//	Unique:       wrapperspb.Bool(false),
-							//	Type:         "PROTO",
-							//	ProtoFileDescriptorSet: &ProtoFileDescriptorSet{
-							//		ProtoPackage:                wrapperspb.String("alis.px.resources.portfolios.v1.Branch"),
-							//		//FileDescriptorSetPath:       wrapperspb.String("gcs:gs://internal.descriptorset.alis-px-product-g51dmvo.alis.services/descriptorset.pb"),
-							//		//FileDescriptorSetPathSource: ProtoFileDescriptorSetSourceGcs,
-							//	},
+							//	Name:           "portfolio_name",
+							//	IsPrimaryKey:   wrapperspb.Bool(true),
+							//	Unique:         wrapperspb.Bool(false),
+							//	Type:           "STRING",
+							//	IsComputed:     wrapperspb.Bool(true),
+							//	ComputationDdl: wrapperspb.String("portfolio.name"),
+							//	Required:       wrapperspb.Bool(true),
+							//	Size:           wrapperspb.Int64(255),
+							//	DefaultValue:   wrapperspb.String("default"),
 							//},
 						},
 					},
@@ -1404,6 +1292,36 @@ func TestSpannerService_DeleteDatabaseRole(t *testing.T) {
 			}
 			if err := s.DeleteDatabaseRole(tt.args.ctx, tt.args.name); (err != nil) != tt.wantErr {
 				t.Errorf("DeleteDatabaseRole() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestCreateProtoBundle(t *testing.T) {
+	type args struct {
+		ctx              context.Context
+		databaseName     string
+		protoPackageName string
+		descriptorSet    []byte
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "CreateProtoBundle",
+			args: args{
+				ctx:              context.Background(),
+				databaseName:     fmt.Sprintf("projects/%s/instances/%s/databases/%s", TestProject, TestInstance, "tf-test"),
+				protoPackageName: "alis.px.resources.portfolios.v1.NAVCommit",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := CreateProtoBundle(tt.args.ctx, tt.args.databaseName, tt.args.protoPackageName, tt.args.descriptorSet); (err != nil) != tt.wantErr {
+				t.Errorf("CreateProtoBundle() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}
