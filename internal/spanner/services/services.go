@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"cloud.google.com/go/iam/apiv1/iampb"
 	spanner "cloud.google.com/go/spanner/admin/database/apiv1"
@@ -24,8 +27,19 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
-	custom_loggers "terraform-provider-alis/internal/spanner/logger"
+	customloggers "terraform-provider-alis/internal/spanner/logger"
 	"terraform-provider-alis/internal/utils"
+)
+
+var tfLogger = customloggers.New(
+	log.New(os.Stdout, "\r\n", log.LstdFlags), // io writer
+	logger.Config{
+		SlowThreshold:             time.Second, // Slow SQL threshold
+		LogLevel:                  logger.Info, // Log level
+		IgnoreRecordNotFoundError: false,       // Ignore ErrRecordNotFound error for logger
+		ParameterizedQueries:      true,        // Don't include params in the SQL log
+		Colorful:                  true,        // Disable color
+	},
 )
 
 const (
@@ -1060,7 +1074,7 @@ func (s *SpannerService) CreateSpannerTable(ctx context.Context, parent string, 
 		),
 		&gorm.Config{
 			PrepareStmt: true,
-			Logger:      custom_loggers.New(logger.Info),
+			Logger:      tfLogger,
 		},
 	)
 	if err != nil {
@@ -1156,7 +1170,7 @@ func (s *SpannerService) GetSpannerTable(ctx context.Context, name string) (*Spa
 		),
 		&gorm.Config{
 			PrepareStmt: true,
-			Logger:      custom_loggers.New(logger.Info),
+			Logger:      tfLogger,
 		},
 	)
 	if err != nil {
@@ -1422,7 +1436,7 @@ func (s *SpannerService) ListSpannerTables(ctx context.Context, parent string) (
 		),
 		&gorm.Config{
 			PrepareStmt: true,
-			Logger:      custom_loggers.New(logger.Info),
+			Logger:      tfLogger,
 		},
 	)
 	if err != nil {
@@ -1565,7 +1579,7 @@ func (s *SpannerService) UpdateSpannerTable(ctx context.Context, table *SpannerT
 		),
 		&gorm.Config{
 			PrepareStmt: true,
-			Logger:      custom_loggers.New(logger.Info),
+			Logger:      tfLogger,
 		},
 	)
 	if err != nil {
@@ -1745,7 +1759,7 @@ func (s *SpannerService) DeleteSpannerTable(ctx context.Context, name string) (*
 		),
 		&gorm.Config{
 			PrepareStmt: true,
-			Logger:      custom_loggers.New(logger.Info),
+			Logger:      tfLogger,
 		},
 	)
 	if err != nil {
@@ -1872,7 +1886,7 @@ func (s *SpannerService) GetTableIamBinding(ctx context.Context, parent string, 
 		),
 		&gorm.Config{
 			PrepareStmt: true,
-			Logger:      custom_loggers.New(logger.Info),
+			Logger:      tfLogger,
 		},
 	)
 	if err != nil {
@@ -2030,7 +2044,7 @@ func (s *SpannerService) CreateSpannerTableIndex(ctx context.Context, parent str
 		),
 		&gorm.Config{
 			PrepareStmt: true,
-			Logger:      custom_loggers.New(logger.Info),
+			Logger:      tfLogger,
 		},
 	)
 	if err != nil {
@@ -2090,7 +2104,7 @@ func (s *SpannerService) GetSpannerTableIndex(ctx context.Context, parent string
 		),
 		&gorm.Config{
 			PrepareStmt: true,
-			Logger:      custom_loggers.New(logger.Info),
+			Logger:      tfLogger,
 		},
 	)
 	if err != nil {
@@ -2142,7 +2156,7 @@ func (s *SpannerService) ListSpannerTableIndices(ctx context.Context, parent str
 		),
 		&gorm.Config{
 			PrepareStmt: true,
-			Logger:      custom_loggers.New(logger.Info),
+			Logger:      tfLogger,
 		},
 	)
 	if err != nil {
@@ -2196,7 +2210,7 @@ func (s *SpannerService) DeleteSpannerTableIndex(ctx context.Context, parent str
 		),
 		&gorm.Config{
 			PrepareStmt: true,
-			Logger:      custom_loggers.New(logger.Info),
+			Logger:      tfLogger,
 		},
 	)
 	if err != nil {
@@ -2279,7 +2293,7 @@ func (s *SpannerService) CreateSpannerTableForeignKeysConstraint(ctx context.Con
 		),
 		&gorm.Config{
 			PrepareStmt: true,
-			Logger:      custom_loggers.New(logger.Info),
+			Logger:      tfLogger,
 		},
 	)
 	if err != nil {

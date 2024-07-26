@@ -11,6 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -43,11 +44,12 @@ type spannerTableResource struct {
 }
 
 type spannerTableModel struct {
-	Name     types.String        `tfsdk:"name"`
-	Project  types.String        `tfsdk:"project"`
-	Instance types.String        `tfsdk:"instance"`
-	Database types.String        `tfsdk:"database"`
-	Schema   *spannerTableSchema `tfsdk:"schema"`
+	Name           types.String        `tfsdk:"name"`
+	Project        types.String        `tfsdk:"project"`
+	Instance       types.String        `tfsdk:"instance"`
+	Database       types.String        `tfsdk:"database"`
+	Schema         *spannerTableSchema `tfsdk:"schema"`
+	PreventDestroy types.Bool          `tfsdk:"prevent_destroy"`
 }
 
 type spannerTableSchema struct {
@@ -162,21 +164,33 @@ func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaReques
 									Optional: true,
 									Description: "Indicates if the column is part of the primary key.\n" +
 										"Multiple columns can be specified as primary keys to create a composite primary key.\n" +
-										"Primary key columns must be non-null.",
+										"Primary key columns must be non-null.\n" +
+										"**Changing this value will cause a table replace**.",
+									PlanModifiers: []planmodifier.Bool{
+										boolplanmodifier.RequiresReplace(),
+									},
 								},
 								"is_computed": schema.BoolAttribute{
 									Optional: true,
 									Description: "Indicates if the column is a computed column.\n" +
 										"Computed columns are generated values based on other columns in the table.\n" +
 										"A common use case is to generate a column from a PROTO column field.\n" +
-										"This should be accompanied by a `computation_ddl` field.",
+										"This should be accompanied by a `computation_ddl` field.\n" +
+										"**Changing this value will cause a table replace**.",
+									PlanModifiers: []planmodifier.Bool{
+										boolplanmodifier.RequiresReplace(),
+									},
 								},
 								"computation_ddl": schema.StringAttribute{
 									Optional: true,
 									Description: "The DDL expression for the computed column.\n" +
 										"This is only applicable to columns where `is_computed` is true.\n" +
 										"The expression must be a valid SQL expression that generates a value for the column.\n" +
-										"Example: `column1 + column2`, or `proto_column.field`.",
+										"Example: `column1 + column2`, or `proto_column.field`.\n" +
+										"**Changing this value will cause a table replace**.",
+									PlanModifiers: []planmodifier.String{
+										stringplanmodifier.RequiresReplace(),
+									},
 								},
 								"auto_increment": schema.BoolAttribute{
 									Optional: true,
@@ -193,7 +207,11 @@ func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaReques
 										stringvalidator.OneOf(services.SpannerTableDataTypes...),
 									},
 									Description: "The data type of the column.\n" +
-										"Valid types are: `BOOL`, `INT64`, `FLOAT64`, `STRING`, `BYTES`, `DATE`, `TIMESTAMP`, `JSON`, `PROTO`, `ARRAY<STRING>`, `ARRAY<INT64>`, `ARRAY<FLOAT32>`, `ARRAY<FLOAT64>`.",
+										"Valid types are: `BOOL`, `INT64`, `FLOAT64`, `STRING`, `BYTES`, `DATE`, `TIMESTAMP`, `JSON`, `PROTO`, `ARRAY<STRING>`, `ARRAY<INT64>`, `ARRAY<FLOAT32>`, `ARRAY<FLOAT64>`.\n" +
+										"**Changing this value will cause a table replace**.",
+									PlanModifiers: []planmodifier.String{
+										stringplanmodifier.RequiresReplace(),
+									},
 								},
 								"size": schema.Int64Attribute{
 									Optional:    true,
@@ -247,6 +265,11 @@ func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaReques
 					},
 				},
 				Description: "The schema of the table.",
+			},
+			"prevent_destroy": schema.BoolAttribute{
+				Optional: true,
+				Description: "Prevent the table from being destroyed.\n" +
+					"**This only applies to the terraform state and does not prevent the actual table from being deleted via another source.**",
 			},
 		},
 		Description: "A Google Cloud Spanner table resource.\n" +
@@ -728,6 +751,15 @@ func (r *spannerTableResource) Delete(ctx context.Context, req resource.DeleteRe
 	instanceName := state.Instance.ValueString()
 	databaseId := state.Database.ValueString()
 	tableId := state.Name.ValueString()
+
+	// Check if prevent_destroy is set to true
+	if state.PreventDestroy.ValueBool() {
+		resp.Diagnostics.AddError(
+			"Error Deleting Table",
+			"Table ("+state.Name.ValueString()+") is protected from deletion by terraform configuration.",
+		)
+		return
+	}
 
 	// Delete existing database
 	_, err := r.config.SpannerService.DeleteSpannerTable(ctx, fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", project, instanceName, databaseId, tableId))

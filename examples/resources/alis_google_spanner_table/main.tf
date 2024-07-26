@@ -2,7 +2,7 @@ terraform {
   required_providers {
     alis = {
       source  = "alis-exchange/alis"
-      version = "1.1.0"
+      version = ">= 1.3.0"
     }
   }
 }
@@ -12,10 +12,11 @@ provider "alis" {
 }
 
 resource "alis_google_spanner_table" "test" {
-  project  = var.ALIS_OS_PROJECT
-  instance = var.ALIS_OS_SPANNER_INSTANCE
-  database = "tf-test"
-  name     = "tftest"
+  project         = var.ALIS_OS_PROJECT
+  instance        = var.ALIS_OS_SPANNER_INSTANCE
+  database        = "tf-test"
+  name            = "tftest"
+  prevent_destroy = true
   schema = {
     columns = [
       {
