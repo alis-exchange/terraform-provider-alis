@@ -1383,10 +1383,20 @@ func (s *SpannerService) GetSpannerTable(ctx context.Context, name string) (*Spa
 					fileDescriptorSet:           nil,
 				}
 			}
+
+			if strings.HasPrefix(columnType.DatabaseTypeName(), "ENUM<") {
+				// Set the proto file descriptor set
+				column.ProtoFileDescriptorSet = &ProtoFileDescriptorSet{
+					ProtoPackage:                wrapperspb.String(strings.TrimSuffix(strings.TrimPrefix(columnType.DatabaseTypeName(), "ENUM<"), ">")),
+					FileDescriptorSetPath:       nil,
+					FileDescriptorSetPathSource: 0,
+					fileDescriptorSet:           nil,
+				}
+			}
 		}
 
 		column.Type = columnType.DatabaseTypeName()
-		if strings.HasPrefix(columnType.DatabaseTypeName(), "PROTO<") {
+		if strings.HasPrefix(columnType.DatabaseTypeName(), "PROTO<") || strings.HasPrefix(columnType.DatabaseTypeName(), "ENUM<") {
 			// Set the correct column type
 			// PROTO<my_package.MyMessage>
 			column.Type = SpannerTableDataType_PROTO.String()
