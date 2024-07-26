@@ -18,7 +18,7 @@ terraform {
   required_providers {
     alis = {
       source  = "alis-exchange/alis"
-      version = "1.1.0"
+      version = ">= 1.3.0"
     }
   }
 }
@@ -28,10 +28,11 @@ provider "alis" {
 }
 
 resource "alis_google_spanner_table" "test" {
-  project  = var.ALIS_OS_PROJECT
-  instance = var.ALIS_OS_SPANNER_INSTANCE
-  database = "tf-test"
-  name     = "tftest"
+  project         = var.ALIS_OS_PROJECT
+  instance        = var.ALIS_OS_SPANNER_INSTANCE
+  database        = "tf-test"
+  name            = "tftest"
+  prevent_destroy = true
   schema = {
     columns = [
       {
@@ -125,6 +126,11 @@ The name must satisfy the expression `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`
 - `project` (String) The Google Cloud project ID in which the table belongs.
 - `schema` (Attributes) The schema of the table. (see [below for nested schema](#nestedatt--schema))
 
+### Optional
+
+- `prevent_destroy` (Boolean) Prevent the table from being destroyed.
+**This only applies to the terraform state and does not prevent the actual table from being deleted via another source.**
+
 <a id="nestedatt--schema"></a>
 ### Nested Schema for `schema`
 
@@ -142,6 +148,7 @@ The name must contain only letters (a-z, A-Z), numbers (0-9), or underscores (_)
 The maximum length is 128 characters.
 - `type` (String) The data type of the column.
 Valid types are: `BOOL`, `INT64`, `FLOAT64`, `STRING`, `BYTES`, `DATE`, `TIMESTAMP`, `JSON`, `PROTO`, `ARRAY<STRING>`, `ARRAY<INT64>`, `ARRAY<FLOAT32>`, `ARRAY<FLOAT64>`.
+**Changing this value will cause a table replace**.
 
 Optional:
 
@@ -151,6 +158,7 @@ The column must be of type `INT64` or `FLOAT64`.
 This is only applicable to columns where `is_computed` is true.
 The expression must be a valid SQL expression that generates a value for the column.
 Example: `column1 + column2`, or `proto_column.field`.
+**Changing this value will cause a table replace**.
 - `default_value` (String) The default value of the column.
 The default value must be compatible with the column type.
 For example, a default value of "true" is valid for a `BOOL` or `STRING` column, but not for an `INT64` column.
@@ -169,9 +177,11 @@ One of the following prefixes must be used to indicate the location of the file 
 Computed columns are generated values based on other columns in the table.
 A common use case is to generate a column from a PROTO column field.
 This should be accompanied by a `computation_ddl` field.
+**Changing this value will cause a table replace**.
 - `is_primary_key` (Boolean) Indicates if the column is part of the primary key.
 Multiple columns can be specified as primary keys to create a composite primary key.
 Primary key columns must be non-null.
+**Changing this value will cause a table replace**.
 - `precision` (Number) The maximum number of digits in the column.
 This is only applicable to columns of type `FLOAT64`.
 The maximum is 17
