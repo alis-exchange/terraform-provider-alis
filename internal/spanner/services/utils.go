@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"sort"
 	"strings"
 	"time"
@@ -504,33 +503,6 @@ func CreateProtoBundle(ctx context.Context, databaseName string, protoPackageNam
 		return err
 	}
 
-	var getNestedProtoPackageNames func(ctx context.Context, desc protoreflect.Descriptor) ([]string, error)
-	getNestedProtoPackageNames = func(ctx context.Context, desc protoreflect.Descriptor) ([]string, error) {
-		var protoPackageNames []string
-		switch d := desc.(type) {
-		case protoreflect.MessageDescriptor:
-			// Add the proto package name
-			protoPackageNames = append(protoPackageNames, fmt.Sprintf("%s", d.FullName()))
-
-			// Add the proto package names for the enums
-			for i := 0; i < d.Enums().Len(); i++ {
-				protoPackageNames = append(protoPackageNames, fmt.Sprintf("%s", d.Enums().Get(i).FullName()))
-			}
-
-			// Add the proto package names for the nested messages
-			for i := 0; i < d.Messages().Len(); i++ {
-				nestedProtoPackageNames, err := getNestedProtoPackageNames(ctx, d.Messages().Get(i))
-				if err != nil {
-					return nil, err
-				}
-
-				protoPackageNames = append(protoPackageNames, nestedProtoPackageNames...)
-			}
-		}
-
-		return protoPackageNames, nil
-	}
-
 	// Unmarshal the proto file descriptor set
 	fds := &descriptorpb.FileDescriptorSet{}
 	if err := proto.Unmarshal(descriptorSet, fds); err != nil {
@@ -542,18 +514,96 @@ func CreateProtoBundle(ctx context.Context, databaseName string, protoPackageNam
 		return status.Errorf(codes.Internal, "Error creating proto files: %v", err)
 	}
 
+	var getProtoPackageNamesFn func(ctx context.Context, parent string, desc protoreflect.Descriptor) ([]string, error)
+	getProtoPackageNamesFn = func(ctx context.Context, parent string, desc protoreflect.Descriptor) ([]string, error) {
+		var protoPackageNames []string
+		switch d := desc.(type) {
+		case protoreflect.MessageDescriptor:
+			// Add the proto package name
+			protoPackageNames = append(protoPackageNames, fmt.Sprintf("%s", d.FullName()))
+
+			nestedProtoPackageParentNamesMap := map[string]protoreflect.Descriptor{}
+
+			for i := 0; i < d.Fields().Len(); i++ {
+				field := d.Fields().Get(i)
+
+				switch field.Kind() {
+				case protoreflect.MessageKind:
+					// Get nested proto package names
+					nestedProtoPackageNames, err := getProtoPackageNamesFn(ctx, parent, field.Message())
+					if err != nil {
+						return nil, err
+					}
+					protoPackageNames = append(protoPackageNames, nestedProtoPackageNames...)
+
+					// Get the nested proto package names of the parent
+					if field.Message().Parent() != nil {
+						nestedProtoPackageParentName := fmt.Sprintf("%s", field.Message().Parent().FullName())
+						nestedProtoPackageParentNamesMap[nestedProtoPackageParentName] = field.Message().Parent()
+					}
+				case protoreflect.EnumKind:
+					protoPackageNames = append(protoPackageNames, fmt.Sprintf("%s", field.Enum().FullName()))
+
+					// Get the nested proto package names of the parent
+					if field.Enum().Parent() != nil {
+						nestedProtoPackageParentName := fmt.Sprintf("%s", field.Enum().Parent().FullName())
+						nestedProtoPackageParentNamesMap[nestedProtoPackageParentName] = field.Enum().Parent()
+					}
+				}
+			}
+
+			// Get the nested proto package names of the parents
+			for nestedProtoPackageParentName, nestedDesc := range nestedProtoPackageParentNamesMap {
+				if nestedProtoPackageParentName == parent {
+					continue
+				}
+
+				nestedProtoPackageNames, err := getProtoPackageNamesFn(ctx, nestedProtoPackageParentName, nestedDesc)
+				if err != nil {
+					return nil, err
+				}
+
+				protoPackageNames = append(protoPackageNames, nestedProtoPackageNames...)
+			}
+		case protoreflect.EnumDescriptor:
+			// Add the proto package name
+			protoPackageNames = append(protoPackageNames, fmt.Sprintf("%s", d.FullName()))
+
+			if d.Parent() != nil {
+				// Get the nested proto package names of the parent
+				nestedProtoPackageParentName := fmt.Sprintf("%s", d.Parent().FullName())
+
+				// Get the nested proto package names of the parents
+				nestedProtoPackageNames, err := getProtoPackageNamesFn(ctx, nestedProtoPackageParentName, d.Parent())
+				if err != nil {
+					return nil, err
+				}
+
+				protoPackageNames = append(protoPackageNames, nestedProtoPackageNames...)
+
+			}
+		}
+
+		return protoPackageNames, nil
+	}
+
+	// Get the message/enum descriptor
 	desc, err := files.FindDescriptorByName(protoreflect.FullName(protoPackageName))
 	if err != nil {
 		return status.Errorf(codes.Internal, "Error finding descriptor for %s: %v", protoPackageName, err)
 	}
 
-	// TODO: Revisit later
-	nestedProtoPackageNames, err := getNestedProtoPackageNames(ctx, desc)
+	// Get the proto package names including nested messages and enums
+	protoPackageNames, err := getProtoPackageNamesFn(ctx, protoPackageName, desc)
 	if err != nil {
 		return err
 	}
 
-	log.Printf("nestedProtoPackageNames: %v", nestedProtoPackageNames)
+	// Remove any duplicates
+	protoPackageNames = alUtils.Unique(protoPackageNames)
+
+	// Sort the proto package names
+	sort.Strings(protoPackageNames)
 
 	updateDatabaseDdl := func(ctx context.Context, databaseName string, statements []string, descriptorSet []byte) error {
 		// Create the proto bundle
@@ -569,11 +619,11 @@ func CreateProtoBundle(ctx context.Context, databaseName string, protoPackageNam
 		return updateDdlOp.Wait(ctx)
 	}
 
-	formattedNestedProtoPackageNames := alUtils.Transform(nestedProtoPackageNames, func(name string) string {
+	formattedProtoPackageNames := alUtils.Transform(protoPackageNames, func(name string) string {
 		return fmt.Sprintf("`%s`", name)
 	})
 
-	createStatement := fmt.Sprintf("CREATE PROTO BUNDLE (%s)", strings.Join(formattedNestedProtoPackageNames, ", "))
+	createStatement := fmt.Sprintf("CREATE PROTO BUNDLE (%s)", strings.Join(formattedProtoPackageNames, ", "))
 	err = updateDatabaseDdl(ctx, databaseName, []string{createStatement}, descriptorSet)
 	if err != nil {
 		if status.Code(err) != codes.AlreadyExists && status.Code(err) != codes.InvalidArgument {
@@ -581,7 +631,7 @@ func CreateProtoBundle(ctx context.Context, databaseName string, protoPackageNam
 		}
 
 		// Try to insert the proto bundle
-		insertStatement := fmt.Sprintf("ALTER PROTO BUNDLE INSERT (%s)", strings.Join(formattedNestedProtoPackageNames, ", "))
+		insertStatement := fmt.Sprintf("ALTER PROTO BUNDLE INSERT (%s)", strings.Join(formattedProtoPackageNames, ", "))
 		err = updateDatabaseDdl(ctx, databaseName, []string{insertStatement}, descriptorSet)
 		if err != nil {
 			if status.Code(err) != codes.AlreadyExists && status.Code(err) != codes.InvalidArgument {
@@ -589,7 +639,7 @@ func CreateProtoBundle(ctx context.Context, databaseName string, protoPackageNam
 			}
 
 			// Try to update the proto bundle
-			updateStatement := fmt.Sprintf("ALTER PROTO BUNDLE UPDATE (%s)", strings.Join(formattedNestedProtoPackageNames, ", "))
+			updateStatement := fmt.Sprintf("ALTER PROTO BUNDLE UPDATE (%s)", strings.Join(formattedProtoPackageNames, ", "))
 			err = updateDatabaseDdl(ctx, databaseName, []string{updateStatement}, descriptorSet)
 			if err != nil {
 				return err

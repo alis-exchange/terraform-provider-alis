@@ -3,9 +3,9 @@ module terraform-provider-alis
 go 1.22
 
 require (
-	cloud.google.com/go/bigtable v1.26.0
-	cloud.google.com/go/discoveryengine v1.9.0
-	cloud.google.com/go/iam v1.1.11
+	cloud.google.com/go/bigtable v1.27.1
+	cloud.google.com/go/discoveryengine v1.10.0
+	cloud.google.com/go/iam v1.1.12
 	cloud.google.com/go/spanner v1.64.0
 	cloud.google.com/go/storage v1.43.0
 	github.com/google/go-cmp v0.6.0
@@ -33,6 +33,7 @@ require (
 	cloud.google.com/go/auth/oauth2adapt v0.2.3 // indirect
 	cloud.google.com/go/compute/metadata v0.5.0 // indirect
 	cloud.google.com/go/longrunning v0.5.10 // indirect
+	cloud.google.com/go/monitoring v1.20.1 // indirect
 	github.com/BurntSushi/toml v1.2.1 // indirect
 	github.com/GoogleCloudPlatform/grpc-gcp-go/grpcgcp v1.5.0 // indirect
 	github.com/Kunde21/markdownfmt/v3 v3.1.0 // indirect
@@ -108,6 +109,8 @@ require (
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.49.0 // indirect
 	go.opentelemetry.io/otel v1.24.0 // indirect
 	go.opentelemetry.io/otel/metric v1.24.0 // indirect
+	go.opentelemetry.io/otel/sdk v1.24.0 // indirect
+	go.opentelemetry.io/otel/sdk/metric v1.24.0 // indirect
 	go.opentelemetry.io/otel/trace v1.24.0 // indirect
 	golang.org/x/crypto v0.25.0 // indirect
 	golang.org/x/exp v0.0.0-20230626212559-97b1e661b5df // indirect

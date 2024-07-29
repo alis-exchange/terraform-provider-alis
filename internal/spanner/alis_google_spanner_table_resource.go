@@ -11,6 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -268,8 +269,10 @@ func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaReques
 			},
 			"prevent_destroy": schema.BoolAttribute{
 				Optional: true,
+				Computed: true,
 				Description: "Prevent the table from being destroyed.\n" +
 					"**This only applies to the terraform state and does not prevent the actual table from being deleted via another source.**",
+				Default: booldefault.StaticBool(true),
 			},
 		},
 		Description: "A Google Cloud Spanner table resource.\n" +
@@ -756,7 +759,7 @@ func (r *spannerTableResource) Delete(ctx context.Context, req resource.DeleteRe
 	if state.PreventDestroy.ValueBool() {
 		resp.Diagnostics.AddError(
 			"Error Deleting Table",
-			"Table ("+state.Name.ValueString()+") is protected from deletion by terraform configuration.",
+			"Table ("+state.Name.ValueString()+") is protected from deletion by terraform configuration. Set `prevent_destroy` to false.",
 		)
 		return
 	}
