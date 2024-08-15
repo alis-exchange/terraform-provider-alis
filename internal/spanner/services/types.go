@@ -29,20 +29,17 @@ type SpannerTableIndex struct {
 	Unique *wrapperspb.BoolValue
 }
 
-type SpannerTableForeignKey struct {
+type SpannerTableForeignKeyConstraint struct {
+	// The name of the constraint
+	Name string
 	// Referenced table
 	ReferencedTable string
 	// Referenced column
 	ReferencedColumn string
 	// Referencing column
 	Column string
-}
-
-type SpannerTableForeignKeysConstraint struct {
-	// The name of the constraint
-	Name string
-	// Foreign keys
-	ForeignKeys []*SpannerTableForeignKey
+	// Referential actions on delete
+	OnDelete SpannerTableForeignKeyConstraintAction
 }
 
 // ProtoFileDescriptorSet represents a Proto File Descriptor Set.
@@ -239,6 +236,14 @@ type Index struct {
 	OrdinalPosition int
 }
 
+type Constraint struct {
+	CONSTRAINT_NAME string
+	TABLE_NAME      string
+	CONSTRAINT_TYPE string
+	UPDATE_RULE     string
+	DELETE_RULE     string
+}
+
 // SpannerTableDataType is a type for Spanner table column data types.
 type SpannerTableDataType int64
 
@@ -303,4 +308,27 @@ func (s SpannerTableIndexColumnOrder) String() string {
 var SpannerTableIndexColumnOrders = []string{
 	SpannerTableIndexColumnOrder_ASC.String(),
 	SpannerTableIndexColumnOrder_DESC.String(),
+}
+
+type SpannerTableForeignKeyConstraintAction int64
+
+const (
+	SpannerTableForeignKeyConstraintActionUnspecified SpannerTableForeignKeyConstraintAction = iota
+	SpannerTableForeignKeyConstraintActionCascade
+	SpannerTableForeignKeyConstraintActionRestrict
+	SpannerTableForeignKeyConstraintNoAction
+	SpannerTableForeignKeyConstraintSetNull
+	SpannerTableForeignKeyConstraintSetDefault
+)
+
+func (a SpannerTableForeignKeyConstraintAction) String() string {
+	return [...]string{"", "CASCADE", "RESTRICT", "NO ACTION", "SET NULL", "SET DEFAULT"}[a]
+}
+
+var SpannerTableForeignKeyConstraintActions = []string{
+	SpannerTableForeignKeyConstraintActionCascade.String(),
+	SpannerTableForeignKeyConstraintActionRestrict.String(),
+	SpannerTableForeignKeyConstraintNoAction.String(),
+	SpannerTableForeignKeyConstraintSetNull.String(),
+	SpannerTableForeignKeyConstraintSetDefault.String(),
 }

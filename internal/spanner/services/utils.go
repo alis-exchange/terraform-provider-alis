@@ -251,7 +251,6 @@ func UpdateColumnMetadata(db *gorm.DB, tableName string, columns []*SpannerTable
 
 	return nil
 }
-
 func DeleteColumnMetadata(db *gorm.DB, tableName string, columns []*SpannerTableColumn) error {
 	// Create or Update ColumnMetadata table
 	if err := db.AutoMigrate(&ColumnMetadata{}); err != nil {

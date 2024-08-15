@@ -345,30 +345,91 @@ func TestCreateSpannerTable(t *testing.T) {
 			args: args{
 				ctx:     context.Background(),
 				parent:  fmt.Sprintf("projects/%s/instances/%s/databases/%s", TestProject, TestInstance, "alis_px_dev_cmk"),
-				tableId: "tftest",
+				tableId: "portfolios",
 				table: &SpannerTable{
-					Name: "tftest",
+					Name: "portfolios",
 					Schema: &SpannerTableSchema{
 						Columns: []*SpannerTableColumn{
 							{
-								Name:         "key",
-								IsPrimaryKey: wrapperspb.Bool(true),
-								Unique:       wrapperspb.Bool(false),
-								Type:         "INT64",
-								Size:         wrapperspb.Int64(255),
-								Required:     wrapperspb.Bool(true),
+								Name:          "key",
+								IsPrimaryKey:  wrapperspb.Bool(true),
+								Unique:        wrapperspb.Bool(false),
+								Type:          "INT64",
+								Size:          wrapperspb.Int64(255),
+								Required:      wrapperspb.Bool(true),
+								AutoIncrement: wrapperspb.Bool(true),
 							},
 							{
-								Name:         "test",
-								IsPrimaryKey: wrapperspb.Bool(false),
-								Unique:       wrapperspb.Bool(false),
-								Type:         "PROTO",
-								ProtoFileDescriptorSet: &ProtoFileDescriptorSet{
-									ProtoPackage:                wrapperspb.String("alis.px.services.data.v2.SpannerTest.NestedEnum"),
-									FileDescriptorSetPath:       wrapperspb.String("gcs:gs://internal.descriptorset.alis-px-product-g51dmvo.alis.services/descriptorset.pb"),
-									FileDescriptorSetPathSource: ProtoFileDescriptorSetSourceGcs,
-								},
+								Name: "portfolio_id",
+								Type: "STRING",
+								Size: wrapperspb.Int64(255),
 							},
+							//{
+							//	Name:         "test",
+							//	IsPrimaryKey: wrapperspb.Bool(false),
+							//	Unique:       wrapperspb.Bool(false),
+							//	Type:         "PROTO",
+							//	ProtoFileDescriptorSet: &ProtoFileDescriptorSet{
+							//		ProtoPackage:                wrapperspb.String("alis.px.services.data.v2.SpannerTest.NestedEnum"),
+							//		FileDescriptorSetPath:       wrapperspb.String("gcs:gs://internal.descriptorset.alis-px-product-g51dmvo.alis.services/descriptorset.pb"),
+							//		FileDescriptorSetPathSource: ProtoFileDescriptorSetSourceGcs,
+							//	},
+							//},
+							//{
+							//	Name:         "branch_test",
+							//	IsPrimaryKey: wrapperspb.Bool(false),
+							//	Unique:       wrapperspb.Bool(false),
+							//	Type:         "STRING",
+							//	//IsComputed:     wrapperspb.Bool(true),
+							//	//ComputationDdl: wrapperspb.String("branch.name"),
+							//	Required: wrapperspb.Bool(false),
+							//	Size:     wrapperspb.Int64(255),
+							//},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "Test_CreateSpannerTable",
+			args: args{
+				ctx:     context.Background(),
+				parent:  fmt.Sprintf("projects/%s/instances/%s/databases/%s", TestProject, TestInstance, "alis_px_dev_cmk"),
+				tableId: "branches",
+				table: &SpannerTable{
+					Name: "branches",
+					Schema: &SpannerTableSchema{
+						Columns: []*SpannerTableColumn{
+							{
+								Name:          "key",
+								IsPrimaryKey:  wrapperspb.Bool(true),
+								Unique:        wrapperspb.Bool(false),
+								Type:          "INT64",
+								Size:          wrapperspb.Int64(255),
+								Required:      wrapperspb.Bool(true),
+								AutoIncrement: wrapperspb.Bool(true),
+							},
+							{
+								Name: "parent",
+								Type: "STRING",
+								Size: wrapperspb.Int64(255),
+							},
+							{
+								Name: "branch_id",
+								Type: "STRING",
+								Size: wrapperspb.Int64(255),
+							},
+							//{
+							//	Name:         "test",
+							//	IsPrimaryKey: wrapperspb.Bool(false),
+							//	Unique:       wrapperspb.Bool(false),
+							//	Type:         "PROTO",
+							//	ProtoFileDescriptorSet: &ProtoFileDescriptorSet{
+							//		ProtoPackage:                wrapperspb.String("alis.px.services.data.v2.SpannerTest.NestedEnum"),
+							//		FileDescriptorSetPath:       wrapperspb.String("gcs:gs://internal.descriptorset.alis-px-product-g51dmvo.alis.services/descriptorset.pb"),
+							//		FileDescriptorSetPathSource: ProtoFileDescriptorSetSourceGcs,
+							//	},
+							//},
 							//{
 							//	Name:         "branch_test",
 							//	IsPrimaryKey: wrapperspb.Bool(false),
@@ -413,7 +474,7 @@ func TestGetSpannerTable(t *testing.T) {
 			name: "Test_GetSpannerTable",
 			args: args{
 				ctx:  context.Background(),
-				name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "alis_px_dev_cmk", "tftest"),
+				name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "mentenova-co", "mentenova_co_dev_62g_Maps"),
 			},
 			want:    &SpannerTable{},
 			wantErr: false,
@@ -556,7 +617,7 @@ func TestDeleteSpannerTable(t *testing.T) {
 			name: "Test_DeleteSpannerTable",
 			args: args{
 				ctx:  context.Background(),
-				name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "tf-test", "tftest"),
+				name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "mentenova-co", "mentenova_co_dev_62g_Tasks"),
 			},
 		},
 	}
@@ -1320,6 +1381,94 @@ func TestCreateProtoBundle(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if err := CreateProtoBundle(tt.args.ctx, tt.args.databaseName, tt.args.protoPackageName, tt.args.descriptorSet); (err != nil) != tt.wantErr {
 				t.Errorf("CreateProtoBundle() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestSpannerService_CreateSpannerTableForeignKeyConstraint(t *testing.T) {
+	type fields struct {
+		GoogleCredentials *googleoauth.Credentials
+	}
+	type args struct {
+		ctx        context.Context
+		parent     string
+		constraint *SpannerTableForeignKeyConstraint
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    *SpannerTableForeignKeyConstraint
+		wantErr bool
+	}{
+		{
+			name: "Test_CreateSpannerTableForeignKeyConstraint",
+			args: args{
+				ctx:    context.Background(),
+				parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "alis_px_dev_cmk", "branches"),
+				constraint: &SpannerTableForeignKeyConstraint{
+					Name:             "fk_branches_portfolio_id",
+					Column:           "parent",
+					ReferencedTable:  "portfolios",
+					ReferencedColumn: "portfolio_id",
+					OnDelete:         SpannerTableForeignKeyConstraintActionCascade,
+				},
+			},
+			want:    &SpannerTableForeignKeyConstraint{},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := service.CreateSpannerTableForeignKeyConstraint(tt.args.ctx, tt.args.parent, tt.args.constraint)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("CreateSpannerTableForeignKeyConstraint() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("CreateSpannerTableForeignKeyConstraint() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSpannerService_GetSpannerTableForeignKeyConstraint(t *testing.T) {
+	type fields struct {
+		GoogleCredentials *googleoauth.Credentials
+	}
+	type args struct {
+		ctx    context.Context
+		parent string
+		name   string
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    *SpannerTableForeignKeyConstraint
+		wantErr bool
+	}{
+		{
+			name: "Test_GetSpannerTableForeignKeyConstraint",
+			args: args{
+				ctx:    context.Background(),
+				parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "alis_px_dev_cmk", "branches"),
+				name:   "fk_branches_portfolio_id",
+			},
+			want:    &SpannerTableForeignKeyConstraint{},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := service.GetSpannerTableForeignKeyConstraint(tt.args.ctx, tt.args.parent, tt.args.name)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("GetSpannerTableForeignKeyConstraint() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("GetSpannerTableForeignKeyConstraint() got = %v, want %v", got, tt.want)
 			}
 		})
 	}

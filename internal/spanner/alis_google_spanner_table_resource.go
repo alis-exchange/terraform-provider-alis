@@ -12,7 +12,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -167,9 +167,6 @@ func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaReques
 										"Multiple columns can be specified as primary keys to create a composite primary key.\n" +
 										"Primary key columns must be non-null.\n" +
 										"**Changing this value will cause a table replace**.",
-									PlanModifiers: []planmodifier.Bool{
-										boolplanmodifier.RequiresReplace(),
-									},
 								},
 								"is_computed": schema.BoolAttribute{
 									Optional: true,
@@ -178,9 +175,6 @@ func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaReques
 										"A common use case is to generate a column from a PROTO column field.\n" +
 										"This should be accompanied by a `computation_ddl` field.\n" +
 										"**Changing this value will cause a table replace**.",
-									PlanModifiers: []planmodifier.Bool{
-										boolplanmodifier.RequiresReplace(),
-									},
 								},
 								"computation_ddl": schema.StringAttribute{
 									Optional: true,
@@ -189,9 +183,6 @@ func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaReques
 										"The expression must be a valid SQL expression that generates a value for the column.\n" +
 										"Example: `column1 + column2`, or `proto_column.field`.\n" +
 										"**Changing this value will cause a table replace**.",
-									PlanModifiers: []planmodifier.String{
-										stringplanmodifier.RequiresReplace(),
-									},
 								},
 								"auto_increment": schema.BoolAttribute{
 									Optional: true,
@@ -210,9 +201,6 @@ func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaReques
 									Description: "The data type of the column.\n" +
 										"Valid types are: `BOOL`, `INT64`, `FLOAT64`, `STRING`, `BYTES`, `DATE`, `TIMESTAMP`, `JSON`, `PROTO`, `ARRAY<STRING>`, `ARRAY<INT64>`, `ARRAY<FLOAT32>`, `ARRAY<FLOAT64>`.\n" +
 										"**Changing this value will cause a table replace**.",
-									PlanModifiers: []planmodifier.String{
-										stringplanmodifier.RequiresReplace(),
-									},
 								},
 								"size": schema.Int64Attribute{
 									Optional:    true,
@@ -263,6 +251,98 @@ func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaReques
 							},
 						},
 						Description: "The columns of the table.",
+						PlanModifiers: []planmodifier.List{
+							listplanmodifier.RequiresReplaceIf(func(ctx context.Context, req planmodifier.ListRequest, resp *listplanmodifier.RequiresReplaceIfFuncResponse) {
+								// Create a map of the columns by name
+								type PriorAndCurrentColumns struct {
+									Prior   *spannerTableColumn
+									Current *spannerTableColumn
+								}
+								columnsMap := make(map[string]*PriorAndCurrentColumns)
+
+								// Get the columns prior to the plan
+								priorColumns := make([]spannerTableColumn, 0, len(req.StateValue.Elements()))
+								d := req.StateValue.ElementsAs(ctx, &priorColumns, false)
+								if d.HasError() {
+									resp.Diagnostics.Append(d...)
+									return
+								}
+								for _, column := range priorColumns {
+									if _, ok := columnsMap[column.Name.ValueString()]; !ok {
+										columnsMap[column.Name.ValueString()] = &PriorAndCurrentColumns{}
+									}
+									columnsMap[column.Name.ValueString()].Prior = &column
+								}
+
+								// Get the columns after the plan
+								currentColumns := make([]spannerTableColumn, 0, len(req.PlanValue.Elements()))
+								d = req.PlanValue.ElementsAs(ctx, &currentColumns, false)
+								if d.HasError() {
+									resp.Diagnostics.Append(d...)
+									return
+								}
+								for _, column := range currentColumns {
+									if _, ok := columnsMap[column.Name.ValueString()]; !ok {
+										columnsMap[column.Name.ValueString()] = &PriorAndCurrentColumns{}
+									}
+									columnsMap[column.Name.ValueString()].Current = &column
+								}
+
+								// Check if the columns are the same.
+								// Columns that are new do not require a replace, unless a primary key is added.
+								// Columns that are removed do not require a replace, unless they are part of the primary key.
+								// Columns that are updated require a replace if: the column type is changed,
+								// the primary key status is changed, or the column's computation_ddl is changed.
+								for name, columns := range columnsMap {
+									// Column is new
+									if columns.Prior == nil && columns.Current != nil {
+										// Check if the column is a primary key
+										if !columns.Current.IsPrimaryKey.IsNull() && columns.Current.IsPrimaryKey.ValueBool() {
+											resp.RequiresReplace = true
+											resp.Diagnostics.AddWarning(fmt.Sprintf("Column %q requires a table replace", name), fmt.Sprintf("Column %q is a new primary key column and requires a table replace", name))
+										}
+										continue
+									}
+
+									// Column is removed
+									if columns.Current == nil && columns.Prior != nil {
+										// Check if the column is a primary key
+										if !columns.Prior.IsPrimaryKey.IsNull() && columns.Prior.IsPrimaryKey.ValueBool() {
+											resp.RequiresReplace = true
+											resp.Diagnostics.AddWarning(fmt.Sprintf("Column %q requires a table replace", name), fmt.Sprintf("Column %q is a removed primary key column and requires a table replace", name))
+										}
+										continue
+									}
+
+									// Column type is changed
+									// Type is required, so we can safely assume it is not null
+									if columns.Prior.Type.ValueString() != columns.Current.Type.ValueString() {
+										resp.RequiresReplace = true
+										resp.Diagnostics.AddWarning(fmt.Sprintf("Column %q requires a table replace", name), fmt.Sprintf("Column %q has a changed type and requires a table replace", name))
+									}
+
+									// Column primary key status is changed
+									// This is not required, so we also need to check if it is null
+									if (!columns.Prior.IsPrimaryKey.IsNull() && !columns.Current.IsPrimaryKey.IsNull() && columns.Prior.IsPrimaryKey.ValueBool() != columns.Current.IsPrimaryKey.ValueBool()) ||
+										(columns.Prior.IsPrimaryKey.IsNull() && !columns.Current.IsPrimaryKey.IsNull() && columns.Current.IsPrimaryKey.ValueBool()) ||
+										(!columns.Prior.IsPrimaryKey.IsNull() && columns.Prior.IsPrimaryKey.ValueBool() && columns.Current.IsPrimaryKey.IsNull()) {
+										resp.RequiresReplace = true
+										resp.Diagnostics.AddWarning(fmt.Sprintf("Column %q requires a table replace", name), fmt.Sprintf("Column %q has a changed primary key status and requires a table replace", name))
+									}
+
+									// Column is computed and computation_ddl is changed
+									// Both fields are required but only if at least one is set
+									if (!columns.Prior.IsComputed.IsNull() && columns.Prior.IsComputed.ValueBool() && !columns.Current.IsComputed.IsNull() && columns.Current.IsComputed.ValueBool() &&
+										columns.Prior.ComputationDdl.ValueString() != columns.Current.ComputationDdl.ValueString()) ||
+										(!columns.Prior.IsComputed.IsNull() && columns.Prior.IsComputed.ValueBool() && (columns.Current.IsComputed.IsNull() || !columns.Current.IsComputed.ValueBool())) {
+										resp.RequiresReplace = true
+										resp.Diagnostics.AddWarning(fmt.Sprintf("Column %q requires a table replace", name), fmt.Sprintf("Column %q has a changed computation_ddl or is_computed has been disabled and requires a table replace", name))
+									}
+								}
+
+							},
+								"If certain values of any of the columns change, Terraform will destroy and recreate the table.", "If certain values of any of the columns change, Terraform will destroy and recreate the table."),
+						},
 					},
 				},
 				Description: "The schema of the table.",

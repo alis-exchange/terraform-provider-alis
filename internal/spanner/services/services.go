@@ -2235,7 +2235,7 @@ func (s *SpannerService) DeleteSpannerTableIndex(ctx context.Context, parent str
 	return &emptypb.Empty{}, nil
 }
 
-func (s *SpannerService) CreateSpannerTableForeignKeysConstraint(ctx context.Context, parent string, constraint *SpannerTableForeignKeysConstraint) (*SpannerTableForeignKeysConstraint, error) {
+func (s *SpannerService) CreateSpannerTableForeignKeyConstraint(ctx context.Context, parent string, constraint *SpannerTableForeignKeyConstraint) (*SpannerTableForeignKeyConstraint, error) {
 	// Validate parent
 	googleSqlParentValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlTableNameRegex)
 	postgresSqlParentValid := utils.ValidateArgument(parent, utils.SpannerPostgresSqlTableNameRegex)
@@ -2251,40 +2251,33 @@ func (s *SpannerService) CreateSpannerTableForeignKeysConstraint(ctx context.Con
 	if !googleSqlConstraintIdValid && !postgresSqlConstraintIdValid {
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument constraint.name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", constraint.Name, utils.SpannerGoogleSqlConstraintIdRegex, utils.SpannerPostgresSqlConstraintIdRegex)
 	}
-	if constraint.ForeignKeys == nil || len(constraint.ForeignKeys) == 0 {
-		return nil, status.Error(codes.InvalidArgument, "Invalid argument constraint.foreign_keys, field is required but not provided")
-	}
 	// Validate foreign key fields
-	for i, foreignKey := range constraint.ForeignKeys {
-		if foreignKey == nil {
-			return nil, status.Errorf(codes.InvalidArgument, "Invalid argument constraint.foreign_keys[%d], field is required but not provided", i)
-		}
-		if foreignKey.ReferencedTable == "" {
-			return nil, status.Errorf(codes.InvalidArgument, "Invalid argument constraint.foreign_keys[%d].referenced_table, field is required but not provided", i)
-		}
-		googleSqlForeignKeyTableValid := utils.ValidateArgument(foreignKey.ReferencedTable, utils.SpannerGoogleSqlTableNameRegex)
-		postgresSqlForeignKeyTableValid := utils.ValidateArgument(foreignKey.ReferencedTable, utils.SpannerPostgresSqlTableNameRegex)
-		if !googleSqlForeignKeyTableValid && !postgresSqlForeignKeyTableValid {
-			return nil, status.Errorf(codes.InvalidArgument, "Invalid argument constraint.foreign_keys[%d].referenced_table (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", i, foreignKey.ReferencedTable, utils.SpannerGoogleSqlTableNameRegex, utils.SpannerPostgresSqlTableNameRegex)
-		}
 
-		if foreignKey.ReferencedColumn == "" {
-			return nil, status.Errorf(codes.InvalidArgument, "Invalid argument constraint.foreign_keys[%d].referenced_columns, field is required but not provided", i)
-		}
-		googleSqlForeignKeyColumnValid := utils.ValidateArgument(foreignKey.ReferencedColumn, utils.SpannerGoogleSqlColumnIdRegex)
-		postgresSqlForeignKeyColumnValid := utils.ValidateArgument(foreignKey.ReferencedColumn, utils.SpannerPostgresSqlColumnIdRegex)
-		if !googleSqlForeignKeyColumnValid && !postgresSqlForeignKeyColumnValid {
-			return nil, status.Errorf(codes.InvalidArgument, "Invalid argument constraint.foreign_keys[%d].referenced_columns (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", i, foreignKey.ReferencedColumn, utils.SpannerGoogleSqlColumnIdRegex, utils.SpannerPostgresSqlColumnIdRegex)
-		}
+	if constraint.ReferencedTable == "" {
+		return nil, status.Error(codes.InvalidArgument, "Invalid argument constraint.referenced_table, field is required but not provided")
+	}
+	googleSqlForeignKeyTableValid := utils.ValidateArgument(constraint.ReferencedTable, utils.SpannerGoogleSqlTableIdRegex)
+	postgresSqlForeignKeyTableValid := utils.ValidateArgument(constraint.ReferencedTable, utils.SpannerPostgresSqlTableIdRegex)
+	if !googleSqlForeignKeyTableValid && !postgresSqlForeignKeyTableValid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument constraint.referenced_table (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", constraint.ReferencedTable, utils.SpannerGoogleSqlTableNameRegex, utils.SpannerPostgresSqlTableNameRegex)
+	}
 
-		if foreignKey.Column == "" {
-			return nil, status.Errorf(codes.InvalidArgument, "Invalid argument constraint.foreign_keys[%d].column, field is required but not provided", i)
-		}
-		googleSqlColumnValid := utils.ValidateArgument(foreignKey.Column, utils.SpannerGoogleSqlColumnIdRegex)
-		postgresSqlColumnValid := utils.ValidateArgument(foreignKey.Column, utils.SpannerPostgresSqlColumnIdRegex)
-		if !googleSqlColumnValid && !postgresSqlColumnValid {
-			return nil, status.Errorf(codes.InvalidArgument, "Invalid argument constraint.foreign_keys[%d].column (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", i, foreignKey.Column, utils.SpannerGoogleSqlColumnIdRegex, utils.SpannerPostgresSqlColumnIdRegex)
-		}
+	if constraint.ReferencedColumn == "" {
+		return nil, status.Error(codes.InvalidArgument, "Invalid argument constraint.referenced_column, field is required but not provided")
+	}
+	googleSqlForeignKeyColumnValid := utils.ValidateArgument(constraint.ReferencedColumn, utils.SpannerGoogleSqlColumnIdRegex)
+	postgresSqlForeignKeyColumnValid := utils.ValidateArgument(constraint.ReferencedColumn, utils.SpannerPostgresSqlColumnIdRegex)
+	if !googleSqlForeignKeyColumnValid && !postgresSqlForeignKeyColumnValid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument constraint.referenced_column (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", constraint.ReferencedColumn, utils.SpannerGoogleSqlColumnIdRegex, utils.SpannerPostgresSqlColumnIdRegex)
+	}
+
+	if constraint.Column == "" {
+		return nil, status.Error(codes.InvalidArgument, "Invalid argument constraint.column, field is required but not provided")
+	}
+	googleSqlColumnValid := utils.ValidateArgument(constraint.Column, utils.SpannerGoogleSqlColumnIdRegex)
+	postgresSqlColumnValid := utils.ValidateArgument(constraint.Column, utils.SpannerPostgresSqlColumnIdRegex)
+	if !googleSqlColumnValid && !postgresSqlColumnValid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument constraint.column (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", constraint.Column, utils.SpannerGoogleSqlColumnIdRegex, utils.SpannerPostgresSqlColumnIdRegex)
 	}
 
 	// Deconstruct parent name to get project, instance, database and table
@@ -2310,14 +2303,79 @@ func (s *SpannerService) CreateSpannerTableForeignKeysConstraint(ctx context.Con
 		return nil, status.Errorf(codes.Internal, "Error connecting to database: %v", err)
 	}
 
-	sqlStatement := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s", tableId, constraint.Name)
-	for _, foreignKey := range constraint.ForeignKeys {
-		sqlStatement += fmt.Sprintf(" FOREIGN KEY (%s) REFERENCES %s(%s)", foreignKey.Column, foreignKey.ReferencedTable, foreignKey.ReferencedColumn)
+	sqlStatement := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s(%s)", tableId, constraint.Name, constraint.Column, constraint.ReferencedTable, constraint.ReferencedColumn)
+	if constraint.OnDelete != SpannerTableForeignKeyConstraintActionUnspecified {
+		sqlStatement += fmt.Sprintf(" ON DELETE %s", constraint.OnDelete.String())
 	}
-
 	if err := db.Exec(sqlStatement).Error; err != nil {
 		return nil, status.Errorf(codes.Internal, "Error creating foreign key constraint: %v", err)
 	}
 
 	return constraint, nil
+}
+
+func (s *SpannerService) GetSpannerTableForeignKeyConstraint(ctx context.Context, parent string, name string) (*SpannerTableForeignKeyConstraint, error) {
+	// Validate parent
+	googleSqlParentValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlTableNameRegex)
+	postgresSqlParentValid := utils.ValidateArgument(parent, utils.SpannerPostgresSqlTableNameRegex)
+	if !googleSqlParentValid && !postgresSqlParentValid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", parent, utils.SpannerGoogleSqlTableNameRegex, utils.SpannerPostgresSqlTableNameRegex)
+	}
+
+	// Validate name
+	googleSqlConstraintIdValid := utils.ValidateArgument(name, utils.SpannerGoogleSqlConstraintIdRegex)
+	postgresSqlConstraintIdValid := utils.ValidateArgument(name, utils.SpannerPostgresSqlConstraintIdRegex)
+	if !googleSqlConstraintIdValid && !postgresSqlConstraintIdValid {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", name, utils.SpannerGoogleSqlConstraintIdRegex, utils.SpannerPostgresSqlConstraintIdRegex)
+	}
+
+	// Deconstruct parent name to get project, instance, database and table
+	parentNameParts := strings.Split(parent, "/")
+	project := parentNameParts[1]
+	instance := parentNameParts[3]
+	databaseId := parentNameParts[5]
+	tableId := parentNameParts[7]
+
+	db, err := gorm.Open(
+		spannergorm.New(
+			spannergorm.Config{
+				DriverName: "spanner",
+				DSN:        fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId),
+			},
+		),
+		&gorm.Config{
+			PrepareStmt: true,
+			Logger:      tfLogger,
+		},
+	)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "Error connecting to database: %v", err)
+	}
+
+	sqlStatement := `
+	SELECT
+	  TABLE_CONSTRAINTS.CONSTRAINT_NAME,
+	  TABLE_CONSTRAINTS.TABLE_NAME,
+	  TABLE_CONSTRAINTS.CONSTRAINT_TYPE,
+	  REFERENTIAL_CONSTRAINTS.UPDATE_RULE,
+	  REFERENTIAL_CONSTRAINTS.DELETE_RULE
+	FROM
+	  INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+	INNER JOIN
+	  INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
+	ON
+	  TABLE_CONSTRAINTS.CONSTRAINT_NAME = REFERENTIAL_CONSTRAINTS.CONSTRAINT_NAME
+	WHERE TABLE_CONSTRAINTS.TABLE_NAME = ? and TABLE_CONSTRAINTS.CONSTRAINT_NAME = ? AND TABLE_CONSTRAINTS.CONSTRAINT_TYPE = "FOREIGN KEY"
+	`
+
+	var result *Constraint
+	db = db.Raw(sqlStatement, tableId, name).Scan(&result)
+	if db.Error != nil {
+		return nil, status.Errorf(codes.Internal, "Error getting foreign key constraint: %v", db.Error)
+	}
+	if result == nil {
+		return nil, status.Errorf(codes.NotFound, "Foreign key constraint %s not found", name)
+	}
+
+	return nil, nil
 }
