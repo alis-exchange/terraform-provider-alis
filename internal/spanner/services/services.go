@@ -1127,7 +1127,9 @@ func (s *SpannerService) CreateSpannerTable(ctx context.Context, parent string, 
 	}
 
 	if err := UpdateColumnMetadata(db, tableId, table.Schema.Columns); err != nil {
-		return nil, status.Errorf(codes.Internal, "Error updating column metadata table: %v", err)
+		// This is not a fatal error, so we log it and continue
+		tfLogger.Error(ctx, fmt.Sprintf("Error updating column metadata table: %v", err))
+		//return nil, status.Errorf(codes.Internal, "Error updating column metadata table: %v", err)
 	}
 
 	// Get created table
@@ -1726,7 +1728,8 @@ func (s *SpannerService) UpdateSpannerTable(ctx context.Context, table *SpannerT
 	}
 
 	if err := UpdateColumnMetadata(db, tableId, table.Schema.Columns); err != nil {
-		return nil, status.Errorf(codes.Internal, "Error updating column metadata table: %v", err)
+		// This is not a fatal error, so we log it and continue
+		tfLogger.Error(ctx, fmt.Sprintf("Error updating column metadata table: %v", err))
 	}
 
 	return table, nil

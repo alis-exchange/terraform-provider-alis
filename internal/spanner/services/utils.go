@@ -141,7 +141,17 @@ func GetColumnMetadata(db *gorm.DB, tableName string) ([]*ColumnMetadata, error)
 }
 func UpdateColumnMetadata(db *gorm.DB, tableName string, columns []*SpannerTableColumn) error {
 	// Create or Update ColumnMetadata table
-	if err := db.AutoMigrate(&ColumnMetadata{}); err != nil {
+	// IMPORTANT: When tables don't depend on each other, terraform will attempt to create them in parallel.
+	// This can cause the migration to run at the same time for multiple tables, which can lead to a duplicate table error.
+	// To prevent this, we'll retry the migration a few times.
+	_, err := utils.Retry(5, 10*time.Second, func() (interface{}, error) {
+		if err := db.AutoMigrate(&ColumnMetadata{}); err != nil {
+			return nil, err
+		}
+
+		return nil, nil
+	})
+	if err != nil {
 		return err
 	}
 
