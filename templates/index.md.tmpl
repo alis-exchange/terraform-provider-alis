@@ -10,8 +10,12 @@ description: |-
 
 Custom terraform provider for managing various google resources used in ALIS.
 
+{{ if .HasExample }}
+
 ## Example Usage
 
-{{ tffile "examples/provider/provider.tf" }}
+{{ tffile .ExampleFile }}
+
+{{ end }}
 
 {{ .SchemaMarkdown | trimspace }}

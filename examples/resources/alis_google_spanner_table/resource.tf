@@ -1,19 +1,6 @@
-terraform {
-  required_providers {
-    alis = {
-      source  = "alis-exchange/alis"
-      version = ">= 1.3.1"
-    }
-  }
-}
-
-provider "alis" {
-
-}
-
 resource "alis_google_spanner_table" "test" {
-  project         = var.ALIS_OS_PROJECT
-  instance        = var.ALIS_OS_SPANNER_INSTANCE
+  project         = var.GOOGLE_PROJECT
+  instance        = var.SPANNER_INSTANCE
   database        = "tf-test"
   name            = "tftest"
   prevent_destroy = true
@@ -91,10 +78,6 @@ resource "alis_google_spanner_table" "test" {
       }
     ]
   }
-}
-
-output "test_table" {
-  value = alis_google_spanner_table.test
 }
 
 

@@ -3,9 +3,12 @@ package spanner
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strings"
 
-	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -16,12 +19,14 @@ import (
 	"google.golang.org/grpc/status"
 	"terraform-provider-alis/internal"
 	"terraform-provider-alis/internal/spanner/services"
+	"terraform-provider-alis/internal/utils"
 )
 
 // Ensure the implementation satisfies the expected interfaces.
 var (
-	_ resource.Resource              = &tableIamBindingResource{}
-	_ resource.ResourceWithConfigure = &tableIamBindingResource{}
+	_ resource.Resource                = &tableIamBindingResource{}
+	_ resource.ResourceWithConfigure   = &tableIamBindingResource{}
+	_ resource.ResourceWithImportState = &tableIamBindingResource{}
 )
 
 // NewTableIamBindingResource is a helper function to simplify the provider implementation.
@@ -73,11 +78,11 @@ func (r *tableIamBindingResource) Schema(_ context.Context, _ resource.SchemaReq
 				},
 				Description: "The role that should be granted to the table.",
 			},
-			"permissions": schema.ListAttribute{
+			"permissions": schema.SetAttribute{
 				ElementType: types.StringType,
 				Required:    true,
-				Validators: []validator.List{
-					listvalidator.ValueStringsAre(stringvalidator.OneOf(services.SpannerTablePolicyBindingPermissions...)),
+				Validators: []validator.Set{
+					setvalidator.ValueStringsAre(stringvalidator.OneOf(services.SpannerTablePolicyBindingPermissions...)),
 				},
 				Description: "The permissions that should be granted to the role.\n" +
 					"Valid permissions are: `SELECT`, `INSERT`, `UPDATE`, `DELETE`.",
@@ -305,6 +310,39 @@ func (r *tableIamBindingResource) Delete(ctx context.Context, req resource.Delet
 		)
 		return
 	}
+}
+
+func (r *tableIamBindingResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	// Split import ID to get project, instance, and database id
+	// projects/{project}/instances/{instance}/databases/{database}/tables/{tables}/tableRoles/{role}
+	importIDParts := strings.Split(req.ID, "/")
+	if len(importIDParts) != 10 {
+		resp.Diagnostics.AddError(
+			"Invalid Import ID",
+			"Import ID must be in the format projects/{project}/instances/{instance}/databases/{database}/tables/{table}/tableRoles/{role}",
+		)
+		return
+	}
+
+	if !regexp.MustCompile(utils.SpannerGoogleSqlTableRoleNameRegex).MatchString(req.ID) && !regexp.MustCompile(utils.SpannerPostgresSqlTableRoleNameRegex).MatchString(req.ID) {
+		resp.Diagnostics.AddError(
+			"Invalid Import ID",
+			"Import ID must be in the format projects/{project}/instances/{instance}/databases/{database}/tables/{table}/tableRoles/{role}",
+		)
+		return
+	}
+
+	project := importIDParts[1]
+	instanceName := importIDParts[3]
+	databaseName := importIDParts[5]
+	tableName := importIDParts[7]
+	role := importIDParts[9]
+
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("project"), project)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("instance"), instanceName)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("database"), databaseName)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("table"), tableName)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("role"), role)...)
 }
 
 // Configure adds the provider configured client to the resource.

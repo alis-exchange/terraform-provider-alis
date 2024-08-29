@@ -1,18 +1,6 @@
-terraform {
-  required_providers {
-    alis = {
-      source  = "alis-exchange/alis"
-      version = "1.1.0"
-    }
-  }
-}
-
-provider "alis" {
-}
-
 resource "alis_google_bigtable_gc_policy" "simple" {
-  project       = var.ALIS_OS_PROJECT
-  instance      = var.ALIS_OS_BIGTABLE_INSTANCE
+  project       = var.GOOGLE_PROJECT
+  instance      = var.BIGTABLE_INSTANCE
   table         = "tf-test"
   column_family = "0"
   gc_rules = jsonencode({
@@ -25,8 +13,8 @@ resource "alis_google_bigtable_gc_policy" "simple" {
 }
 
 resource "alis_google_bigtable_gc_policy" "complex_union" {
-  project       = var.ALIS_OS_PROJECT
-  instance      = var.ALIS_OS_BIGTABLE_INSTANCE
+  project       = var.GOOGLE_PROJECT
+  instance      = var.BIGTABLE_INSTANCE
   table         = "tf-test"
   column_family = "1"
   gc_rules = jsonencode({
@@ -43,8 +31,8 @@ resource "alis_google_bigtable_gc_policy" "complex_union" {
 }
 
 resource "alis_google_bigtable_gc_policy" "complex_intersection" {
-  project       = var.ALIS_OS_PROJECT
-  instance      = var.ALIS_OS_BIGTABLE_INSTANCE
+  project       = var.GOOGLE_PROJECT
+  instance      = var.BIGTABLE_INSTANCE
   table         = "tf-test"
   column_family = "2"
   gc_rules = jsonencode({

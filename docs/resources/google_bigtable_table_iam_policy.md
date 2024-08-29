@@ -11,40 +11,27 @@ Authoritative. Sets the IAM policy for the tables and replaces any existing poli
 
 > NOTE: This resource at the moment offers nothing beyond the standard Google provider. It is recommended to use the standard Google provider for now.
 
+
+
 ## Example Usage
 
 ```terraform
-terraform {
-  required_providers {
-    alis = {
-      source  = "alis-exchange/alis"
-      version = "1.1.0"
-    }
-  }
-}
-
-provider "alis" {
-}
-
 resource "alis_google_bigtable_table_iam_policy" "policy" {
-  project  = var.ALIS_OS_PROJECT
-  instance = var.ALIS_OS_BIGTABLE_INSTANCE
+  project  = var.GOOGLE_PROJECT
+  instance = var.BIGTABLE_INSTANCE
   table    = "tf-test"
   bindings = [
     {
       role = "roles/bigtable.user",
       members = [
-        "serviceAccount:${var.ALIS_OS_SERVICE_ACCOUNT}"
+        "serviceAccount:${var.SERVICE_ACCOUNT}"
       ]
     }
   ]
 }
-
-output "test_iam" {
-  description = "The IAM policy for the table"
-  value       = alis_google_bigtable_table_iam_policy.policy
-}
 ```
+
+
 
 > **Warning ⚠️**
 >
@@ -80,3 +67,4 @@ Required:
 	- domain:{domain}: A G Suite domain (primary, instead of alias) name that represents all the users of that domain. For example, google.com or example.com.
 - `role` (String) The role that should be applied. Only one `alis_google_bigtable_table_iam_binding` can be used per role.
 Note that custom roles must be of the format `[projects|organizations]/{parent-name}/roles/{role-name}`
+

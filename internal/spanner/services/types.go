@@ -205,11 +205,6 @@ type ColumnMetadataMeta struct {
 	FileDescriptorSetPathSource string `json:"file_descriptor_set_path_source"`
 }
 
-// Value returns value of CustomerInfo struct and implements driver.Valuer interface
-func (c *ColumnMetadataMeta) Value() (driver.Value, error) {
-	return json.Marshal(c)
-}
-
 // Scan scans value into Jsonb and implements sql.Scanner interface
 func (c *ColumnMetadataMeta) Scan(value interface{}) error {
 	b, ok := value.([]byte)
@@ -219,12 +214,21 @@ func (c *ColumnMetadataMeta) Scan(value interface{}) error {
 	return json.Unmarshal(b, &c)
 }
 
+// Value returns value of CustomerInfo struct and implements driver.Valuer interface
+func (c ColumnMetadataMeta) Value() (driver.Value, error) {
+	return json.Marshal(c)
+}
+
+func (c ColumnMetadataMeta) GormDataType() string {
+	return "bytes"
+}
+
 type ColumnMetadata struct {
-	TableName  string `gorm:"primaryKey"`
-	ColumnName string `gorm:"primaryKey"`
-	Metadata   *ColumnMetadataMeta
-	CreatedAt  time.Time // Automatically managed by GORM for creation time
-	UpdatedAt  time.Time // Automatically managed by GORM for update time
+	TableName  string              `gorm:"primaryKey"`
+	ColumnName string              `gorm:"primaryKey"`
+	Metadata   *ColumnMetadataMeta `gorm:"type:bytes"`
+	CreatedAt  time.Time           // Automatically managed by GORM for creation time
+	UpdatedAt  time.Time           // Automatically managed by GORM for update time
 }
 
 type Index struct {

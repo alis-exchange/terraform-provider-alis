@@ -11,41 +11,27 @@ Authoritative. Sets the IAM policy for the databases and replaces any existing p
 
 > NOTE: This resource at the moment offers nothing beyond the standard Google provider. It is recommended to use the standard Google provider for now.
 
+
+
 ## Example Usage
 
 ```terraform
-terraform {
-  required_providers {
-    alis = {
-      source  = "alis-exchange/alis"
-      version = "1.1.0"
-    }
-  }
-}
-
-provider "alis" {
-
-}
-
 resource "alis_google_spanner_database_iam_policy" "policy" {
-  project  = var.ALIS_OS_PROJECT
-  instance = var.ALIS_OS_SPANNER_INSTANCE
+  project  = var.GOOGLE_PROJECT
+  instance = var.SPANNER_INSTANCE
   database = "tf-test"
   bindings = [
     {
       role = "roles/editor",
       members = [
-        "serviceAccount:${var.ALIS_OS_SERVICE_ACCOUNT}",
+        "serviceAccount:${var.SERVICE_ACCOUNT}",
       ]
     }
   ]
 }
-
-output "test_iam" {
-  description = "The IAM policy for the database"
-  value       = alis_google_spanner_database_iam_policy.policy
-}
 ```
+
+
 
 > **Warning ⚠️**
 >
@@ -81,3 +67,4 @@ Required:
 	- domain:{domain}: A G Suite domain (primary, instead of alias) name that represents all the users of that domain. For example, google.com or example.com.
 - `role` (String) The role that should be applied. Only one `alis_google_spanner_database_iam_binding` can be used per role.
 Note that custom roles must be of the format `[projects|organizations]/{parent-name}/roles/{role-name}`
+

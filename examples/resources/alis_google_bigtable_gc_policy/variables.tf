@@ -1,2 +1,2 @@
-variable "ALIS_OS_PROJECT" {}
-variable "ALIS_OS_BIGTABLE_INSTANCE" {}
+variable "GOOGLE_PROJECT" {}
+variable "BIGTABLE_INSTANCE" {}

@@ -139,7 +139,7 @@ func GetColumnMetadata(db *gorm.DB, tableName string) ([]*ColumnMetadata, error)
 
 	return results, nil
 }
-func UpdateColumnMetadata(db *gorm.DB, tableName string, columns []*SpannerTableColumn) error {
+func UpdateColumnMetadata(ctx context.Context, db *gorm.DB, tableName string, columns []*SpannerTableColumn) error {
 	// Create or Update ColumnMetadata table
 	// IMPORTANT: When tables don't depend on each other, terraform will attempt to create them in parallel.
 	// This can cause the migration to run at the same time for multiple tables, which can lead to a duplicate table error.

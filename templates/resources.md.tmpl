@@ -9,8 +9,20 @@ description: |-
 
 {{ .Description | trimspace }}
 
+{{ if .HasExample }}
+
 ## Example Usage
 
-{{ tffile (printf "examples/resources/%s/main.tf" .Name) }}
+{{ tffile .ExampleFile }}
+
+{{ end }}
 
 {{ .SchemaMarkdown | trimspace }}
+
+{{ if .HasImport }}
+
+## Import
+
+{{ tffile .ImportFile }}
+
+{{ end }}

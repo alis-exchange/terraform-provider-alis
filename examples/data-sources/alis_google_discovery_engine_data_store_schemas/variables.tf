@@ -1,2 +1,2 @@
-variable "ALIS_OS_PROJECT" {}
-variable "ALIS_OS_DISCOVERY_ENGINE_DATASTORE" {}
+variable "GOOGLE_PROJECT" {}
+variable "DISCOVERY_ENGINE_DATASTORE" {}

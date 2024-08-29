@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -25,8 +27,9 @@ import (
 
 // Ensure the implementation satisfies the expected interfaces.
 var (
-	_ resource.Resource              = &spannerTableIndexResource{}
-	_ resource.ResourceWithConfigure = &spannerTableIndexResource{}
+	_ resource.Resource                = &spannerTableIndexResource{}
+	_ resource.ResourceWithConfigure   = &spannerTableIndexResource{}
+	_ resource.ResourceWithImportState = &spannerTableIndexResource{}
 )
 
 // NewSpannerTableIndexResource is a helper function to simplify the provider implementation.
@@ -367,6 +370,39 @@ func (r *spannerTableIndexResource) Delete(ctx context.Context, req resource.Del
 		)
 		return
 	}
+}
+
+func (r *spannerTableIndexResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	// Split import ID to get project, instance, and database id
+	// projects/{project}/instances/{instance}/databases/{database}/tables/{tables}/indexes/{index}
+	importIDParts := strings.Split(req.ID, "/")
+	if len(importIDParts) != 10 {
+		resp.Diagnostics.AddError(
+			"Invalid Import ID",
+			"Import ID must be in the format projects/{project}/instances/{instance}/databases/{database}/tables/{table}/indexes/{index}",
+		)
+		return
+	}
+
+	if !regexp.MustCompile(utils.SpannerGoogleSqlTableIndexNameRegex).MatchString(req.ID) && !regexp.MustCompile(utils.SpannerPostgresSqlTableIndexNameRegex).MatchString(req.ID) {
+		resp.Diagnostics.AddError(
+			"Invalid Import ID",
+			"Import ID must be in the format projects/{project}/instances/{instance}/databases/{database}/tables/{table}/indexes/{index}",
+		)
+		return
+	}
+
+	project := importIDParts[1]
+	instanceName := importIDParts[3]
+	databaseName := importIDParts[5]
+	tableName := importIDParts[7]
+	indexName := importIDParts[9]
+
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("project"), project)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("instance"), instanceName)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("database"), databaseName)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("table"), tableName)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("name"), indexName)...)
 }
 
 // Configure adds the provider configured client to the resource.

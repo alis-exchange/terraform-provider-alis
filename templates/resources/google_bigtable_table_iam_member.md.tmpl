@@ -11,9 +11,13 @@ description: |-
 
 > NOTE: This resource at the moment offers nothing beyond the standard Google provider. It is recommended to use the standard Google provider for now.
 
+{{ if .HasExample }}
+
 ## Example Usage
 
-{{ tffile (printf "examples/resources/%s/main.tf" .Name) }}
+{{ tffile .ExampleFile }}
+
+{{ end }}
 
 > **Warning ⚠️**
 >
@@ -26,3 +30,11 @@ description: |-
 > `alis_google_bigtable_table_iam_binding` resources can be used in conjunction with `alis_google_bigtable_table_iam_member` resources only if they do not grant privilege to the same role.
 
 {{ .SchemaMarkdown | trimspace }}
+
+{{ if .HasImport }}
+
+## Import
+
+{{ tffile .ImportFile }}
+
+{{ end }}

@@ -11,35 +11,21 @@ Non-authoritative. Updates the IAM policy to grant a role to a new member. Other
 
 > NOTE: This resource at the moment offers nothing beyond the standard Google provider. It is recommended to use the standard Google provider for now.
 
+
+
 ## Example Usage
 
 ```terraform
-terraform {
-  required_providers {
-    alis = {
-      source  = "alis-exchange/alis"
-      version = "1.1.0"
-    }
-  }
-}
-
-provider "alis" {
-
-}
-
 resource "alis_google_spanner_database_iam_member" "editor" {
-  project  = var.ALIS_OS_PROJECT
-  instance = var.ALIS_OS_SPANNER_INSTANCE
+  project  = var.GOOGLE_PROJECT
+  instance = var.SPANNER_INSTANCE
   database = "tf-test"
   role     = "roles/editor"
-  member   = "serviceAccount:${var.ALIS_OS_SERVICE_ACCOUNT}"
-}
-
-output "test_iam" {
-  description = "The IAM policy for the database"
-  value       = alis_google_spanner_database_iam_member.editor
+  member   = "serviceAccount:${var.SERVICE_ACCOUNT}"
 }
 ```
+
+
 
 > **Warning ⚠️**
 >
@@ -68,3 +54,4 @@ output "test_iam" {
 - `project` (String)
 - `role` (String) The role that should be applied. Only one `alis_google_spanner_database_iam_binding` can be used per role.
 Note that custom roles must be of the format `[projects|organizations]/{parent-name}/roles/{role-name}`
+

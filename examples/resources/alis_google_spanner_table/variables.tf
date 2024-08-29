@@ -1,2 +1,4 @@
-variable "ALIS_OS_PROJECT" {}
-variable "ALIS_OS_SPANNER_INSTANCE" {}
+variable "GOOGLE_PROJECT" {}
+variable "SPANNER_INSTANCE" {}
+variable "SPANNER_DB" {}
+variable "SPANNER_TABLE" {}

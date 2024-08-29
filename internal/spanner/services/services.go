@@ -34,11 +34,11 @@ import (
 var tfLogger = customloggers.New(
 	log.New(os.Stdout, "\r\n", log.LstdFlags), // io writer
 	logger.Config{
-		SlowThreshold:             time.Second, // Slow SQL threshold
-		LogLevel:                  logger.Info, // Log level
-		IgnoreRecordNotFoundError: false,       // Ignore ErrRecordNotFound error for logger
-		ParameterizedQueries:      true,        // Don't include params in the SQL log
-		Colorful:                  true,        // Disable color
+		SlowThreshold:             200 * time.Millisecond, // Slow SQL threshold
+		LogLevel:                  logger.Info,            // Log level
+		IgnoreRecordNotFoundError: false,                  // Ignore ErrRecordNotFound error for logger
+		ParameterizedQueries:      true,                   // Don't include params in the SQL log
+		Colorful:                  true,                   // Disable color
 	},
 )
 
@@ -1126,9 +1126,9 @@ func (s *SpannerService) CreateSpannerTable(ctx context.Context, parent string, 
 		return nil, status.Errorf(codes.Internal, "Error creating table: %v", err)
 	}
 
-	if err := UpdateColumnMetadata(db, tableId, table.Schema.Columns); err != nil {
+	if err := UpdateColumnMetadata(ctx, db, tableId, table.Schema.Columns); err != nil {
 		// This is not a fatal error, so we log it and continue
-		tfLogger.Error(ctx, fmt.Sprintf("Error updating column metadata table: %v", err))
+		tfLogger.Warn(ctx, fmt.Sprintf("Error updating column metadata table: %v", err))
 		//return nil, status.Errorf(codes.Internal, "Error updating column metadata table: %v", err)
 	}
 
@@ -1727,9 +1727,9 @@ func (s *SpannerService) UpdateSpannerTable(ctx context.Context, table *SpannerT
 		return nil, status.Errorf(codes.Internal, "Error updating table: %v", err)
 	}
 
-	if err := UpdateColumnMetadata(db, tableId, table.Schema.Columns); err != nil {
+	if err := UpdateColumnMetadata(ctx, db, tableId, table.Schema.Columns); err != nil {
 		// This is not a fatal error, so we log it and continue
-		tfLogger.Error(ctx, fmt.Sprintf("Error updating column metadata table: %v", err))
+		tfLogger.Warn(ctx, fmt.Sprintf("Error updating column metadata table: %v", err))
 	}
 
 	return table, nil

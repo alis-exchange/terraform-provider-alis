@@ -864,7 +864,17 @@ func (r *spannerTableResource) ImportState(ctx context.Context, req resource.Imp
 			"Invalid Import ID",
 			"Import ID must be in the format projects/{project}/instances/{instance}/databases/{database}/tables/{table}",
 		)
+		return
 	}
+
+	if !regexp.MustCompile(utils.SpannerGoogleSqlTableIdRegex).MatchString(req.ID) && !regexp.MustCompile(utils.SpannerPostgresSqlTableIdRegex).MatchString(req.ID) {
+		resp.Diagnostics.AddError(
+			"Invalid Import ID",
+			"Import ID must be a valid Spanner Table ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions",
+		)
+		return
+	}
+
 	project := importIDParts[1]
 	instanceName := importIDParts[3]
 	databaseName := importIDParts[5]

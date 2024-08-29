@@ -1,3 +1,3 @@
-variable "ALIS_OS_PROJECT" {}
-variable "ALIS_OS_BIGTABLE_INSTANCE" {}
-variable "ALIS_OS_SERVICE_ACCOUNT" {}
+variable "GOOGLE_PROJECT" {}
+variable "BIGTABLE_INSTANCE" {}
+variable "SERVICE_ACCOUNT" {}

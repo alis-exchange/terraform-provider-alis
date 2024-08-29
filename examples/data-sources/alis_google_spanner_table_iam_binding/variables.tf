@@ -1,2 +1,2 @@
-variable "ALIS_OS_PROJECT" {}
-variable "ALIS_OS_SPANNER_INSTANCE" {}
+variable "GOOGLE_PROJECT" {}
+variable "SPANNER_INSTANCE" {}

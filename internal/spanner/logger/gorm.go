@@ -77,24 +77,24 @@ func (l *tfLogger) LogMode(level logger.LogLevel) logger.Interface {
 // Info print info
 func (l *tfLogger) Info(ctx context.Context, msg string, data ...interface{}) {
 	if l.LogLevel >= logger.Info {
-		l.Printf(l.infoStr+msg, append([]interface{}{utils.FileWithLineNum()}, data...)...)
 		tflog.Info(ctx, l.infoStr+msg)
+		l.Printf(l.infoStr+msg, append([]interface{}{utils.FileWithLineNum()}, data...)...)
 	}
 }
 
 // Warn print warn messages
 func (l *tfLogger) Warn(ctx context.Context, msg string, data ...interface{}) {
 	if l.LogLevel >= logger.Warn {
-		l.Printf(l.warnStr+msg, append([]interface{}{utils.FileWithLineNum()}, data...)...)
 		tflog.Warn(ctx, l.warnStr+msg)
+		l.Printf(l.warnStr+msg, append([]interface{}{utils.FileWithLineNum()}, data...)...)
 	}
 }
 
 // Error print error messages
 func (l *tfLogger) Error(ctx context.Context, msg string, data ...interface{}) {
 	if l.LogLevel >= logger.Error {
-		l.Printf(l.errStr+msg, append([]interface{}{utils.FileWithLineNum()}, data...)...)
 		tflog.Error(ctx, l.errStr+msg)
+		l.Printf(l.errStr+msg, append([]interface{}{utils.FileWithLineNum()}, data...)...)
 	}
 }
 

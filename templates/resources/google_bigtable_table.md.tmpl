@@ -11,8 +11,20 @@ description: |-
 
 > NOTE: This resource at the moment offers nothing beyond the standard Google provider. It is recommended to use the standard Google provider for now.
 
+{{ if .HasExample }}
+
 ## Example Usage
 
-{{ tffile (printf "examples/resources/%s/main.tf" .Name) }}
+{{ tffile .ExampleFile }}
+
+{{ end }}
 
 {{ .SchemaMarkdown | trimspace }}
+
+{{ if .HasImport }}
+
+## Import
+
+{{ tffile .ImportFile }}
+
+{{ end }}

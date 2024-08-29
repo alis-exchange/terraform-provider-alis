@@ -61,7 +61,7 @@ func (r *tableIamBindingDataSource) Schema(_ context.Context, _ datasource.Schem
 				Required:    true,
 				Description: "The role that should be granted to the table.",
 			},
-			"permissions": schema.ListAttribute{
+			"permissions": schema.SetAttribute{
 				Computed:    true,
 				ElementType: types.StringType,
 				Description: "The permissions that should be granted to the role.\n" +
