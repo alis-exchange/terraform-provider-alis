@@ -344,10 +344,10 @@ func TestCreateSpannerTable(t *testing.T) {
 			name: "Test_CreateSpannerTable",
 			args: args{
 				ctx:     context.Background(),
-				parent:  fmt.Sprintf("projects/%s/instances/%s/databases/%s", TestProject, TestInstance, "alis_px_dev_cmk"),
-				tableId: "portfolios",
+				parent:  fmt.Sprintf("projects/%s/instances/%s/databases/%s", TestProject, TestInstance, "alis-px"),
+				tableId: "tf_test",
 				table: &SpannerTable{
-					Name: "portfolios",
+					Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "alis-px", "tf_test"),
 					Schema: &SpannerTableSchema{
 						Columns: []*SpannerTableColumn{
 							{
@@ -360,86 +360,16 @@ func TestCreateSpannerTable(t *testing.T) {
 								AutoIncrement: wrapperspb.Bool(true),
 							},
 							{
-								Name: "portfolio_id",
-								Type: "STRING",
-								Size: wrapperspb.Int64(255),
-							},
-							//{
-							//	Name:         "test",
-							//	IsPrimaryKey: wrapperspb.Bool(false),
-							//	Unique:       wrapperspb.Bool(false),
-							//	Type:         "PROTO",
-							//	ProtoFileDescriptorSet: &ProtoFileDescriptorSet{
-							//		ProtoPackage:                wrapperspb.String("alis.px.services.data.v2.SpannerTest.NestedEnum"),
-							//		FileDescriptorSetPath:       wrapperspb.String("gcs:gs://internal.descriptorset.alis-px-product-g51dmvo.alis.services/descriptorset.pb"),
-							//		FileDescriptorSetPathSource: ProtoFileDescriptorSetSourceGcs,
-							//	},
-							//},
-							//{
-							//	Name:         "branch_test",
-							//	IsPrimaryKey: wrapperspb.Bool(false),
-							//	Unique:       wrapperspb.Bool(false),
-							//	Type:         "STRING",
-							//	//IsComputed:     wrapperspb.Bool(true),
-							//	//ComputationDdl: wrapperspb.String("branch.name"),
-							//	Required: wrapperspb.Bool(false),
-							//	Size:     wrapperspb.Int64(255),
-							//},
-						},
-					},
-				},
-			},
-		},
-		{
-			name: "Test_CreateSpannerTable",
-			args: args{
-				ctx:     context.Background(),
-				parent:  fmt.Sprintf("projects/%s/instances/%s/databases/%s", TestProject, TestInstance, "alis_px_dev_cmk"),
-				tableId: "branches",
-				table: &SpannerTable{
-					Name: "branches",
-					Schema: &SpannerTableSchema{
-						Columns: []*SpannerTableColumn{
-							{
-								Name:          "key",
-								IsPrimaryKey:  wrapperspb.Bool(true),
-								Unique:        wrapperspb.Bool(false),
-								Type:          "INT64",
-								Size:          wrapperspb.Int64(255),
-								Required:      wrapperspb.Bool(true),
-								AutoIncrement: wrapperspb.Bool(true),
+								Name:     "created_at",
+								Type:     "TIMESTAMP",
+								Required: wrapperspb.Bool(false),
 							},
 							{
-								Name: "parent",
-								Type: "STRING",
-								Size: wrapperspb.Int64(255),
+								Name:           "updated_at",
+								Type:           "TIMESTAMP",
+								Required:       wrapperspb.Bool(true),
+								AutoUpdateTime: wrapperspb.Bool(true),
 							},
-							{
-								Name: "branch_id",
-								Type: "STRING",
-								Size: wrapperspb.Int64(255),
-							},
-							//{
-							//	Name:         "test",
-							//	IsPrimaryKey: wrapperspb.Bool(false),
-							//	Unique:       wrapperspb.Bool(false),
-							//	Type:         "PROTO",
-							//	ProtoFileDescriptorSet: &ProtoFileDescriptorSet{
-							//		ProtoPackage:                wrapperspb.String("alis.px.services.data.v2.SpannerTest.NestedEnum"),
-							//		FileDescriptorSetPath:       wrapperspb.String("gcs:gs://internal.descriptorset.alis-px-product-g51dmvo.alis.services/descriptorset.pb"),
-							//		FileDescriptorSetPathSource: ProtoFileDescriptorSetSourceGcs,
-							//	},
-							//},
-							//{
-							//	Name:         "branch_test",
-							//	IsPrimaryKey: wrapperspb.Bool(false),
-							//	Unique:       wrapperspb.Bool(false),
-							//	Type:         "STRING",
-							//	//IsComputed:     wrapperspb.Bool(true),
-							//	//ComputationDdl: wrapperspb.String("branch.name"),
-							//	Required: wrapperspb.Bool(false),
-							//	Size:     wrapperspb.Int64(255),
-							//},
 						},
 					},
 				},
@@ -511,37 +441,29 @@ func TestUpdateSpannerTable(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				table: &SpannerTable{
-					Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "alis_px_dev_cmk", "tftest"),
+					Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "alis-px", "tf_test"),
 					Schema: &SpannerTableSchema{
 						Columns: []*SpannerTableColumn{
 							{
-								Name:         "key",
-								IsPrimaryKey: wrapperspb.Bool(true),
-								Unique:       wrapperspb.Bool(false),
-								Type:         "INT64",
-								Size:         wrapperspb.Int64(255),
-								Required:     wrapperspb.Bool(true),
+								Name:          "key",
+								IsPrimaryKey:  wrapperspb.Bool(true),
+								Unique:        wrapperspb.Bool(false),
+								Type:          "INT64",
+								Size:          wrapperspb.Int64(255),
+								Required:      wrapperspb.Bool(true),
+								AutoIncrement: wrapperspb.Bool(true),
 							},
 							{
-								Name:         "test",
-								IsPrimaryKey: wrapperspb.Bool(false),
-								Unique:       wrapperspb.Bool(false),
-								Type:         "PROTO",
-								ProtoFileDescriptorSet: &ProtoFileDescriptorSet{
-									ProtoPackage: wrapperspb.String("alis.px.resources.portfolios.v1.Branch"),
-									//FileDescriptorSetPath:       wrapperspb.String("gcs:gs://internal.descriptorset.alis-px-product-g51dmvo.alis.services/descriptorset.pb"),
-									//FileDescriptorSetPathSource: ProtoFileDescriptorSetSourceGcs,
-								},
+								Name:           "created_at",
+								Type:           "TIMESTAMP",
+								Required:       wrapperspb.Bool(false),
+								AutoUpdateTime: wrapperspb.Bool(true),
 							},
 							{
-								Name: "branch_tests",
-								//IsPrimaryKey:   wrapperspb.Bool(false),
-								//Unique:         wrapperspb.Bool(false),
-								Type: "ARRAY<STRING>",
-								//IsComputed:     wrapperspb.Bool(true),
-								//ComputationDdl: wrapperspb.String("test.name"),
-								Required: wrapperspb.Bool(true),
-								//Size:           wrapperspb.Int64(255),
+								Name:           "updated_at",
+								Type:           "TIMESTAMP",
+								Required:       wrapperspb.Bool(true),
+								AutoUpdateTime: wrapperspb.Bool(true),
 							},
 						},
 					},
@@ -617,7 +539,7 @@ func TestDeleteSpannerTable(t *testing.T) {
 			name: "Test_DeleteSpannerTable",
 			args: args{
 				ctx:  context.Background(),
-				name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "mentenova-co", "mentenova_co_dev_62g_Tasks"),
+				name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "alis-px", "tf_test"),
 			},
 		},
 	}
@@ -1469,6 +1391,175 @@ func TestSpannerService_GetSpannerTableForeignKeyConstraint(t *testing.T) {
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("GetSpannerTableForeignKeyConstraint() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSpannerService_CreateSpannerTableRowDeletionPolicy(t *testing.T) {
+	type fields struct {
+		GoogleCredentials *googleoauth.Credentials
+	}
+	type args struct {
+		ctx    context.Context
+		parent string
+		ttl    *SpannerTableRowDeletionPolicy
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    *SpannerTableRowDeletionPolicy
+		wantErr bool
+	}{
+		{
+			name: "Test_CreateSpannerTableRowDeletionPolicy",
+			args: args{
+				ctx:    context.Background(),
+				parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "alis-px", "tf_test"),
+				ttl: &SpannerTableRowDeletionPolicy{
+					Column:   "updated_at",
+					Duration: wrapperspb.Int64(1),
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &SpannerService{
+				GoogleCredentials: tt.fields.GoogleCredentials,
+			}
+			got, err := s.CreateSpannerTableRowDeletionPolicy(tt.args.ctx, tt.args.parent, tt.args.ttl)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("CreateSpannerTableRowDeletionPolicy() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("CreateSpannerTableRowDeletionPolicy() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSpannerService_GetSpannerTableRowDeletionPolicy(t *testing.T) {
+	type fields struct {
+		GoogleCredentials *googleoauth.Credentials
+	}
+	type args struct {
+		ctx    context.Context
+		parent string
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    *SpannerTableRowDeletionPolicy
+		wantErr bool
+	}{
+		{
+			name: "Test_GetSpannerTableRowDeletionPolicy",
+			args: args{
+				ctx:    context.Background(),
+				parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "alis-px", "tf_test"),
+			},
+			want:    &SpannerTableRowDeletionPolicy{},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &SpannerService{
+				GoogleCredentials: tt.fields.GoogleCredentials,
+			}
+			got, err := s.GetSpannerTableRowDeletionPolicy(tt.args.ctx, tt.args.parent)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("GetSpannerTableRowDeletionPolicy() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("GetSpannerTableRowDeletionPolicy() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSpannerService_UpdateSpannerTableRowDeletionPolicy(t *testing.T) {
+	type fields struct {
+		GoogleCredentials *googleoauth.Credentials
+	}
+	type args struct {
+		ctx    context.Context
+		parent string
+		ttl    *SpannerTableRowDeletionPolicy
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    *SpannerTableRowDeletionPolicy
+		wantErr bool
+	}{
+		{
+			name: "Test_UpdateSpannerTableRowDeletionPolicy",
+			args: args{
+				ctx:    context.Background(),
+				parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "alis-px", "tf_test"),
+				ttl: &SpannerTableRowDeletionPolicy{
+					Column:   "updated_at",
+					Duration: wrapperspb.Int64(0),
+				},
+			},
+			want:    &SpannerTableRowDeletionPolicy{},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &SpannerService{
+				GoogleCredentials: tt.fields.GoogleCredentials,
+			}
+			got, err := s.UpdateSpannerTableRowDeletionPolicy(tt.args.ctx, tt.args.parent, tt.args.ttl)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("UpdateSpannerTableRowDeletionPolicy() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("UpdateSpannerTableRowDeletionPolicy() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSpannerService_DeleteSpannerTableRowDeletionPolicy(t *testing.T) {
+	type fields struct {
+		GoogleCredentials *googleoauth.Credentials
+	}
+	type args struct {
+		ctx    context.Context
+		parent string
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "Test_DeleteSpannerTableRowDeletionPolicy",
+			args: args{
+				ctx:    context.Background(),
+				parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "alis-px", "tf_test"),
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &SpannerService{
+				GoogleCredentials: tt.fields.GoogleCredentials,
+			}
+			if err := s.DeleteSpannerTableRowDeletionPolicy(tt.args.ctx, tt.args.parent); (err != nil) != tt.wantErr {
+				t.Errorf("DeleteSpannerTableRowDeletionPolicy() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}

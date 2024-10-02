@@ -336,3 +336,10 @@ var SpannerTableForeignKeyConstraintActions = []string{
 	SpannerTableForeignKeyConstraintSetNull.String(),
 	SpannerTableForeignKeyConstraintSetDefault.String(),
 }
+
+type SpannerTableRowDeletionPolicy struct {
+	// The name of the TIMESTAMP column that is used to determine when a row is deleted
+	Column string
+	// The duration after which a row is deleted in days
+	Duration *wrapperspb.Int64Value
+}

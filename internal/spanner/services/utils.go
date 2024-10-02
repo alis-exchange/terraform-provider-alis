@@ -386,6 +386,34 @@ func ParseSchemaToStruct(schema *SpannerTableSchema) (interface{}, error) {
 			// TODO: Should we support default values for computed columns?
 
 			gormTags = append(gormTags, fmt.Sprintf("type: %s AS (%s) STORED", columnTypeArgs, column.ComputationDdl.GetValue()))
+		} else if column.Type == SpannerTableDataType_TIMESTAMP.String() && column.AutoUpdateTime != nil {
+			// Set the column type manually since we'll be overriding it using the `type` gorm tag
+			columnTypeArgs := ""
+
+			{
+				// Set the appropriate column type
+				columnTypeArgs += column.Type
+			}
+
+			{
+				// Set nullable
+				if column.Required != nil && column.Required.GetValue() {
+					columnTypeArgs += " NOT NULL"
+				}
+			}
+
+			{
+				// Set auto update
+				if column.AutoUpdateTime != nil {
+					if column.AutoUpdateTime.GetValue() {
+						columnTypeArgs += " OPTIONS (allow_commit_timestamp=true)"
+					} else {
+						columnTypeArgs += " OPTIONS (allow_commit_timestamp=null)"
+					}
+				}
+			}
+
+			gormTags = append(gormTags, fmt.Sprintf("type: %s", columnTypeArgs))
 		} else {
 			// Set auto increment
 			if column.AutoIncrement != nil && column.AutoIncrement.GetValue() {

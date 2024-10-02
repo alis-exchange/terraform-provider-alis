@@ -70,7 +70,7 @@ Valid values are: `asc` or `desc`. If not specified the default is `asc`.
 ## Import
 
 ```terraform
-# Table can be imported by specifying the fully qualified name of the table
+# Index can be imported by specifying the fully qualified name of the index
 # projects/{project}/instances/{instance}/databases/{database}/tables/{table}/indexes/{index}
 terraform import alis_google_spanner_table.table "projects/{project}/instances/{instance}/databases/{database}/tables/{table}/indexes/{index}"
 ```

@@ -63,6 +63,7 @@ type spannerTableColumn struct {
 	IsComputed     types.Bool   `tfsdk:"is_computed"`
 	ComputationDdl types.String `tfsdk:"computation_ddl"`
 	AutoIncrement  types.Bool   `tfsdk:"auto_increment"`
+	AutoUpdateTime types.Bool   `tfsdk:"auto_update_time"`
 	Unique         types.Bool   `tfsdk:"unique"`
 	Type           types.String `tfsdk:"type"`
 	Size           types.Int64  `tfsdk:"size"`
@@ -76,20 +77,21 @@ type spannerTableColumn struct {
 
 func (o spannerTableColumn) attrTypes() map[string]attr.Type {
 	return map[string]attr.Type{
-		"name":            types.StringType,
-		"is_primary_key":  types.BoolType,
-		"is_computed":     types.BoolType,
-		"computation_ddl": types.StringType,
-		"auto_increment":  types.BoolType,
-		"unique":          types.BoolType,
-		"type":            types.StringType,
-		"size":            types.Int64Type,
-		"precision":       types.Int64Type,
-		"scale":           types.Int64Type,
-		"required":        types.BoolType,
-		"default_value":   types.StringType,
-		"proto_package":   types.StringType,
-		"file_descriptor": types.StringType,
+		"name":             types.StringType,
+		"is_primary_key":   types.BoolType,
+		"is_computed":      types.BoolType,
+		"computation_ddl":  types.StringType,
+		"auto_increment":   types.BoolType,
+		"auto_update_time": types.BoolType,
+		"unique":           types.BoolType,
+		"type":             types.StringType,
+		"size":             types.Int64Type,
+		"precision":        types.Int64Type,
+		"scale":            types.Int64Type,
+		"required":         types.BoolType,
+		"default_value":    types.StringType,
+		"proto_package":    types.StringType,
+		"file_descriptor":  types.StringType,
 	}
 }
 
@@ -188,6 +190,11 @@ func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaReques
 									Optional: true,
 									Description: "Indicates if the column is auto-incrementing.\n" +
 										"The column must be of type `INT64` or `FLOAT64`.",
+								},
+								"auto_update_time": schema.BoolAttribute{
+									Optional: true,
+									Description: "Indicates if the column auto populates on row update.\n" +
+										"The column must be of type `TIMESTAMP`.",
 								},
 								"unique": schema.BoolAttribute{
 									Optional:    true,
@@ -430,6 +437,11 @@ func (r *spannerTableResource) Create(ctx context.Context, req resource.CreateRe
 					col.AutoIncrement = wrapperspb.Bool(column.AutoIncrement.ValueBool())
 				}
 
+				// Populate auto update time
+				if !column.AutoUpdateTime.IsNull() {
+					col.AutoUpdateTime = wrapperspb.Bool(column.AutoUpdateTime.ValueBool())
+				}
+
 				// Populate unique
 				if !column.Unique.IsNull() {
 					col.Unique = wrapperspb.Bool(column.Unique.ValueBool())
@@ -593,6 +605,11 @@ func (r *spannerTableResource) Read(ctx context.Context, req resource.ReadReques
 					col.AutoIncrement = types.BoolValue(column.AutoIncrement.GetValue())
 				}
 
+				// Get auto update time
+				if column.AutoUpdateTime != nil {
+					col.AutoUpdateTime = types.BoolValue(column.AutoUpdateTime.GetValue())
+				}
+
 				// Get unique
 				if column.Unique != nil {
 					col.Unique = types.BoolValue(column.Unique.GetValue())
@@ -729,6 +746,11 @@ func (r *spannerTableResource) Update(ctx context.Context, req resource.UpdateRe
 				// Populate auto increment
 				if !column.AutoIncrement.IsNull() {
 					col.AutoIncrement = wrapperspb.Bool(column.AutoIncrement.ValueBool())
+				}
+
+				// Populate auto update time
+				if !column.AutoUpdateTime.IsNull() {
+					col.AutoUpdateTime = wrapperspb.Bool(column.AutoUpdateTime.ValueBool())
 				}
 
 				// Populate unique

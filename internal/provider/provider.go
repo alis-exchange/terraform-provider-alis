@@ -189,6 +189,7 @@ func (p *googleProvider) Resources(_ context.Context) []func() resource.Resource
 		spanner.NewSpannerTableIndexResource,
 		spanner.NewDatabaseRoleResource,
 		spanner.NewTableIamBindingResource,
+		spanner.NewTableTtlPolicyResource,
 		discoveryengine.NewDiscoveryEngineDataSourceSchemaResource,
 	}
 }

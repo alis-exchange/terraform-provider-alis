@@ -141,6 +141,8 @@ Optional:
 
 - `auto_increment` (Boolean) Indicates if the column is auto-incrementing.
 The column must be of type `INT64` or `FLOAT64`.
+- `auto_update_time` (Boolean) Indicates if the column auto populates on row update.
+The column must be of type `TIMESTAMP`.
 - `computation_ddl` (String) The DDL expression for the computed column.
 This is only applicable to columns where `is_computed` is true.
 The expression must be a valid SQL expression that generates a value for the column.
