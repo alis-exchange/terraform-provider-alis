@@ -332,7 +332,7 @@ func ParseSchemaToStruct(schema *SpannerTableSchema) (interface{}, error) {
 
 			{
 				// Set the appropriate column type
-				columnTypeArgs += column.ProtoFileDescriptorSet.ProtoPackage.GetValue()
+				columnTypeArgs += fmt.Sprintf("`%s`", column.ProtoFileDescriptorSet.ProtoPackage.GetValue())
 			}
 
 			{
