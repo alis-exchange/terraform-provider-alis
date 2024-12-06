@@ -101,6 +101,7 @@ func (d *discoveryEngineDataStoreSchemasDataSource) Schema(_ context.Context, _ 
 				Description: "List of schemas.",
 			},
 		},
+		DeprecationMessage: "This data source is deprecated. Please use the standard Google provider resource instead.",
 	}
 }
 

@@ -115,6 +115,7 @@ func (r *tableResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 		},
 		Description: "A Google Bigtable resource.\n" +
 			"This resource provisions and manages tables in a Bigtable instance.",
+		DeprecationMessage: "This resource is deprecated. Please use the standard Google provider resource instead.",
 	}
 }
 

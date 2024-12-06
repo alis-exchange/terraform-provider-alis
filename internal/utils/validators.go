@@ -49,9 +49,12 @@ var (
 	SpannerGoogleSqlTableIndexNameRegex     = fmt.Sprintf(`^projects\/%s\/instances\/%s\/databases\/%s\/tables\/%s\/indexes\/%s$`, CutPrefixAndSuffix(ProjectIdRegex, "^", "$"), CutPrefixAndSuffix(InstanceIdRegex, "^", "$"), CutPrefixAndSuffix(SpannerGoogleSqlDatabaseIdRegex, "^", "$"), CutPrefixAndSuffix(SpannerGoogleSqlTableIdRegex, "^", "$"), CutPrefixAndSuffix(SpannerGoogleSqlIndexIdRegex, "^", "$"))
 	SpannerPostgresSqlTableIndexNameRegex   = fmt.Sprintf(`^projects\/%s\/instances\/%s\/databases\/%s\/tables\/%s\/indexes\/%s$`, CutPrefixAndSuffix(ProjectIdRegex, "^", "$"), CutPrefixAndSuffix(InstanceIdRegex, "^", "$"), CutPrefixAndSuffix(SpannerPostgresSqlDatabaseIdRegex, "^", "$"), CutPrefixAndSuffix(SpannerPostgresSqlTableIdRegex, "^", "$"), CutPrefixAndSuffix(SpannerPostgresSqlIndexIdRegex, "^", "$"))
 
-	SpannerGoogleSqlConstraintIdRegex   = ``
-	SpannerPostgresSqlConstraintIdRegex = ``
+	SpannerGoogleSqlConstraintIdRegex   = `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`
+	SpannerPostgresSqlConstraintIdRegex = `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`
+)
 
+// Discovery Engine regex
+var (
 	DiscoveryEngineDatastoreNameRegex       = fmt.Sprintf(`^projects\/%s\/locations\/[a-zA-Z0-9-]*\/collections\/[a-zA-Z0-9-_]*\/dataStores\/[a-z0-9-_]*$`, CutPrefixAndSuffix(ProjectIdRegex, "^", "$"))
 	DiscoveryEngineDatastoreSchemaIdRegex   = `^[a-zA-Z0-9-_]*$`
 	DiscoveryEngineDatastoreSchemaNameRegex = fmt.Sprintf(`^projects\/%s\/locations\/[a-zA-Z0-9-]*\/collections\/[a-zA-Z0-9-_]*\/dataStores\/[a-z0-9-_]*\/schemas\/%s$`, CutPrefixAndSuffix(ProjectIdRegex, "^", "$"), CutPrefixAndSuffix(DiscoveryEngineDatastoreSchemaIdRegex, "^", "$"))

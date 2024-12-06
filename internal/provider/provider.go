@@ -187,6 +187,7 @@ func (p *googleProvider) Resources(_ context.Context) []func() resource.Resource
 		spanner.NewIamMemberResource,
 		spanner.NewSpannerTableResource,
 		spanner.NewSpannerTableIndexResource,
+		spanner.NewTableForeignKeyResource,
 		spanner.NewDatabaseRoleResource,
 		spanner.NewTableIamBindingResource,
 		spanner.NewTableTtlPolicyResource,

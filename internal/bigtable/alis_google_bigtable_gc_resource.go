@@ -99,6 +99,7 @@ func (r *garbageCollectionPolicyResource) Schema(_ context.Context, _ resource.S
 					"Alternatively, you can have nested JSON objects with the same structure as the parent JSON object(`gc_rules`).",
 			},
 		},
+		DeprecationMessage: "This resource is deprecated. Please use the standard Google provider resource instead.",
 	}
 }
 

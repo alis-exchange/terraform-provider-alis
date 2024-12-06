@@ -88,6 +88,7 @@ func (d *databaseIamPolicyDataSource) Schema(_ context.Context, _ datasource.Sch
 				},
 			},
 		},
+		DeprecationMessage: "This resource is deprecated. Please use the standard Google provider resource instead.",
 	}
 }
 

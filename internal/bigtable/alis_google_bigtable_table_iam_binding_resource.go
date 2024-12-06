@@ -85,6 +85,7 @@ func (r *tableIamBindingResource) Schema(_ context.Context, _ resource.SchemaReq
 		},
 		Description: "Authoritative for a given role. Updates the IAM policy to grant a role to a list of members.\n" +
 			"Other roles within the IAM policy for the table are preserved.",
+		DeprecationMessage: "This resource is deprecated. Please use the standard Google provider resource instead.",
 	}
 }
 

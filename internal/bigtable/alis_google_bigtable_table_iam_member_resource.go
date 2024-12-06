@@ -86,7 +86,8 @@ func (r *tableIamMemberResource) Schema(_ context.Context, _ resource.SchemaRequ
 					"	- domain:{domain}: A G Suite domain (primary, instead of alias) name that represents all the users of that domain. For example, google.com or example.com.\n",
 			},
 		},
-		Description: "Non-authoritative. Updates the IAM policy to grant a role to a new member. Other members for the role for the table are preserved.",
+		Description:        "Non-authoritative. Updates the IAM policy to grant a role to a new member. Other members for the role for the table are preserved.",
+		DeprecationMessage: "This resource is deprecated. Please use the standard Google provider resource instead.",
 	}
 }
 

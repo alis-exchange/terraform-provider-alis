@@ -241,11 +241,14 @@ type Index struct {
 }
 
 type Constraint struct {
-	CONSTRAINT_NAME string
-	TABLE_NAME      string
-	CONSTRAINT_TYPE string
-	UPDATE_RULE     string
-	DELETE_RULE     string
+	CONSTRAINT_NAME    string
+	CONSTRAINT_TYPE    string
+	CONSTRAINED_TABLE  string
+	CONSTRAINED_COLUMN string
+	UPDATE_RULE        string
+	DELETE_RULE        string
+	REFERENCED_TABLE   string
+	REFERENCED_COLUMN  string
 }
 
 // SpannerTableDataType is a type for Spanner table column data types.
@@ -319,22 +322,27 @@ type SpannerTableForeignKeyConstraintAction int64
 const (
 	SpannerTableForeignKeyConstraintActionUnspecified SpannerTableForeignKeyConstraintAction = iota
 	SpannerTableForeignKeyConstraintActionCascade
-	SpannerTableForeignKeyConstraintActionRestrict
 	SpannerTableForeignKeyConstraintNoAction
-	SpannerTableForeignKeyConstraintSetNull
-	SpannerTableForeignKeyConstraintSetDefault
 )
 
 func (a SpannerTableForeignKeyConstraintAction) String() string {
-	return [...]string{"", "CASCADE", "RESTRICT", "NO ACTION", "SET NULL", "SET DEFAULT"}[a]
+	return [...]string{"", "CASCADE", "NO ACTION"}[a]
+}
+
+func SpannerTableForeignKeyConstraintActionFromString(s string) SpannerTableForeignKeyConstraintAction {
+	switch s {
+	case "CASCADE":
+		return SpannerTableForeignKeyConstraintActionCascade
+	case "NO ACTION":
+		return SpannerTableForeignKeyConstraintNoAction
+	default:
+		return SpannerTableForeignKeyConstraintActionUnspecified
+	}
 }
 
 var SpannerTableForeignKeyConstraintActions = []string{
 	SpannerTableForeignKeyConstraintActionCascade.String(),
-	SpannerTableForeignKeyConstraintActionRestrict.String(),
 	SpannerTableForeignKeyConstraintNoAction.String(),
-	SpannerTableForeignKeyConstraintSetNull.String(),
-	SpannerTableForeignKeyConstraintSetDefault.String(),
 }
 
 type SpannerTableRowDeletionPolicy struct {

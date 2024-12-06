@@ -11,6 +11,8 @@ description: |-
 A Google Discovery Engine DataStore Schema resource.
 This resource provisions and manages schemas for a Google Discovery Engine DataStore.
 
+> NOTE: This resource at the moment offers nothing beyond the standard Google provider. It is recommended to use the standard Google provider for now.
+
 
 
 ## Example Usage

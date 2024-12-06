@@ -200,6 +200,7 @@ func (r *spannerDatabaseResource) Schema(_ context.Context, _ resource.SchemaReq
 		},
 		Description: "A Cloud Spanner Database resource.\n" +
 			"This resource provisions and manages Cloud Spanner Databases.",
+		DeprecationMessage: "This resource is deprecated. Please use the standard Google provider resource instead.",
 	}
 }
 

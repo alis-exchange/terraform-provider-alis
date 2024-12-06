@@ -125,6 +125,7 @@ func (r *discoveryEngineDataStoreSchemaResource) Schema(_ context.Context, _ res
 		},
 		Description: "A Google Discovery Engine DataStore Schema resource.\n" +
 			"This resource provisions and manages schemas for a Google Discovery Engine DataStore.",
+		DeprecationMessage: "This resource is deprecated and will be removed in the next major release. Please use the standard Google provider resource instead.",
 	}
 }
 

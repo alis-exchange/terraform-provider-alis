@@ -84,7 +84,8 @@ func (r *tableIamPolicyResource) Schema(_ context.Context, _ resource.SchemaRequ
 				Description: "IAM policy bindings to be set on the table.",
 			},
 		},
-		Description: "Authoritative. Sets the IAM policy for the tables and replaces any existing policy already attached.",
+		Description:        "Authoritative. Sets the IAM policy for the tables and replaces any existing policy already attached.",
+		DeprecationMessage: "This resource is deprecated. Please use the standard Google provider resource instead.",
 	}
 }
 

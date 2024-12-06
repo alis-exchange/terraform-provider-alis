@@ -2582,7 +2582,7 @@ func (s *SpannerService) CreateSpannerTableForeignKeyConstraint(ctx context.Cont
 	}
 	db = db.WithContext(ctx)
 
-	sqlStatement := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s(%s)", tableId, constraint.Name, constraint.Column, constraint.ReferencedTable, constraint.ReferencedColumn)
+	sqlStatement := fmt.Sprintf("ALTER TABLE `%s` ADD CONSTRAINT `%s` FOREIGN KEY (`%s`) REFERENCES %s(`%s`)", tableId, constraint.Name, constraint.Column, constraint.ReferencedTable, constraint.ReferencedColumn)
 	if constraint.OnDelete != SpannerTableForeignKeyConstraintActionUnspecified {
 		sqlStatement += fmt.Sprintf(" ON DELETE %s", constraint.OnDelete.String())
 	}
@@ -2635,17 +2635,31 @@ func (s *SpannerService) GetSpannerTableForeignKeyConstraint(ctx context.Context
 	sqlStatement := `
 	SELECT
 	  TABLE_CONSTRAINTS.CONSTRAINT_NAME,
-	  TABLE_CONSTRAINTS.TABLE_NAME,
+	  TABLE_CONSTRAINTS.TABLE_NAME AS CONSTRAINED_TABLE,
 	  TABLE_CONSTRAINTS.CONSTRAINT_TYPE,
 	  REFERENTIAL_CONSTRAINTS.UPDATE_RULE,
-	  REFERENTIAL_CONSTRAINTS.DELETE_RULE
+	  REFERENTIAL_CONSTRAINTS.DELETE_RULE,
+	  KEY_COLUMN_USAGE.COLUMN_NAME AS CONSTRAINED_COLUMN,
+	  UNIQUE_COLUMN_CONSTRAINT.TABLE_NAME AS REFERENCED_TABLE,
+	  UNIQUE_COLUMN_CONSTRAINT.COLUMN_NAME AS REFERENCED_COLUMN
 	FROM
 	  INFORMATION_SCHEMA.TABLE_CONSTRAINTS
 	INNER JOIN
 	  INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
-	ON
-	  TABLE_CONSTRAINTS.CONSTRAINT_NAME = REFERENTIAL_CONSTRAINTS.CONSTRAINT_NAME
-	WHERE TABLE_CONSTRAINTS.TABLE_NAME = ? and TABLE_CONSTRAINTS.CONSTRAINT_NAME = ? AND TABLE_CONSTRAINTS.CONSTRAINT_TYPE = "FOREIGN KEY"
+	  ON TABLE_CONSTRAINTS.CONSTRAINT_NAME = REFERENTIAL_CONSTRAINTS.CONSTRAINT_NAME
+	INNER JOIN
+	  INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+	  ON TABLE_CONSTRAINTS.CONSTRAINT_NAME = KEY_COLUMN_USAGE.CONSTRAINT_NAME
+	INNER JOIN
+	  INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS UNIQUE_COLUMN_CONSTRAINT
+	  ON REFERENTIAL_CONSTRAINTS.UNIQUE_CONSTRAINT_NAME = UNIQUE_COLUMN_CONSTRAINT.CONSTRAINT_NAME
+	  AND KEY_COLUMN_USAGE.POSITION_IN_UNIQUE_CONSTRAINT = UNIQUE_COLUMN_CONSTRAINT.ORDINAL_POSITION
+	WHERE
+	  TABLE_CONSTRAINTS.TABLE_NAME = ?
+	  AND TABLE_CONSTRAINTS.CONSTRAINT_NAME = ?
+	  AND TABLE_CONSTRAINTS.CONSTRAINT_TYPE = "FOREIGN KEY"
+	ORDER BY
+	  KEY_COLUMN_USAGE.ORDINAL_POSITION;
 	`
 
 	var result *Constraint
@@ -2657,5 +2671,60 @@ func (s *SpannerService) GetSpannerTableForeignKeyConstraint(ctx context.Context
 		return nil, status.Errorf(codes.NotFound, "Foreign key constraint %s not found", name)
 	}
 
-	return nil, nil
+	constaint := &SpannerTableForeignKeyConstraint{
+		Name:             result.CONSTRAINT_NAME,
+		ReferencedTable:  result.REFERENCED_TABLE,
+		ReferencedColumn: result.REFERENCED_COLUMN,
+		Column:           result.CONSTRAINED_COLUMN,
+		OnDelete:         SpannerTableForeignKeyConstraintActionFromString(result.DELETE_RULE),
+	}
+
+	return constaint, nil
+}
+
+func (s *SpannerService) DeleteSpannerTableForeignKeyConstraint(ctx context.Context, parent string, name string) error {
+	// Validate parent
+	googleSqlParentValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlTableNameRegex)
+	postgresSqlParentValid := utils.ValidateArgument(parent, utils.SpannerPostgresSqlTableNameRegex)
+	if !googleSqlParentValid && !postgresSqlParentValid {
+		return status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", parent, utils.SpannerGoogleSqlTableNameRegex, utils.SpannerPostgresSqlTableNameRegex)
+	}
+
+	// Validate name
+	googleSqlConstraintIdValid := utils.ValidateArgument(name, utils.SpannerGoogleSqlConstraintIdRegex)
+	postgresSqlConstraintIdValid := utils.ValidateArgument(name, utils.SpannerPostgresSqlConstraintIdRegex)
+	if !googleSqlConstraintIdValid && !postgresSqlConstraintIdValid {
+		return status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", name, utils.SpannerGoogleSqlConstraintIdRegex, utils.SpannerPostgresSqlConstraintIdRegex)
+	}
+
+	// Deconstruct parent name to get project, instance, database and table
+	parentNameParts := strings.Split(parent, "/")
+	project := parentNameParts[1]
+	instance := parentNameParts[3]
+	databaseId := parentNameParts[5]
+	tableId := parentNameParts[7]
+
+	db, err := gorm.Open(
+		spannergorm.New(
+			spannergorm.Config{
+				DriverName: "spanner",
+				DSN:        fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId),
+			},
+		),
+		&gorm.Config{
+			PrepareStmt: true,
+			Logger:      tfLogger,
+		},
+	)
+	if err != nil {
+		return status.Errorf(codes.Internal, "Error connecting to database: %v", err)
+	}
+	db = db.WithContext(ctx)
+
+	sqlStatement := fmt.Sprintf("ALTER TABLE `%s` DROP CONSTRAINT `%s`", tableId, name)
+	if err := db.Exec(sqlStatement).Error; err != nil {
+		return status.Errorf(codes.Internal, "Error dropping foreign key constraint: %v", err)
+	}
+
+	return nil
 }

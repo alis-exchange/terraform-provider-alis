@@ -84,7 +84,8 @@ func (r *databaseIamPolicyResource) Schema(_ context.Context, _ resource.SchemaR
 				Description: "IAM policy bindings to be set on the database.",
 			},
 		},
-		Description: "Authoritative. Sets the IAM policy for the databases and replaces any existing policy already attached.",
+		Description:        "Authoritative. Sets the IAM policy for the databases and replaces any existing policy already attached.",
+		DeprecationMessage: "This resource is deprecated. Please use the standard Google provider resource instead.",
 	}
 }
 
