@@ -74,8 +74,8 @@ func (r *databaseRoleResource) Schema(_ context.Context, _ resource.SchemaReques
 				Description: "The role that should be applied.",
 			},
 		},
-		Description: "Authoritative for a given role. Updates the Database to create a custom role.\n" +
-			"Other roles within the IAM policy for the database are preserved.",
+		Description: "Creates a custom role in the database if it does not exist. If the role already exists, it will be imported into the state.\n" +
+			"Authoritative for a given role. Other roles within the database are preserved.",
 	}
 }
 
@@ -95,7 +95,24 @@ func (r *databaseRoleResource) Create(ctx context.Context, req resource.CreateRe
 	database := plan.Database.ValueString()
 	role := plan.Role.ValueString()
 
-	_, err := r.config.SpannerService.CreateDatabaseRole(ctx,
+	existingRole, err := r.config.SpannerService.GetDatabaseRole(ctx,
+		fmt.Sprintf("projects/%s/instances/%s/databases/%s/databaseRoles/%s", project, instance, database, role),
+	)
+	if err != nil && status.Code(err) != codes.NotFound {
+		resp.Diagnostics.AddError(
+			"Error Creating Database Role",
+			"Could not read Role ("+role+") in Database ("+database+"): "+err.Error(),
+		)
+		return
+	}
+	if existingRole != nil {
+		// Set state to fully populated data
+		diags = resp.State.Set(ctx, plan)
+		resp.Diagnostics.Append(diags...)
+		return
+	}
+
+	_, err = r.config.SpannerService.CreateDatabaseRole(ctx,
 		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
 		role,
 	)
