@@ -31,19 +31,23 @@ jobs:
           path: release-notes.txt
           retention-days: 1
   goreleaser:
-    needs: [release-notes]
+    needs: [ release-notes ]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           # Allow goreleaser to access older tag information.
           fetch-depth: 0
-      - uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491 # v5.0.0
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
           cache: true
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
       - name: Import GPG key
-        uses: crazy-max/ghaction-import-gpg@01dd5d3ca463c7f10f7f4f7b4f177225ac661ee4 # v6.1.0
+        uses: crazy-max/ghaction-import-gpg@v6
         id: import_gpg
         with:
           gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
