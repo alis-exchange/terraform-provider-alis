@@ -50,6 +50,17 @@ Valid permissions are: `SELECT`, `INSERT`, `UPDATE`, `DELETE`.
 
 ## Import
 
+An [import block](https://developer.hashicorp.com/terraform/language/import) (Terraform v1.5.0 and later) can be used to import an existing resource into this resource.
+
+```tf
+import {
+    id = ""
+    to = alis_google_spanner_table_iam_binding.resource_name
+}
+```
+
+The terraform import command can also be used:
+
 ```terraform
 # Table can be imported by specifying the fully qualified name of the table
 # projects/{project}/instances/{instance}/databases/{database}/tables/{table}/tableRoles/{role}

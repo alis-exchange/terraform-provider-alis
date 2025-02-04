@@ -188,6 +188,17 @@ This is only applicable to columns of type `FLOAT64`.
 
 ## Import
 
+An [import block](https://developer.hashicorp.com/terraform/language/import) (Terraform v1.5.0 and later) can be used to import an existing resource into this resource.
+
+```tf
+import {
+    id = ""
+    to = alis_google_spanner_table.resource_name
+}
+```
+
+The terraform import command can also be used:
+
 ```terraform
 # Table can be imported by specifying the fully qualified name of the table
 # projects/{project}/instances/{instance}/databases/{database}/tables/{table}

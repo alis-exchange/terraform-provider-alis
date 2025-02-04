@@ -37,3 +37,24 @@ resource "alis_google_spanner_database_role" "admin_role" {
 - `role` (String) The role that should be applied.
 
 
+
+## Import
+
+An [import block](https://developer.hashicorp.com/terraform/language/import) (Terraform v1.5.0 and later) can be used to import an existing resource into this resource.
+
+```tf
+import {
+    id = ""
+    to = alis_google_spanner_database_role.resource_name
+}
+```
+
+The terraform import command can also be used:
+
+```terraform
+# Role can be imported by specifying the fully qualified name of the role
+# projects/{project}/instances/{instance}/databases/{database}/databaseRoles/{role}
+terraform import alis_google_spanner_database_role.role "projects/{project}/instances/{instance}/databases/{database}/databaseRoles/{role}"
+```
+
+

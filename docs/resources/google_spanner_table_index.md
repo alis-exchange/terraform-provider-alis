@@ -69,6 +69,17 @@ Valid values are: `asc` or `desc`. If not specified the default is `asc`.
 
 ## Import
 
+An [import block](https://developer.hashicorp.com/terraform/language/import) (Terraform v1.5.0 and later) can be used to import an existing resource into this resource.
+
+```tf
+import {
+    id = ""
+    to = alis_google_spanner_table_index.resource_name
+}
+```
+
+The terraform import command can also be used:
+
 ```terraform
 # Index can be imported by specifying the fully qualified name of the index
 # projects/{project}/instances/{instance}/databases/{database}/tables/{table}/indexes/{index}

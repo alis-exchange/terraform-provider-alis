@@ -23,6 +23,17 @@ description: |-
 
 ## Import
 
+An [import block](https://developer.hashicorp.com/terraform/language/import) (Terraform v1.5.0 and later) can be used to import an existing resource into this resource.
+
+```tf
+import {
+    id = ""
+    to = {{.Name}}.resource_name
+}
+```
+
+The terraform import command can also be used:
+
 {{ tffile .ImportFile }}
 
 {{ end }}
