@@ -16,7 +16,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"terraform-provider-alis/internal"
-	"terraform-provider-alis/internal/spanner/services"
+	tableschema "terraform-provider-alis/internal/spanner/schema"
 	"terraform-provider-alis/internal/utils"
 	"terraform-provider-alis/internal/validators"
 )
@@ -155,7 +155,7 @@ func (r *spannerTableForeignKeyResource) Schema(_ context.Context, _ resource.Sc
 					"Supported values are `CASCADE`, `NO_ACTION`.\n" +
 					"See https://cloud.google.com/spanner/docs/foreign-keys/overview#how-to-define-foreign-key-action",
 				Validators: []validator.String{
-					stringvalidator.OneOf(services.SpannerTableForeignKeyConstraintActions...),
+					stringvalidator.OneOf(tableschema.SpannerTableConstraintActions...),
 				},
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
@@ -186,12 +186,12 @@ func (r *spannerTableForeignKeyResource) Create(ctx context.Context, req resourc
 	tableId := plan.Table.ValueString()
 
 	// Generate policy from plan
-	constraint := &services.SpannerTableForeignKeyConstraint{
+	constraint := &tableschema.SpannerTableForeignKeyConstraint{
 		Name:             plan.Name.ValueString(),
 		ReferencedTable:  plan.ReferencedTable.ValueString(),
 		ReferencedColumn: plan.ReferencedColumn.ValueString(),
 		Column:           plan.Column.ValueString(),
-		OnDelete:         services.SpannerTableForeignKeyConstraintActionFromString(plan.OnDelete.ValueString()),
+		OnDelete:         tableschema.SpannerTableConstraintActionFromString(plan.OnDelete.ValueString()),
 	}
 
 	// Create row deletion policy

@@ -2,14 +2,14 @@
 page_title: "alis_google_spanner_database_role Resource - alis"
 subcategory: ""
 description: |-
-  Authoritative for a given role. Updates the Database to create a custom role.
-  Other roles within the IAM policy for the database are preserved.
+  Creates a custom role in the database if it does not exist. If the role already exists, it will be imported into the state.
+  Authoritative for a given role. Other roles within the database are preserved.
 ---
 
 # alis_google_spanner_database_role (Resource)
 
-Authoritative for a given role. Updates the Database to create a custom role.
-Other roles within the IAM policy for the database are preserved.
+Creates a custom role in the database if it does not exist. If the role already exists, it will be imported into the state.
+Authoritative for a given role. Other roles within the database are preserved.
 
 
 

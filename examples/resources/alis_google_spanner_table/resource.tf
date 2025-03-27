@@ -1,4 +1,4 @@
-resource "alis_google_spanner_table" "test" {
+resource "alis_google_spanner_table" "example" {
   project         = var.GOOGLE_PROJECT
   instance        = var.SPANNER_INSTANCE
   database        = "tf-test"
@@ -10,7 +10,6 @@ resource "alis_google_spanner_table" "test" {
         name           = "id",
         type           = "INT64",
         is_primary_key = true,
-        unique         = true,
         required       = true,
       },
       {
@@ -77,6 +76,10 @@ resource "alis_google_spanner_table" "test" {
         type = "ARRAY<FLOAT64>",
       }
     ]
+  }
+  interleave = {
+    parent_table = alis_google_spanner_table.other_example.name
+    on_delete    = "CASCADE"
   }
 }
 

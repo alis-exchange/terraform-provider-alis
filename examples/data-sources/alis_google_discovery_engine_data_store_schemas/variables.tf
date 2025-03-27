@@ -1,2 +1,0 @@
-variable "GOOGLE_PROJECT" {}
-variable "DISCOVERY_ENGINE_DATASTORE" {}

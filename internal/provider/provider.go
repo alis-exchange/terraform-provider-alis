@@ -13,10 +13,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"terraform-provider-alis/internal"
-	"terraform-provider-alis/internal/bigtable"
-	bigtableservices "terraform-provider-alis/internal/bigtable/services"
-	"terraform-provider-alis/internal/discoveryengine"
-	discoveryengineservices "terraform-provider-alis/internal/discoveryengine/services"
 	"terraform-provider-alis/internal/spanner"
 	spannerservices "terraform-provider-alis/internal/spanner/services"
 	"terraform-provider-alis/internal/utils"
@@ -151,10 +147,8 @@ func (p *googleProvider) Configure(ctx context.Context, req provider.ConfigureRe
 	// Make the Bigtable and Spanner services available during DataSource and Resource
 	// type Configure methods.
 	providerConfig := &internal.ProviderConfig{
-		GoogleProjectId:        config.Project.ValueString(),
-		BigtableService:        bigtableservices.NewBigtableService(googleCreds),
-		SpannerService:         spannerservices.NewSpannerService(googleCreds),
-		DiscoveryEngineService: discoveryengineservices.NewDiscoveryEngineService(googleCreds),
+		GoogleProjectId: config.Project.ValueString(),
+		SpannerService:  spannerservices.NewSpannerService(googleCreds),
 	}
 	resp.DataSourceData = providerConfig
 	resp.ResourceData = providerConfig
@@ -165,32 +159,19 @@ func (p *googleProvider) Configure(ctx context.Context, req provider.ConfigureRe
 // DataSources defines the data sources implemented in the provider.
 func (p *googleProvider) DataSources(_ context.Context) []func() datasource.DataSource {
 	return []func() datasource.DataSource{
-		bigtable.NewIamPolicyDataSource,
-		spanner.NewIamPolicyDataSource,
 		spanner.NewDatabaseRolesDataSource,
 		spanner.NewTableIamBindingDataSource,
-		discoveryengine.NewDiscoveryEngineDataStoreSchemasDataSource,
 	}
 }
 
 // Resources defines the resources implemented in the provider.
 func (p *googleProvider) Resources(_ context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
-		bigtable.NewTableResource,
-		bigtable.NewGarbageCollectionPolicyResource,
-		bigtable.NewIamPolicyResource,
-		bigtable.NewIamBindingResource,
-		bigtable.NewIamMemberResource,
-		spanner.NewSpannerDatabaseResource,
-		spanner.NewIamPolicyResource,
-		spanner.NewIamBindingResource,
-		spanner.NewIamMemberResource,
 		spanner.NewSpannerTableResource,
 		spanner.NewSpannerTableIndexResource,
 		spanner.NewTableForeignKeyResource,
 		spanner.NewDatabaseRoleResource,
 		spanner.NewTableIamBindingResource,
 		spanner.NewTableTtlPolicyResource,
-		discoveryengine.NewDiscoveryEngineDataSourceSchemaResource,
 	}
 }

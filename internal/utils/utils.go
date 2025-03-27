@@ -5,8 +5,6 @@ import (
 	"errors"
 	"strings"
 
-	"cloud.google.com/go/bigtable"
-	discoveryengine "cloud.google.com/go/discoveryengine/apiv1beta"
 	"cloud.google.com/go/spanner"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	oath2 "golang.org/x/oauth2"
@@ -59,17 +57,12 @@ func SnakeCaseToPascalCase(s string) string {
 //
 // Returns: {google.Credentials}
 func GetGoogleCredentials(ctx context.Context, projectId string, credentialsStr string, accessToken string, scopes ...string) (*googleoauth.Credentials, error) {
-
 	// Set default scopes if none are provided
 	if len(scopes) == 0 {
 		scopes = []string{
-			bigtable.Scope,
-			bigtable.AdminScope,
-			bigtable.InstanceAdminScope,
 			spanner.Scope,
 			spanner.AdminScope,
 		}
-		scopes = append(scopes, discoveryengine.DefaultAuthScopes()...)
 	}
 
 	// If credentialsStr are provided, use them

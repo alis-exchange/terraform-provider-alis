@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -23,7 +24,7 @@ import (
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 	"terraform-provider-alis/internal"
-	"terraform-provider-alis/internal/spanner/services"
+	tableschema "terraform-provider-alis/internal/spanner/schema"
 	"terraform-provider-alis/internal/utils"
 	"terraform-provider-alis/internal/validators"
 )
@@ -45,12 +46,13 @@ type spannerTableResource struct {
 }
 
 type spannerTableModel struct {
-	Name           types.String        `tfsdk:"name"`
-	Project        types.String        `tfsdk:"project"`
-	Instance       types.String        `tfsdk:"instance"`
-	Database       types.String        `tfsdk:"database"`
-	Schema         *spannerTableSchema `tfsdk:"schema"`
-	PreventDestroy types.Bool          `tfsdk:"prevent_destroy"`
+	Name           types.String            `tfsdk:"name"`
+	Project        types.String            `tfsdk:"project"`
+	Instance       types.String            `tfsdk:"instance"`
+	Database       types.String            `tfsdk:"database"`
+	Schema         *spannerTableSchema     `tfsdk:"schema"`
+	Interleave     *spannerTableInterleave `tfsdk:"interleave"`
+	PreventDestroy types.Bool              `tfsdk:"prevent_destroy"`
 }
 
 type spannerTableSchema struct {
@@ -62,13 +64,9 @@ type spannerTableColumn struct {
 	IsPrimaryKey   types.Bool   `tfsdk:"is_primary_key"`
 	IsComputed     types.Bool   `tfsdk:"is_computed"`
 	ComputationDdl types.String `tfsdk:"computation_ddl"`
-	AutoIncrement  types.Bool   `tfsdk:"auto_increment"`
 	AutoUpdateTime types.Bool   `tfsdk:"auto_update_time"`
-	Unique         types.Bool   `tfsdk:"unique"`
 	Type           types.String `tfsdk:"type"`
 	Size           types.Int64  `tfsdk:"size"`
-	Precision      types.Int64  `tfsdk:"precision"`
-	Scale          types.Int64  `tfsdk:"scale"`
 	Required       types.Bool   `tfsdk:"required"`
 	DefaultValue   types.String `tfsdk:"default_value"`
 	ProtoPackage   types.String `tfsdk:"proto_package"`
@@ -81,18 +79,19 @@ func (o spannerTableColumn) attrTypes() map[string]attr.Type {
 		"is_primary_key":   types.BoolType,
 		"is_computed":      types.BoolType,
 		"computation_ddl":  types.StringType,
-		"auto_increment":   types.BoolType,
 		"auto_update_time": types.BoolType,
-		"unique":           types.BoolType,
 		"type":             types.StringType,
 		"size":             types.Int64Type,
-		"precision":        types.Int64Type,
-		"scale":            types.Int64Type,
 		"required":         types.BoolType,
 		"default_value":    types.StringType,
 		"proto_package":    types.StringType,
 		"file_descriptor":  types.StringType,
 	}
+}
+
+type spannerTableInterleave struct {
+	ParentTable types.String `tfsdk:"parent_table"`
+	OnDelete    types.String `tfsdk:"on_delete"`
 }
 
 // Metadata returns the resource type name.
@@ -186,24 +185,15 @@ func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaReques
 										"Example: `column1 + column2`, or `proto_column.field`.\n" +
 										"**Changing this value will cause a table replace**.",
 								},
-								"auto_increment": schema.BoolAttribute{
-									Optional: true,
-									Description: "Indicates if the column is auto-incrementing.\n" +
-										"The column must be of type `INT64` or `FLOAT64`.",
-								},
 								"auto_update_time": schema.BoolAttribute{
 									Optional: true,
 									Description: "Indicates if the column auto populates on row update.\n" +
 										"The column must be of type `TIMESTAMP`.",
 								},
-								"unique": schema.BoolAttribute{
-									Optional:    true,
-									Description: "Indicates if the column is unique.",
-								},
 								"type": schema.StringAttribute{
 									Required: true,
 									Validators: []validator.String{
-										stringvalidator.OneOf(services.SpannerTableDataTypes...),
+										stringvalidator.OneOf(tableschema.SpannerTableDataTypes...),
 									},
 									Description: "The data type of the column.\n" +
 										"Valid types are: `BOOL`, `INT64`, `FLOAT64`, `STRING`, `BYTES`, `DATE`, `TIMESTAMP`, `JSON`, `PROTO`, `ARRAY<STRING>`, `ARRAY<INT64>`, `ARRAY<FLOAT32>`, `ARRAY<FLOAT64>`.\n" +
@@ -212,17 +202,6 @@ func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaReques
 								"size": schema.Int64Attribute{
 									Optional:    true,
 									Description: "The maximum size of the column.",
-								},
-								"precision": schema.Int64Attribute{
-									Optional: true,
-									Description: "The maximum number of digits in the column.\n" +
-										"This is only applicable to columns of type `FLOAT64`.\n" +
-										"The maximum is 17",
-								},
-								"scale": schema.Int64Attribute{
-									Optional: true,
-									Description: "The maximum number of digits after the decimal point in the column.\n" +
-										"This is only applicable to columns of type `FLOAT64`.",
 								},
 								"required": schema.BoolAttribute{
 									Optional:    true,
@@ -354,6 +333,38 @@ func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaReques
 				},
 				Description: "The schema of the table.",
 			},
+			"interleave": schema.SingleNestedAttribute{
+				Optional: true,
+				Attributes: map[string]schema.Attribute{
+					"parent_table": schema.StringAttribute{
+						Required: true,
+						Description: "The name of the parent table to interleave in.\n" +
+							"The parent table must be in the same database.\n" +
+							"**Changing this value will cause a table replace**.",
+						PlanModifiers: []planmodifier.String{
+							stringplanmodifier.RequiresReplace(),
+						},
+					},
+					"on_delete": schema.StringAttribute{
+						Optional: true,
+						Description: "The action to take on delete.\n" +
+							"Supported values are `CASCADE`, `NO_ACTION`.\n" +
+							"Setting this value to `CASCADE` signifies that when a row from the parent table is deleted, its child rows are automatically deleted as well.\n" +
+							"The default value is `NO_ACTION`.\n" +
+							"**Changing this value will cause a table replace**.",
+						Validators: []validator.String{
+							stringvalidator.OneOf(tableschema.SpannerTableConstraintActions...),
+						},
+						PlanModifiers: []planmodifier.String{
+							stringplanmodifier.RequiresReplace(),
+						},
+					},
+				},
+				Description: "The interleave configuration of the table.",
+				PlanModifiers: []planmodifier.Object{
+					objectplanmodifier.RequiresReplace(),
+				},
+			},
 			"prevent_destroy": schema.BoolAttribute{
 				Optional: true,
 				Computed: true,
@@ -381,9 +392,9 @@ func (r *spannerTableResource) Create(ctx context.Context, req resource.CreateRe
 	}
 
 	// Generate table from plan
-	table := &services.SpannerTable{
+	table := &tableschema.SpannerTable{
 		Name: "",
-		Schema: &services.SpannerTableSchema{
+		Schema: &tableschema.SpannerTableSchema{
 			Columns: nil,
 		},
 	}
@@ -396,7 +407,7 @@ func (r *spannerTableResource) Create(ctx context.Context, req resource.CreateRe
 
 	// Populate schema if any
 	if plan.Schema != nil {
-		tableSchema := &services.SpannerTableSchema{
+		tableSchema := &tableschema.SpannerTableSchema{
 			Columns: nil,
 		}
 
@@ -410,7 +421,7 @@ func (r *spannerTableResource) Create(ctx context.Context, req resource.CreateRe
 			diags.Append(d...)
 
 			for _, column := range columns {
-				col := &services.SpannerTableColumn{}
+				col := &tableschema.SpannerTableColumn{}
 
 				// Populate column name
 				if !column.Name.IsNull() {
@@ -432,19 +443,9 @@ func (r *spannerTableResource) Create(ctx context.Context, req resource.CreateRe
 					col.ComputationDdl = wrapperspb.String(column.ComputationDdl.ValueString())
 				}
 
-				// Populate auto increment
-				if !column.AutoIncrement.IsNull() {
-					col.AutoIncrement = wrapperspb.Bool(column.AutoIncrement.ValueBool())
-				}
-
 				// Populate auto update time
 				if !column.AutoUpdateTime.IsNull() {
 					col.AutoUpdateTime = wrapperspb.Bool(column.AutoUpdateTime.ValueBool())
-				}
-
-				// Populate unique
-				if !column.Unique.IsNull() {
-					col.Unique = wrapperspb.Bool(column.Unique.ValueBool())
 				}
 
 				// Populate type
@@ -455,16 +456,6 @@ func (r *spannerTableResource) Create(ctx context.Context, req resource.CreateRe
 				// Populate size
 				if !column.Size.IsNull() {
 					col.Size = wrapperspb.Int64(column.Size.ValueInt64())
-				}
-
-				// Populate precision
-				if !column.Precision.IsNull() {
-					col.Precision = wrapperspb.Int64(column.Precision.ValueInt64())
-				}
-
-				// Populate scale
-				if !column.Scale.IsNull() {
-					col.Scale = wrapperspb.Int64(column.Scale.ValueInt64())
 				}
 
 				// Populate required
@@ -479,7 +470,7 @@ func (r *spannerTableResource) Create(ctx context.Context, req resource.CreateRe
 
 				// Populate ProtoFileDescriptorSet
 				if !column.ProtoPackage.IsNull() || !column.FileDescriptor.IsNull() {
-					col.ProtoFileDescriptorSet = &services.ProtoFileDescriptorSet{}
+					col.ProtoFileDescriptorSet = &tableschema.ProtoFileDescriptorSet{}
 
 					// Populate proto package
 					if !column.ProtoPackage.IsNull() {
@@ -491,11 +482,11 @@ func (r *spannerTableResource) Create(ctx context.Context, req resource.CreateRe
 						col.ProtoFileDescriptorSet.FileDescriptorSetPath = wrapperspb.String(column.FileDescriptor.ValueString())
 
 						if strings.HasPrefix(column.FileDescriptor.ValueString(), "gcs:") {
-							col.ProtoFileDescriptorSet.FileDescriptorSetPathSource = services.ProtoFileDescriptorSetSourceGcs
+							col.ProtoFileDescriptorSet.FileDescriptorSetPathSource = tableschema.ProtoFileDescriptorSetSourceGcs
 						}
 
 						if strings.HasPrefix(column.FileDescriptor.ValueString(), "url:") {
-							col.ProtoFileDescriptorSet.FileDescriptorSetPathSource = services.ProtoFileDescriptorSetSourceUrl
+							col.ProtoFileDescriptorSet.FileDescriptorSetPathSource = tableschema.ProtoFileDescriptorSetSourceUrl
 						}
 					}
 				}
@@ -505,6 +496,17 @@ func (r *spannerTableResource) Create(ctx context.Context, req resource.CreateRe
 		}
 
 		table.Schema = tableSchema
+	}
+
+	// Populate interleave if any
+	if plan.Interleave != nil {
+		table.Interleave = &tableschema.SpannerTableInterleave{
+			ParentTable: plan.Interleave.ParentTable.ValueString(),
+		}
+
+		if !plan.Interleave.OnDelete.IsNull() {
+			table.Interleave.OnDelete = tableschema.SpannerTableConstraintActionFromString(plan.Interleave.OnDelete.ValueString())
+		}
 	}
 
 	// Create table
@@ -600,19 +602,9 @@ func (r *spannerTableResource) Read(ctx context.Context, req resource.ReadReques
 					col.ComputationDdl = types.StringValue(column.ComputationDdl.GetValue())
 				}
 
-				// Get auto increment
-				if column.AutoIncrement != nil {
-					col.AutoIncrement = types.BoolValue(column.AutoIncrement.GetValue())
-				}
-
 				// Get auto update time
 				if column.AutoUpdateTime != nil {
 					col.AutoUpdateTime = types.BoolValue(column.AutoUpdateTime.GetValue())
-				}
-
-				// Get unique
-				if column.Unique != nil {
-					col.Unique = types.BoolValue(column.Unique.GetValue())
 				}
 
 				// Get type
@@ -623,16 +615,6 @@ func (r *spannerTableResource) Read(ctx context.Context, req resource.ReadReques
 				// Get size
 				if column.Size != nil {
 					col.Size = types.Int64Value(column.Size.GetValue())
-				}
-
-				// Get precision
-				if column.Precision != nil {
-					col.Precision = types.Int64Value(column.Precision.GetValue())
-				}
-
-				// Get scale
-				if column.Scale != nil {
-					col.Scale = types.Int64Value(column.Scale.GetValue())
 				}
 
 				// Get required
@@ -671,6 +653,19 @@ func (r *spannerTableResource) Read(ctx context.Context, req resource.ReadReques
 		state.Schema = s
 	}
 
+	// Populate interleave
+	if table.Interleave != nil {
+		i := &spannerTableInterleave{
+			ParentTable: types.StringValue(table.Interleave.ParentTable),
+		}
+
+		if table.Interleave.OnDelete != tableschema.SpannerTableConstraintActionUnspecified {
+			i.OnDelete = types.StringValue(table.Interleave.OnDelete.String())
+		}
+
+		state.Interleave = i
+	}
+
 	// Set refreshed state
 	diags = resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -682,6 +677,7 @@ func (r *spannerTableResource) Read(ctx context.Context, req resource.ReadReques
 	}
 }
 
+// Update updates the resource and updates the Terraform state on success.
 func (r *spannerTableResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	// Retrieve values from plan
 	var plan spannerTableModel
@@ -698,16 +694,16 @@ func (r *spannerTableResource) Update(ctx context.Context, req resource.UpdateRe
 	tableId := plan.Name.ValueString()
 
 	// Generate table from plan
-	table := &services.SpannerTable{
+	table := &tableschema.SpannerTable{
 		Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", project, instanceName, databaseId, tableId),
-		Schema: &services.SpannerTableSchema{
+		Schema: &tableschema.SpannerTableSchema{
 			Columns: nil,
 		},
 	}
 
 	// Populate schema if any
 	if plan.Schema != nil {
-		tableSchema := &services.SpannerTableSchema{
+		tableSchema := &tableschema.SpannerTableSchema{
 			Columns: nil,
 		}
 
@@ -721,7 +717,7 @@ func (r *spannerTableResource) Update(ctx context.Context, req resource.UpdateRe
 			diags.Append(d...)
 
 			for _, column := range columns {
-				col := &services.SpannerTableColumn{}
+				col := &tableschema.SpannerTableColumn{}
 
 				// Populate column name
 				if !column.Name.IsNull() {
@@ -743,19 +739,9 @@ func (r *spannerTableResource) Update(ctx context.Context, req resource.UpdateRe
 					col.ComputationDdl = wrapperspb.String(column.ComputationDdl.ValueString())
 				}
 
-				// Populate auto increment
-				if !column.AutoIncrement.IsNull() {
-					col.AutoIncrement = wrapperspb.Bool(column.AutoIncrement.ValueBool())
-				}
-
 				// Populate auto update time
 				if !column.AutoUpdateTime.IsNull() {
 					col.AutoUpdateTime = wrapperspb.Bool(column.AutoUpdateTime.ValueBool())
-				}
-
-				// Populate unique
-				if !column.Unique.IsNull() {
-					col.Unique = wrapperspb.Bool(column.Unique.ValueBool())
 				}
 
 				// Populate type
@@ -766,16 +752,6 @@ func (r *spannerTableResource) Update(ctx context.Context, req resource.UpdateRe
 				// Populate size
 				if !column.Size.IsNull() {
 					col.Size = wrapperspb.Int64(column.Size.ValueInt64())
-				}
-
-				// Populate precision
-				if !column.Precision.IsNull() {
-					col.Precision = wrapperspb.Int64(column.Precision.ValueInt64())
-				}
-
-				// Populate scale
-				if !column.Scale.IsNull() {
-					col.Scale = wrapperspb.Int64(column.Scale.ValueInt64())
 				}
 
 				// Populate required
@@ -790,7 +766,7 @@ func (r *spannerTableResource) Update(ctx context.Context, req resource.UpdateRe
 
 				// Populate ProtoFileDescriptorSet
 				if !column.ProtoPackage.IsNull() || !column.FileDescriptor.IsNull() {
-					col.ProtoFileDescriptorSet = &services.ProtoFileDescriptorSet{}
+					col.ProtoFileDescriptorSet = &tableschema.ProtoFileDescriptorSet{}
 
 					// Populate proto package
 					if !column.ProtoPackage.IsNull() {
@@ -802,11 +778,11 @@ func (r *spannerTableResource) Update(ctx context.Context, req resource.UpdateRe
 						col.ProtoFileDescriptorSet.FileDescriptorSetPath = wrapperspb.String(column.FileDescriptor.ValueString())
 
 						if strings.HasPrefix(column.FileDescriptor.ValueString(), "gcs:") {
-							col.ProtoFileDescriptorSet.FileDescriptorSetPathSource = services.ProtoFileDescriptorSetSourceGcs
+							col.ProtoFileDescriptorSet.FileDescriptorSetPathSource = tableschema.ProtoFileDescriptorSetSourceGcs
 						}
 
 						if strings.HasPrefix(column.FileDescriptor.ValueString(), "url:") {
-							col.ProtoFileDescriptorSet.FileDescriptorSetPathSource = services.ProtoFileDescriptorSetSourceUrl
+							col.ProtoFileDescriptorSet.FileDescriptorSetPathSource = tableschema.ProtoFileDescriptorSetSourceUrl
 						}
 					}
 				}
@@ -816,6 +792,17 @@ func (r *spannerTableResource) Update(ctx context.Context, req resource.UpdateRe
 		}
 
 		table.Schema = tableSchema
+	}
+
+	// Populate interleave if any
+	if plan.Interleave != nil {
+		table.Interleave = &tableschema.SpannerTableInterleave{
+			ParentTable: plan.Interleave.ParentTable.ValueString(),
+		}
+
+		if !plan.Interleave.OnDelete.IsNull() {
+			table.Interleave.OnDelete = tableschema.SpannerTableConstraintActionFromString(plan.Interleave.OnDelete.ValueString())
+		}
 	}
 
 	// Update table

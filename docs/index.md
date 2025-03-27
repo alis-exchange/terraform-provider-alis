@@ -3,23 +3,23 @@
 page_title: "alis Provider"
 subcategory: ""
 description: |-
-  Custom terraform provider for managing various google resources used in ALIS.
+Custom terraform provider for managing various google resources used at [Alis Exchange](https://alisx.com).
 ---
 
 # ALIS Provider
 
-Custom terraform provider for managing various google resources used in ALIS.
+Custom terraform provider for managing various google resources used at [Alis Exchange](https://alisx.com).
 
 
 
-## Example Usage
+    ## Example Usage
 
-```terraform
+    ```terraform
 terraform {
   required_providers {
     alis = {
       source  = "alis-exchange/alis"
-      version = ">= 1.5.0"
+      version = ">= 1.5.0, < 2.0.0"
     }
   }
 }

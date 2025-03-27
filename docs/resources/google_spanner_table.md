@@ -16,7 +16,7 @@ This resource manages the schema of a table in a Google Cloud Spanner database.
 ## Example Usage
 
 ```terraform
-resource "alis_google_spanner_table" "test" {
+resource "alis_google_spanner_table" "example" {
   project         = var.GOOGLE_PROJECT
   instance        = var.SPANNER_INSTANCE
   database        = "tf-test"
@@ -28,7 +28,6 @@ resource "alis_google_spanner_table" "test" {
         name           = "id",
         type           = "INT64",
         is_primary_key = true,
-        unique         = true,
         required       = true,
       },
       {
@@ -96,6 +95,10 @@ resource "alis_google_spanner_table" "test" {
       }
     ]
   }
+  interleave = {
+    parent_table = alis_google_spanner_table.other_example.name
+    on_delete    = "CASCADE"
+  }
 }
 ```
 
@@ -115,6 +118,7 @@ The name must satisfy the expression `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`
 
 ### Optional
 
+- `interleave` (Attributes) The interleave configuration of the table. (see [below for nested schema](#nestedatt--interleave))
 - `prevent_destroy` (Boolean) Prevent the table from being destroyed.
 **This only applies to the terraform state and does not prevent the actual table from being deleted via another source.**
 
@@ -139,8 +143,6 @@ Valid types are: `BOOL`, `INT64`, `FLOAT64`, `STRING`, `BYTES`, `DATE`, `TIMESTA
 
 Optional:
 
-- `auto_increment` (Boolean) Indicates if the column is auto-incrementing.
-The column must be of type `INT64` or `FLOAT64`.
 - `auto_update_time` (Boolean) Indicates if the column auto populates on row update.
 The column must be of type `TIMESTAMP`.
 - `computation_ddl` (String) The DDL expression for the computed column.
@@ -171,18 +173,31 @@ This should be accompanied by a `computation_ddl` field.
 Multiple columns can be specified as primary keys to create a composite primary key.
 Primary key columns must be non-null.
 **Changing this value will cause a table replace**.
-- `precision` (Number) The maximum number of digits in the column.
-This is only applicable to columns of type `FLOAT64`.
-The maximum is 17
 - `proto_package` (String) The full name of the proto message to be used in the column.
 The name must be a valid package name including the message name.
 This field is only required for columns of type `PROTO`
 Example: "com.example.Message", where `com.example` is the package name and `Message` is the message name.
 - `required` (Boolean) Indicates if the column is required.
-- `scale` (Number) The maximum number of digits after the decimal point in the column.
-This is only applicable to columns of type `FLOAT64`.
 - `size` (Number) The maximum size of the column.
-- `unique` (Boolean) Indicates if the column is unique.
+
+
+
+<a id="nestedatt--interleave"></a>
+### Nested Schema for `interleave`
+
+Required:
+
+- `parent_table` (String) The name of the parent table to interleave in.
+The parent table must be in the same database.
+**Changing this value will cause a table replace**.
+
+Optional:
+
+- `on_delete` (String) The action to take on delete.
+Supported values are `CASCADE`, `NO_ACTION`.
+Setting this value to `CASCADE` signifies that when a row from the parent table is deleted, its child rows are automatically deleted as well.
+The default value is `NO_ACTION`.
+**Changing this value will cause a table replace**.
 
 
 
