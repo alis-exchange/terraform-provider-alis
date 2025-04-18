@@ -64,6 +64,7 @@ type spannerTableColumn struct {
 	IsPrimaryKey   types.Bool   `tfsdk:"is_primary_key"`
 	IsComputed     types.Bool   `tfsdk:"is_computed"`
 	ComputationDdl types.String `tfsdk:"computation_ddl"`
+	IsStored       types.Bool   `tfsdk:"is_stored"`
 	AutoUpdateTime types.Bool   `tfsdk:"auto_update_time"`
 	Type           types.String `tfsdk:"type"`
 	Size           types.Int64  `tfsdk:"size"`
@@ -79,6 +80,7 @@ func (o spannerTableColumn) attrTypes() map[string]attr.Type {
 		"is_primary_key":   types.BoolType,
 		"is_computed":      types.BoolType,
 		"computation_ddl":  types.StringType,
+		"is_stored":        types.BoolType,
 		"auto_update_time": types.BoolType,
 		"type":             types.StringType,
 		"size":             types.Int64Type,
@@ -185,6 +187,14 @@ func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaReques
 										"Example: `column1 + column2`, or `proto_column.field`.\n" +
 										"**Changing this value will cause a table replace**.",
 								},
+								"is_stored": schema.BoolAttribute{
+									Optional: true,
+									Description: "Indicates if the generated column is stored.\n" +
+										"This is only applicable to columns where `is_computed` is true.\n" +
+										"Stored columns are physically stored in the table and can be indexed.\n" +
+										"Non-stored columns are not physically stored in the table and are computed on the fly.\n" +
+										"**Changing this value will cause a table replace**.",
+								},
 								"auto_update_time": schema.BoolAttribute{
 									Optional: true,
 									Description: "Indicates if the column auto populates on row update.\n" +
@@ -278,7 +288,7 @@ func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaReques
 								// Columns that are new do not require a replace, unless a primary key is added.
 								// Columns that are removed do not require a replace, unless they are part of the primary key.
 								// Columns that are updated require a replace if: the column type is changed,
-								// the primary key status is changed, or the column's computation_ddl is changed.
+								// the primary key status is changed, the column's computation_ddl is changed, or the column's is_stored status is changed.
 								for name, columns := range columnsMap {
 									// Column is new
 									if columns.Prior == nil && columns.Current != nil {
@@ -323,6 +333,15 @@ func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaReques
 										(!columns.Prior.IsComputed.IsNull() && columns.Prior.IsComputed.ValueBool() && (columns.Current.IsComputed.IsNull() || !columns.Current.IsComputed.ValueBool())) {
 										resp.RequiresReplace = true
 										resp.Diagnostics.AddWarning(fmt.Sprintf("Column %q requires a table replace", name), fmt.Sprintf("Column %q has a changed computation_ddl or is_computed has been disabled and requires a table replace", name))
+									}
+
+									// Column is computed and is_stored is changed
+									// Both fields are required but only if at least one is set
+									if (!columns.Prior.IsStored.IsNull() && columns.Prior.IsStored.ValueBool() && !columns.Current.IsStored.IsNull() && columns.Current.IsStored.ValueBool() &&
+										columns.Prior.IsStored.ValueBool() != columns.Current.IsStored.ValueBool()) ||
+										(!columns.Prior.IsStored.IsNull() && columns.Prior.IsStored.ValueBool() && (columns.Current.IsStored.IsNull() || !columns.Current.IsStored.ValueBool())) {
+										resp.RequiresReplace = true
+										resp.Diagnostics.AddWarning(fmt.Sprintf("Column %q requires a table replace", name), fmt.Sprintf("Column %q has a changed is_stored status and requires a table replace", name))
 									}
 								}
 
@@ -441,6 +460,11 @@ func (r *spannerTableResource) Create(ctx context.Context, req resource.CreateRe
 				// Populate computation ddl
 				if !column.ComputationDdl.IsNull() {
 					col.ComputationDdl = wrapperspb.String(column.ComputationDdl.ValueString())
+				}
+
+				// Populate is stored
+				if !column.IsStored.IsNull() {
+					col.IsStored = wrapperspb.Bool(column.IsStored.ValueBool())
 				}
 
 				// Populate auto update time
@@ -602,6 +626,11 @@ func (r *spannerTableResource) Read(ctx context.Context, req resource.ReadReques
 					col.ComputationDdl = types.StringValue(column.ComputationDdl.GetValue())
 				}
 
+				// Get is stored
+				if column.IsStored != nil {
+					col.IsStored = types.BoolValue(column.IsStored.GetValue())
+				}
+
 				// Get auto update time
 				if column.AutoUpdateTime != nil {
 					col.AutoUpdateTime = types.BoolValue(column.AutoUpdateTime.GetValue())
@@ -737,6 +766,11 @@ func (r *spannerTableResource) Update(ctx context.Context, req resource.UpdateRe
 				// Populate computation ddl
 				if !column.ComputationDdl.IsNull() {
 					col.ComputationDdl = wrapperspb.String(column.ComputationDdl.ValueString())
+				}
+
+				// Populate is stored
+				if !column.IsStored.IsNull() {
+					col.IsStored = wrapperspb.Bool(column.IsStored.ValueBool())
 				}
 
 				// Populate auto update time

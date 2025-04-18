@@ -76,6 +76,7 @@ resource "alis_google_spanner_table" "example" {
         type            = "STRING",
         is_computed     = true,
         computation_ddl = "proto_test.example_field",
+        is_stored       = true,
       },
       {
         name = "arr_str",
@@ -172,6 +173,11 @@ This should be accompanied by a `computation_ddl` field.
 - `is_primary_key` (Boolean) Indicates if the column is part of the primary key.
 Multiple columns can be specified as primary keys to create a composite primary key.
 Primary key columns must be non-null.
+**Changing this value will cause a table replace**.
+- `is_stored` (Boolean) Indicates if the generated column is stored.
+This is only applicable to columns where `is_computed` is true.
+Stored columns are physically stored in the table and can be indexed.
+Non-stored columns are not physically stored in the table and are computed on the fly.
 **Changing this value will cause a table replace**.
 - `proto_package` (String) The full name of the proto message to be used in the column.
 The name must be a valid package name including the message name.

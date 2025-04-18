@@ -145,29 +145,78 @@ func TestCreateSpannerTable(t *testing.T) {
 			name: "Test_CreateSpannerTable",
 			args: args{
 				ctx:     context.Background(),
-				parent:  fmt.Sprintf("projects/%s/instances/%s/databases/%s", TestProject, TestInstance, "alis-px"),
+				parent:  fmt.Sprintf("projects/%s/instances/%s/databases/%s", TestProject, TestInstance, "play-np"),
 				tableId: "tf_test",
 				table: &schema.SpannerTable{
-					Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "alis-px", "tf_test"),
+					Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "play-np", "tf_test"),
 					Schema: &schema.SpannerTableSchema{
 						Columns: []*schema.SpannerTableColumn{
 							{
-								Name:         "key",
+								Name:         "id",
 								IsPrimaryKey: wrapperspb.Bool(true),
 								Type:         "INT64",
-								Size:         wrapperspb.Int64(255),
 								Required:     wrapperspb.Bool(true),
 							},
 							{
-								Name:     "created_at",
-								Type:     "TIMESTAMP",
-								Required: wrapperspb.Bool(false),
+								Name: "display_name",
+								Type: "STRING",
+								Size: wrapperspb.Int64(200),
 							},
 							{
-								Name:           "updated_at",
-								Type:           "TIMESTAMP",
-								Required:       wrapperspb.Bool(true),
-								AutoUpdateTime: wrapperspb.Bool(true),
+								Name: "is_active",
+								Type: "BOOL",
+							},
+							{
+								Name:         "latest_return",
+								Type:         "FLOAT64",
+								DefaultValue: wrapperspb.String("10.0"),
+							},
+							{
+								Name: "inception_date",
+								Type: "DATE",
+							},
+							{
+								Name: "last_refreshed_at",
+								Type: "TIMESTAMP",
+							},
+							{
+								Name: "metadata",
+								Type: "JSON",
+							},
+							{
+								Name: "data",
+								Type: "BYTES",
+							},
+							{
+								Name: "User",
+								Type: "PROTO",
+								ProtoFileDescriptorSet: &schema.ProtoFileDescriptorSet{
+									ProtoPackage: wrapperspb.String("alis.open.iam.v1.User"),
+								},
+							},
+							{
+								Name:           "user_name",
+								IsComputed:     wrapperspb.Bool(true),
+								ComputationDdl: wrapperspb.String("User.name"),
+								IsStored:       wrapperspb.Bool(true),
+								Type:           "STRING",
+							},
+							{
+								Name: "tags",
+								Type: "ARRAY<STRING>",
+								Size: wrapperspb.Int64(255),
+							},
+							{
+								Name: "ids",
+								Type: "ARRAY<INT64>",
+							},
+							{
+								Name: "prices",
+								Type: "ARRAY<FLOAT64>",
+							},
+							{
+								Name: "discounts",
+								Type: "ARRAY<FLOAT32>",
 							},
 						},
 					},
@@ -291,6 +340,7 @@ func TestUpdateSpannerTable(t *testing.T) {
 								Name:           "user_name",
 								IsComputed:     wrapperspb.Bool(true),
 								ComputationDdl: wrapperspb.String("User.name"),
+								IsStored:       wrapperspb.Bool(true),
 								Type:           "STRING",
 							},
 							{

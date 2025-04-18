@@ -29,6 +29,7 @@ type ColumnMetadataMeta struct {
 	IsPrimaryKey                string `json:"is_primary_key"`
 	IsComputed                  string `json:"is_computed"`
 	ComputationDdl              string `json:"computation_ddl"`
+	IsStored                    string `json:"is_stored"`
 	ProtoPackage                string `json:"proto_package"`
 	FileDescriptorSetPath       string `json:"file_descriptor_set_path"`
 	FileDescriptorSetPathSource string `json:"file_descriptor_set_path_source"`
@@ -133,6 +134,11 @@ func UpdateColumnMetadata(ctx context.Context, db *gorm.DB, tableName string, co
 			meta.ComputationDdl = column.ComputationDdl.GetValue()
 		} else {
 			meta.ComputationDdl = "nil"
+		}
+		if column.IsStored != nil {
+			meta.IsStored = fmt.Sprintf("%t", column.IsStored.GetValue())
+		} else {
+			meta.IsStored = "nil"
 		}
 		if column.ProtoFileDescriptorSet != nil {
 			if column.ProtoFileDescriptorSet.ProtoPackage != nil {

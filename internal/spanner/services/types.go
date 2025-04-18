@@ -100,6 +100,7 @@ type ColumnMetadataMeta struct {
 	IsPrimaryKey                string `json:"is_primary_key"`
 	IsComputed                  string `json:"is_computed"`
 	ComputationDdl              string `json:"computation_ddl"`
+	IsStored                    string `json:"is_stored"`
 	ProtoPackage                string `json:"proto_package"`
 	FileDescriptorSetPath       string `json:"file_descriptor_set_path"`
 	FileDescriptorSetPathSource string `json:"file_descriptor_set_path_source"`

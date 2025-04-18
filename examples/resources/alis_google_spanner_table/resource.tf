@@ -58,6 +58,7 @@ resource "alis_google_spanner_table" "example" {
         type            = "STRING",
         is_computed     = true,
         computation_ddl = "proto_test.example_field",
+        is_stored       = true,
       },
       {
         name = "arr_str",

@@ -21,6 +21,9 @@ type SpannerTableColumn struct {
 	// The expression for the computed column
 	// This is only valid for computed columns
 	ComputationDdl *wrapperspb.StringValue
+	// Whether the generated column is stored
+	// This is only valid for computed columns
+	IsStored *wrapperspb.BoolValue
 	// Whether the column should auto-generate a create time
 	// This is only valid for TIMESTAMP columns
 	AutoCreateTime *wrapperspb.BoolValue
@@ -76,6 +79,14 @@ func (c *SpannerTableColumn) GetComputationDdl() *wrapperspb.StringValue {
 	}
 
 	return c.ComputationDdl
+}
+
+func (c *SpannerTableColumn) GetIsStored() *wrapperspb.BoolValue {
+	if c == nil {
+		return nil
+	}
+
+	return c.IsStored
 }
 
 func (c *SpannerTableColumn) GetAutoCreateTime() *wrapperspb.BoolValue {
@@ -192,6 +203,9 @@ func (c *SpannerTableColumn) ddl() (string, error) {
 			}
 
 			ddl += fmt.Sprintf(" AS (%s)", c.GetComputationDdl().GetValue())
+			if c.GetIsStored() != nil && c.GetIsStored().GetValue() {
+				ddl += " STORED"
+			}
 		}
 
 	}

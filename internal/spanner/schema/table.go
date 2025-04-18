@@ -453,6 +453,14 @@ func (t *SpannerTable) Get(ctx context.Context, name string) (*SpannerTable, err
 					column.ComputationDdl = wrapperspb.String(metadata.Metadata.ComputationDdl)
 				}
 
+				// Populate stored if present
+				switch metadata.Metadata.IsStored {
+				case "true":
+					column.IsStored = wrapperspb.Bool(true)
+				case "false":
+					column.IsStored = wrapperspb.Bool(false)
+				}
+
 				// Populate auto create time if present
 				switch metadata.Metadata.AutoCreateTime {
 				case "true":
@@ -566,6 +574,11 @@ func (t *SpannerTable) Get(ctx context.Context, name string) (*SpannerTable, err
 				}
 				if column.GetIsComputed().GetValue() && generationExpr.Valid {
 					column.ComputationDdl = wrapperspb.String(generationExpr.StringVal)
+				}
+
+				// Handle Stored
+				if isStored.Valid {
+					column.IsStored = wrapperspb.Bool(isStored.StringVal == "YES")
 				}
 			}
 
