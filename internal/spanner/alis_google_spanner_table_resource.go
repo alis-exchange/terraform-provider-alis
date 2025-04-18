@@ -336,12 +336,27 @@ func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaReques
 									}
 
 									// Column is computed and is_stored is changed
-									// Both fields are required but only if at least one is set
-									if (!columns.Prior.IsStored.IsNull() && columns.Prior.IsStored.ValueBool() && !columns.Current.IsStored.IsNull() && columns.Current.IsStored.ValueBool() &&
-										columns.Prior.IsStored.ValueBool() != columns.Current.IsStored.ValueBool()) ||
-										(!columns.Prior.IsStored.IsNull() && columns.Prior.IsStored.ValueBool() && (columns.Current.IsStored.IsNull() || !columns.Current.IsStored.ValueBool())) {
-										resp.RequiresReplace = true
-										resp.Diagnostics.AddWarning(fmt.Sprintf("Column %q requires a table replace", name), fmt.Sprintf("Column %q has a changed is_stored status and requires a table replace", name))
+									{
+
+										// (treating null as equivalent to false)
+										isStoredChanged := false
+
+										// Case 1: Prior is true (not null and value is true)
+										priorIsTrue := !columns.Prior.IsStored.IsNull() && columns.Prior.IsStored.ValueBool()
+
+										// Case 2: Current is true (not null and value is true)
+										currentIsTrue := !columns.Current.IsStored.IsNull() && columns.Current.IsStored.ValueBool()
+
+										// A meaningful change occurs when one side is true and the other side is either false or null
+										isStoredChanged = priorIsTrue != currentIsTrue
+
+										if isStoredChanged {
+											resp.RequiresReplace = true
+											resp.Diagnostics.AddWarning(
+												fmt.Sprintf("Column %q requires a table replace", name),
+												fmt.Sprintf("Column %q has a changed is_stored status and requires a table replace", name),
+											)
+										}
 									}
 								}
 
