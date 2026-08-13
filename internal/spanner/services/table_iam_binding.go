@@ -5,14 +5,10 @@ import (
 	"fmt"
 	"strings"
 
-	"terraform-provider-alis/internal/utils"
-
-	spanner "cloud.google.com/go/spanner/admin/database/apiv1"
-	"cloud.google.com/go/spanner/admin/database/apiv1/databasepb"
-	spannergorm "github.com/googleapis/go-gorm-spanner"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"gorm.io/gorm"
+	"terraform-provider-alis/internal/spanner/conn"
+	"terraform-provider-alis/internal/utils"
 )
 
 func (s *SpannerService) SetTableIamBinding(ctx context.Context, parent string, binding *TablePolicyBinding) (*TablePolicyBinding, error) {
@@ -35,16 +31,9 @@ func (s *SpannerService) SetTableIamBinding(ctx context.Context, parent string, 
 	}
 
 	// Ensure permissions are provided
-	if binding.Permissions == nil || len(binding.Permissions) == 0 {
+	if len(binding.Permissions) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "Invalid argument binding.permissions, field is required but not provided")
 	}
-
-	// "projects/my-project/instances/my-instance/database/my-db"
-	client, err := spanner.NewDatabaseAdminClient(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer client.Close()
 
 	// Deconstruct parent name to get project, instance, database and table
 	parentNameParts := strings.Split(parent, "/")
@@ -52,11 +41,10 @@ func (s *SpannerService) SetTableIamBinding(ctx context.Context, parent string, 
 	instance := parentNameParts[3]
 	databaseId := parentNameParts[5]
 	tableId := parentNameParts[7]
+	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
 
-	// Get database state
-	database, err := client.GetDatabase(ctx, &databasepb.GetDatabaseRequest{
-		Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId),
-	})
+	// Get database dialect (also verifies the database exists)
+	dialect, err := s.conn.Dialect(ctx, database)
 	if err != nil {
 		return nil, err
 	}
@@ -66,25 +54,14 @@ func (s *SpannerService) SetTableIamBinding(ctx context.Context, parent string, 
 		permissions = append(permissions, permission.String())
 	}
 
-	// CREATE ROLE inventory_admin;
 	var ddlStatements []string
-	if database.GetDatabaseDialect() == databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL {
+	if dialect == conn.DialectGoogleSQL {
 		ddlStatements = append(ddlStatements, fmt.Sprintf("GRANT %s ON TABLE %s TO ROLE %s", strings.Join(permissions, ", "), tableId, binding.Role))
 	}
-	if database.GetDatabaseDialect() == databasepb.DatabaseDialect_POSTGRESQL {
+	if dialect == conn.DialectPostgreSQL {
 		ddlStatements = append(ddlStatements, fmt.Sprintf("GRANT %s ON TABLE %s TO ROLE %s", strings.Join(permissions, ", "), tableId, binding.Role))
 	}
-	updateDatabaseDdlOperation, err := client.UpdateDatabaseDdl(ctx, &databasepb.UpdateDatabaseDdlRequest{
-		Database:   database.GetName(),
-		Statements: ddlStatements,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	// Wait for LRO to complete
-	err = updateDatabaseDdlOperation.Wait(ctx)
-	if err != nil {
+	if err := s.conn.ExecuteDDL(ctx, database, ddlStatements...); err != nil {
 		return nil, err
 	}
 
@@ -111,28 +88,12 @@ func (s *SpannerService) GetTableIamBinding(ctx context.Context, parent string, 
 	instance := parentNameParts[3]
 	databaseId := parentNameParts[5]
 	tableId := parentNameParts[7]
-
-	db, err := gorm.Open(
-		spannergorm.New(
-			spannergorm.Config{
-				DriverName: "spanner",
-				DSN:        fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId),
-			},
-		),
-		&gorm.Config{
-			PrepareStmt: true,
-			Logger:      tfLogger,
-		},
-	)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "Error connecting to database: %v", err)
-	}
-	db = db.WithContext(ctx)
+	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
 
 	var rows []*TablePermissionsRow
-	res := db.Raw("SELECT * FROM INFORMATION_SCHEMA.TABLE_PRIVILEGES WHERE table_name = ? AND grantee = ?", tableId, role).Scan(&rows)
-	if res.Error != nil {
-		return nil, status.Errorf(codes.Internal, "Error getting table IAM binding: %v", res.Error)
+	if err := s.conn.Query(ctx, database, &rows,
+		"SELECT * FROM INFORMATION_SCHEMA.TABLE_PRIVILEGES WHERE table_name = ? AND grantee = ?", tableId, role); err != nil {
+		return nil, status.Errorf(codes.Internal, "Error getting table IAM binding: %v", err)
 	}
 
 	if len(rows) == 0 {
@@ -173,18 +134,10 @@ func (s *SpannerService) DeleteTableIamBinding(ctx context.Context, parent strin
 	instance := parentNameParts[3]
 	databaseId := parentNameParts[5]
 	tableId := parentNameParts[7]
+	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
 
-	// "projects/my-project/instances/my-instance/database/my-db"
-	client, err := spanner.NewDatabaseAdminClient(ctx)
-	if err != nil {
-		return err
-	}
-	defer client.Close()
-
-	// Get database state
-	database, err := client.GetDatabase(ctx, &databasepb.GetDatabaseRequest{
-		Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId),
-	})
+	// Get database dialect (also verifies the database exists)
+	dialect, err := s.conn.Dialect(ctx, database)
 	if err != nil {
 		return err
 	}
@@ -200,27 +153,12 @@ func (s *SpannerService) DeleteTableIamBinding(ctx context.Context, parent strin
 		permissions = append(permissions, permission.String())
 	}
 
-	// CREATE ROLE inventory_admin;
 	var ddlStatements []string
-	if database.GetDatabaseDialect() == databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL {
+	if dialect == conn.DialectGoogleSQL {
 		ddlStatements = append(ddlStatements, fmt.Sprintf("REVOKE %s ON TABLE %s FROM ROLE %s", strings.Join(permissions, ", "), tableId, role))
 	}
-	if database.GetDatabaseDialect() == databasepb.DatabaseDialect_POSTGRESQL {
+	if dialect == conn.DialectPostgreSQL {
 		ddlStatements = append(ddlStatements, fmt.Sprintf("REVOKE %s ON TABLE %s FROM ROLE %s", strings.Join(permissions, ", "), tableId, role))
 	}
-	updateDatabaseDdlOperation, err := client.UpdateDatabaseDdl(ctx, &databasepb.UpdateDatabaseDdlRequest{
-		Database:   database.GetName(),
-		Statements: ddlStatements,
-	})
-	if err != nil {
-		return err
-	}
-
-	// Wait for LRO to complete
-	err = updateDatabaseDdlOperation.Wait(ctx)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return s.conn.ExecuteDDL(ctx, database, ddlStatements...)
 }

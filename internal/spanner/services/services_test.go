@@ -7,10 +7,10 @@ import (
 	"reflect"
 	"testing"
 
+	"terraform-provider-alis/internal/spanner/conn"
 	"terraform-provider-alis/internal/spanner/schema"
 
 	"cloud.google.com/go/spanner/admin/database/apiv1/databasepb"
-	googleoauth "golang.org/x/oauth2/google"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -39,7 +39,7 @@ func init() {
 		TestInstance = "test-instance"
 	}
 
-	service = NewSpannerService(nil)
+	service = NewSpannerService(conn.New(conn.Options{}))
 }
 
 // skipIfNoIntegrationEnv skips tests that need a live Spanner instance when the
@@ -53,7 +53,7 @@ func skipIfNoIntegrationEnv(t *testing.T) {
 func TestSpannerService_CreateDatabaseRole(t *testing.T) {
 	skipIfNoIntegrationEnv(t)
 	type fields struct {
-		GoogleCredentials *googleoauth.Credentials
+		Conn conn.Connection
 	}
 	type args struct {
 		ctx    context.Context
@@ -83,7 +83,7 @@ func TestSpannerService_CreateDatabaseRole(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &SpannerService{
-				GoogleCredentials: tt.fields.GoogleCredentials,
+				conn: tt.fields.Conn,
 			}
 			got, err := s.CreateDatabaseRole(tt.args.ctx, tt.args.parent, tt.args.roleId)
 			if (err != nil) != tt.wantErr {
@@ -100,7 +100,7 @@ func TestSpannerService_CreateDatabaseRole(t *testing.T) {
 func TestSpannerService_GetDatabaseRole(t *testing.T) {
 	skipIfNoIntegrationEnv(t)
 	type fields struct {
-		GoogleCredentials *googleoauth.Credentials
+		Conn conn.Connection
 	}
 	type args struct {
 		ctx  context.Context
@@ -128,7 +128,7 @@ func TestSpannerService_GetDatabaseRole(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &SpannerService{
-				GoogleCredentials: tt.fields.GoogleCredentials,
+				conn: tt.fields.Conn,
 			}
 			got, err := s.GetDatabaseRole(tt.args.ctx, tt.args.name)
 			if (err != nil) != tt.wantErr {
@@ -575,7 +575,7 @@ func TestSpannerService_ListSpannerTableIndices(t *testing.T) {
 func TestSpannerService_DeleteIndex(t *testing.T) {
 	skipIfNoIntegrationEnv(t)
 	type fields struct {
-		GoogleCredentials *googleoauth.Credentials
+		Conn conn.Connection
 	}
 	type args struct {
 		ctx       context.Context
@@ -603,7 +603,7 @@ func TestSpannerService_DeleteIndex(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &SpannerService{
-				GoogleCredentials: tt.fields.GoogleCredentials,
+				conn: tt.fields.Conn,
 			}
 			got, err := s.DeleteSpannerTableIndex(tt.args.ctx, tt.args.parent, tt.args.indexName)
 			if (err != nil) != tt.wantErr {
@@ -620,7 +620,7 @@ func TestSpannerService_DeleteIndex(t *testing.T) {
 func TestSpannerService_SetTableIamBinding(t *testing.T) {
 	skipIfNoIntegrationEnv(t)
 	type fields struct {
-		GoogleCredentials *googleoauth.Credentials
+		Conn conn.Connection
 	}
 	type args struct {
 		ctx     context.Context
@@ -654,7 +654,7 @@ func TestSpannerService_SetTableIamBinding(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &SpannerService{
-				GoogleCredentials: tt.fields.GoogleCredentials,
+				conn: tt.fields.Conn,
 			}
 			got, err := s.SetTableIamBinding(tt.args.ctx, tt.args.parent, tt.args.binding)
 			if (err != nil) != tt.wantErr {
@@ -671,7 +671,7 @@ func TestSpannerService_SetTableIamBinding(t *testing.T) {
 func TestSpannerService_GetTableIamBinding(t *testing.T) {
 	skipIfNoIntegrationEnv(t)
 	type fields struct {
-		GoogleCredentials *googleoauth.Credentials
+		Conn conn.Connection
 	}
 	type args struct {
 		ctx    context.Context
@@ -699,7 +699,7 @@ func TestSpannerService_GetTableIamBinding(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &SpannerService{
-				GoogleCredentials: tt.fields.GoogleCredentials,
+				conn: tt.fields.Conn,
 			}
 			got, err := s.GetTableIamBinding(tt.args.ctx, tt.args.parent, tt.args.role)
 			if (err != nil) != tt.wantErr {
@@ -716,7 +716,7 @@ func TestSpannerService_GetTableIamBinding(t *testing.T) {
 func TestSpannerService_DeleteTableIamBinding(t *testing.T) {
 	skipIfNoIntegrationEnv(t)
 	type fields struct {
-		GoogleCredentials *googleoauth.Credentials
+		Conn conn.Connection
 	}
 	type args struct {
 		ctx    context.Context
@@ -742,7 +742,7 @@ func TestSpannerService_DeleteTableIamBinding(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &SpannerService{
-				GoogleCredentials: tt.fields.GoogleCredentials,
+				conn: tt.fields.Conn,
 			}
 			if err := s.DeleteTableIamBinding(tt.args.ctx, tt.args.parent, tt.args.role); (err != nil) != tt.wantErr {
 				t.Errorf("DeleteTableIamBinding() error = %v, wantErr %v", err, tt.wantErr)
@@ -754,7 +754,7 @@ func TestSpannerService_DeleteTableIamBinding(t *testing.T) {
 func TestSpannerService_ListDatabaseRoles(t *testing.T) {
 	skipIfNoIntegrationEnv(t)
 	type fields struct {
-		GoogleCredentials *googleoauth.Credentials
+		Conn conn.Connection
 	}
 	type args struct {
 		ctx       context.Context
@@ -786,7 +786,7 @@ func TestSpannerService_ListDatabaseRoles(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &SpannerService{
-				GoogleCredentials: tt.fields.GoogleCredentials,
+				conn: tt.fields.Conn,
 			}
 			got, got1, err := s.ListDatabaseRoles(tt.args.ctx, tt.args.parent, tt.args.pageSize, tt.args.pageToken)
 			if (err != nil) != tt.wantErr {
@@ -806,7 +806,7 @@ func TestSpannerService_ListDatabaseRoles(t *testing.T) {
 func TestSpannerService_DeleteDatabaseRole(t *testing.T) {
 	skipIfNoIntegrationEnv(t)
 	type fields struct {
-		GoogleCredentials *googleoauth.Credentials
+		Conn conn.Connection
 	}
 	type args struct {
 		ctx  context.Context
@@ -830,7 +830,7 @@ func TestSpannerService_DeleteDatabaseRole(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &SpannerService{
-				GoogleCredentials: tt.fields.GoogleCredentials,
+				conn: tt.fields.Conn,
 			}
 			if err := s.DeleteDatabaseRole(tt.args.ctx, tt.args.name); (err != nil) != tt.wantErr {
 				t.Errorf("DeleteDatabaseRole() error = %v, wantErr %v", err, tt.wantErr)
@@ -863,7 +863,7 @@ func TestCreateProtoBundle(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := CreateProtoBundle(tt.args.ctx, tt.args.databaseName, tt.args.protoPackageName, tt.args.descriptorSet); (err != nil) != tt.wantErr {
+			if err := CreateProtoBundle(tt.args.ctx, conn.New(conn.Options{}), tt.args.databaseName, tt.args.protoPackageName, tt.args.descriptorSet); (err != nil) != tt.wantErr {
 				t.Errorf("CreateProtoBundle() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
@@ -873,7 +873,7 @@ func TestCreateProtoBundle(t *testing.T) {
 func TestSpannerService_CreateSpannerTableForeignKeyConstraint(t *testing.T) {
 	skipIfNoIntegrationEnv(t)
 	type fields struct {
-		GoogleCredentials *googleoauth.Credentials
+		Conn conn.Connection
 	}
 	type args struct {
 		ctx        context.Context
@@ -921,7 +921,7 @@ func TestSpannerService_CreateSpannerTableForeignKeyConstraint(t *testing.T) {
 func TestSpannerService_GetSpannerTableForeignKeyConstraint(t *testing.T) {
 	skipIfNoIntegrationEnv(t)
 	type fields struct {
-		GoogleCredentials *googleoauth.Credentials
+		Conn conn.Connection
 	}
 	type args struct {
 		ctx    context.Context
@@ -963,7 +963,7 @@ func TestSpannerService_GetSpannerTableForeignKeyConstraint(t *testing.T) {
 func TestSpannerService_CreateSpannerTableRowDeletionPolicy(t *testing.T) {
 	skipIfNoIntegrationEnv(t)
 	type fields struct {
-		GoogleCredentials *googleoauth.Credentials
+		Conn conn.Connection
 	}
 	type args struct {
 		ctx    context.Context
@@ -992,7 +992,7 @@ func TestSpannerService_CreateSpannerTableRowDeletionPolicy(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &SpannerService{
-				GoogleCredentials: tt.fields.GoogleCredentials,
+				conn: tt.fields.Conn,
 			}
 			got, err := s.CreateSpannerTableRowDeletionPolicy(tt.args.ctx, tt.args.parent, tt.args.ttl)
 			if (err != nil) != tt.wantErr {
@@ -1009,7 +1009,7 @@ func TestSpannerService_CreateSpannerTableRowDeletionPolicy(t *testing.T) {
 func TestSpannerService_GetSpannerTableRowDeletionPolicy(t *testing.T) {
 	skipIfNoIntegrationEnv(t)
 	type fields struct {
-		GoogleCredentials *googleoauth.Credentials
+		Conn conn.Connection
 	}
 	type args struct {
 		ctx    context.Context
@@ -1035,7 +1035,7 @@ func TestSpannerService_GetSpannerTableRowDeletionPolicy(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &SpannerService{
-				GoogleCredentials: tt.fields.GoogleCredentials,
+				conn: tt.fields.Conn,
 			}
 			got, err := s.GetSpannerTableRowDeletionPolicy(tt.args.ctx, tt.args.parent)
 			if (err != nil) != tt.wantErr {
@@ -1052,7 +1052,7 @@ func TestSpannerService_GetSpannerTableRowDeletionPolicy(t *testing.T) {
 func TestSpannerService_UpdateSpannerTableRowDeletionPolicy(t *testing.T) {
 	skipIfNoIntegrationEnv(t)
 	type fields struct {
-		GoogleCredentials *googleoauth.Credentials
+		Conn conn.Connection
 	}
 	type args struct {
 		ctx    context.Context
@@ -1083,7 +1083,7 @@ func TestSpannerService_UpdateSpannerTableRowDeletionPolicy(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &SpannerService{
-				GoogleCredentials: tt.fields.GoogleCredentials,
+				conn: tt.fields.Conn,
 			}
 			got, err := s.UpdateSpannerTableRowDeletionPolicy(tt.args.ctx, tt.args.parent, tt.args.ttl)
 			if (err != nil) != tt.wantErr {
@@ -1100,7 +1100,7 @@ func TestSpannerService_UpdateSpannerTableRowDeletionPolicy(t *testing.T) {
 func TestSpannerService_DeleteSpannerTableRowDeletionPolicy(t *testing.T) {
 	skipIfNoIntegrationEnv(t)
 	type fields struct {
-		GoogleCredentials *googleoauth.Credentials
+		Conn conn.Connection
 	}
 	type args struct {
 		ctx    context.Context
@@ -1124,7 +1124,7 @@ func TestSpannerService_DeleteSpannerTableRowDeletionPolicy(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &SpannerService{
-				GoogleCredentials: tt.fields.GoogleCredentials,
+				conn: tt.fields.Conn,
 			}
 			if err := s.DeleteSpannerTableRowDeletionPolicy(tt.args.ctx, tt.args.parent); (err != nil) != tt.wantErr {
 				t.Errorf("DeleteSpannerTableRowDeletionPolicy() error = %v, wantErr %v", err, tt.wantErr)
@@ -1136,7 +1136,7 @@ func TestSpannerService_DeleteSpannerTableRowDeletionPolicy(t *testing.T) {
 func TestSpannerService_CreateSpannerSequence(t *testing.T) {
 	skipIfNoIntegrationEnv(t)
 	type fields struct {
-		GoogleCredentials *googleoauth.Credentials
+		Conn conn.Connection
 	}
 	type args struct {
 		ctx      context.Context
@@ -1175,7 +1175,7 @@ func TestSpannerService_CreateSpannerSequence(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &SpannerService{
-				GoogleCredentials: tt.fields.GoogleCredentials,
+				conn: tt.fields.Conn,
 			}
 			got, err := s.CreateSpannerSequence(tt.args.ctx, tt.args.parent, tt.args.sequence)
 			if (err != nil) != tt.wantErr {
@@ -1191,7 +1191,7 @@ func TestSpannerService_CreateSpannerSequence(t *testing.T) {
 func TestSpannerService_UpdateSpannerSequence(t *testing.T) {
 	skipIfNoIntegrationEnv(t)
 	type fields struct {
-		GoogleCredentials *googleoauth.Credentials
+		Conn conn.Connection
 	}
 	type args struct {
 		ctx      context.Context
@@ -1236,7 +1236,7 @@ func TestSpannerService_UpdateSpannerSequence(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &SpannerService{
-				GoogleCredentials: tt.fields.GoogleCredentials,
+				conn: tt.fields.Conn,
 			}
 			got, err := s.UpdateSpannerSequence(tt.args.ctx, tt.args.sequence)
 			if (err != nil) != tt.wantErr {
@@ -1252,7 +1252,7 @@ func TestSpannerService_UpdateSpannerSequence(t *testing.T) {
 func TestSpannerService_GetSpannerSequence(t *testing.T) {
 	skipIfNoIntegrationEnv(t)
 	type fields struct {
-		GoogleCredentials *googleoauth.Credentials
+		Conn conn.Connection
 	}
 	type args struct {
 		ctx  context.Context
@@ -1276,7 +1276,7 @@ func TestSpannerService_GetSpannerSequence(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &SpannerService{
-				GoogleCredentials: tt.fields.GoogleCredentials,
+				conn: tt.fields.Conn,
 			}
 			got, err := s.GetSpannerSequence(tt.args.ctx, tt.args.name)
 			if (err != nil) != tt.wantErr {

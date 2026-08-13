@@ -14,6 +14,7 @@ import (
 
 	googleoauth "golang.org/x/oauth2/google"
 	"google.golang.org/api/option"
+	"gorm.io/gorm"
 )
 
 // Dialect is owned by this module so callers and fakes never import databasepb.
@@ -51,6 +52,11 @@ type Connection interface {
 	// repo goes through this method.
 	ExecuteDDL(ctx context.Context, database string, statements ...string) error
 
+	// ExecuteDDLWithDescriptors is ExecuteDDL carrying a proto
+	// FileDescriptorSet — CREATE/ALTER PROTO BUNDLE statements require the
+	// descriptors on the same request. Same semantics as ExecuteDDL otherwise.
+	ExecuteDDLWithDescriptors(ctx context.Context, database string, protoDescriptors []byte, statements ...string) error
+
 	// Exec runs exactly one non-schema statement (DML) with positional params.
 	// Schema changes MUST use ExecuteDDL so retry and LRO semantics stay
 	// uniform; passing DDL here is a contract violation.
@@ -64,9 +70,24 @@ type Connection interface {
 	//   dest *T   → first row; zero rows yields codes.NotFound.
 	Query(ctx context.Context, database string, dest any, sql string, params ...any) error
 
+	// DatabaseRoles lists the database's role resource names (an admin
+	// metadata read — roles are not reliably visible via INFORMATION_SCHEMA
+	// to all principals). pageSize <= 0 lists all roles. Returns the page
+	// and the next page token ("" when exhausted).
+	DatabaseRoles(ctx context.Context, database string, pageSize int32, pageToken string) ([]string, string, error)
+
 	// Close releases all cached clients and pools. Called once at provider
 	// teardown; idempotent.
 	Close() error
+}
+
+// MetadataDB is the quarantined gorm escape hatch. Only
+// schema/column_metadata.go may type-assert for it; absence is a no-op,
+// matching the metadata writes' non-fatal production semantics. Implemented
+// only by the GCP adapter (never by fakes) — deliberately a one-adapter seam,
+// marked for removal when metadata writes become parameterized DML.
+type MetadataDB interface {
+	GormDB(ctx context.Context, database string) (*gorm.DB, error)
 }
 
 // Options configures the GCP adapter. The zero value is valid: ADC

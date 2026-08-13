@@ -5,13 +5,10 @@ import (
 	"fmt"
 	"strings"
 
-	"terraform-provider-alis/internal/utils"
-
-	spannergorm "github.com/googleapis/go-gorm-spanner"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
-	"gorm.io/gorm"
+	"terraform-provider-alis/internal/utils"
 )
 
 // CreateSpannerTableIndex creates a new Spanner table index.
@@ -38,7 +35,7 @@ func (s *SpannerService) CreateSpannerTableIndex(ctx context.Context, parent str
 	if !googleSqlIndexIdValid && !postgresSqlIndexIdValid {
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument index.name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", index.Name, utils.SpannerGoogleSqlIndexIdRegex, utils.SpannerPostgresSqlIndexIdRegex)
 	}
-	if index.Columns == nil || len(index.Columns) == 0 {
+	if len(index.Columns) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "Invalid argument index.columns, field is required but not provided")
 	}
 	for i, column := range index.Columns {
@@ -59,33 +56,15 @@ func (s *SpannerService) CreateSpannerTableIndex(ctx context.Context, parent str
 	instance := parentNameParts[3]
 	databaseId := parentNameParts[5]
 	tableId := parentNameParts[7]
-
-	db, err := gorm.Open(
-		spannergorm.New(
-			spannergorm.Config{
-				DriverName: "spanner",
-				DSN:        fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId),
-			},
-		),
-		&gorm.Config{
-			PrepareStmt: true,
-			Logger:      tfLogger,
-		},
-	)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "Error connecting to database: %v", err)
-	}
-	db = db.WithContext(ctx)
+	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
 
 	// Get parent table
-	_, err = s.GetSpannerTable(ctx, parent)
-	if err != nil {
+	if _, err := s.GetSpannerTable(ctx, parent); err != nil {
 		return nil, err
 	}
 
 	// Create index
-	err = CreateIndex(db, tableId, index)
-	if err != nil {
+	if err := CreateIndex(ctx, s.conn, database, tableId, index); err != nil {
 		return nil, status.Errorf(codes.Internal, "Error creating index: %v", err)
 	}
 
@@ -120,25 +99,9 @@ func (s *SpannerService) GetSpannerTableIndex(ctx context.Context, parent string
 	instance := parentNameParts[3]
 	databaseId := parentNameParts[5]
 	tableId := parentNameParts[7]
+	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
 
-	db, err := gorm.Open(
-		spannergorm.New(
-			spannergorm.Config{
-				DriverName: "spanner",
-				DSN:        fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId),
-			},
-		),
-		&gorm.Config{
-			PrepareStmt: true,
-			Logger:      tfLogger,
-		},
-	)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "Error connecting to database: %v", err)
-	}
-	db = db.WithContext(ctx)
-
-	indexes, err := GetIndexes(db, tableId)
+	indexes, err := GetIndexes(ctx, s.conn, database, tableId)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "Error getting table indices: %v", err)
 	}
@@ -173,25 +136,9 @@ func (s *SpannerService) ListSpannerTableIndices(ctx context.Context, parent str
 	instance := parentNameParts[3]
 	databaseId := parentNameParts[5]
 	tableId := parentNameParts[7]
+	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
 
-	db, err := gorm.Open(
-		spannergorm.New(
-			spannergorm.Config{
-				DriverName: "spanner",
-				DSN:        fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId),
-			},
-		),
-		&gorm.Config{
-			PrepareStmt: true,
-			Logger:      tfLogger,
-		},
-	)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "Error connecting to database: %v", err)
-	}
-	db = db.WithContext(ctx)
-
-	indexes, err := GetIndexes(db, tableId)
+	indexes, err := GetIndexes(ctx, s.conn, database, tableId)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "Error getting table indices: %v", err)
 	}
@@ -199,7 +146,7 @@ func (s *SpannerService) ListSpannerTableIndices(ctx context.Context, parent str
 	return indexes, nil
 }
 
-// DeleteIndex deletes a Spanner table index.
+// DeleteSpannerTableIndex deletes a Spanner table index.
 //
 // Params:
 //   - ctx: context.Context - The context to use for RPCs.
@@ -227,27 +174,11 @@ func (s *SpannerService) DeleteSpannerTableIndex(ctx context.Context, parent str
 	project := parentNameParts[1]
 	instance := parentNameParts[3]
 	databaseId := parentNameParts[5]
-	tableId := parentNameParts[7]
+	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
 
-	db, err := gorm.Open(
-		spannergorm.New(
-			spannergorm.Config{
-				DriverName: "spanner",
-				DSN:        fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId),
-			},
-		),
-		&gorm.Config{
-			PrepareStmt: true,
-			Logger:      tfLogger,
-		},
-	)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "Error connecting to database: %v", err)
-	}
-	db = db.WithContext(ctx)
-
-	err = db.Migrator().DropIndex(tableId, indexName)
-	if err != nil {
+	// Drop the index. Historically this went through gorm's Migrator().DropIndex;
+	// the emitted statement is the same DROP INDEX, now on the DDL path.
+	if err := s.conn.ExecuteDDL(ctx, database, fmt.Sprintf("DROP INDEX %s", indexName)); err != nil {
 		return nil, status.Errorf(codes.Internal, "Error dropping index: %v", err)
 	}
 

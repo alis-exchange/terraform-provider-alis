@@ -347,17 +347,8 @@ func (r *tableIamBindingResource) ImportState(ctx context.Context, req resource.
 
 // Configure adds the provider configured client to the resource.
 func (r *tableIamBindingResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	if req.ProviderData == nil {
-		return
-	}
-
-	config, ok := req.ProviderData.(*internal.ProviderConfig)
+	config, ok := configureProviderConfig(req.ProviderData, &resp.Diagnostics)
 	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Resource Configure Type",
-			fmt.Sprintf("Expected *utils.ProviderConfig, got: %T. Please report this issue to the provider developers.", req.ProviderData),
-		)
-
 		return
 	}
 

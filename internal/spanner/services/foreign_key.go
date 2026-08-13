@@ -5,13 +5,10 @@ import (
 	"fmt"
 	"strings"
 
-	"terraform-provider-alis/internal/spanner/schema"
-	"terraform-provider-alis/internal/utils"
-
-	spannergorm "github.com/googleapis/go-gorm-spanner"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"gorm.io/gorm"
+	"terraform-provider-alis/internal/spanner/schema"
+	"terraform-provider-alis/internal/utils"
 )
 
 func (s *SpannerService) CreateSpannerTableForeignKeyConstraint(ctx context.Context, parent string, constraint *schema.SpannerTableForeignKeyConstraint) (*schema.SpannerTableForeignKeyConstraint, error) {
@@ -65,29 +62,13 @@ func (s *SpannerService) CreateSpannerTableForeignKeyConstraint(ctx context.Cont
 	instance := parentNameParts[3]
 	databaseId := parentNameParts[5]
 	tableId := parentNameParts[7]
-
-	db, err := gorm.Open(
-		spannergorm.New(
-			spannergorm.Config{
-				DriverName: "spanner",
-				DSN:        fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId),
-			},
-		),
-		&gorm.Config{
-			PrepareStmt: true,
-			Logger:      tfLogger,
-		},
-	)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "Error connecting to database: %v", err)
-	}
-	db = db.WithContext(ctx)
+	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
 
 	sqlStatement := fmt.Sprintf("ALTER TABLE `%s` ADD CONSTRAINT `%s` FOREIGN KEY (`%s`) REFERENCES %s(`%s`)", tableId, constraint.Name, constraint.Column, constraint.ReferencedTable, constraint.ReferencedColumn)
 	if constraint.OnDelete != schema.SpannerTableConstraintActionUnspecified {
 		sqlStatement += fmt.Sprintf(" ON DELETE %s", constraint.OnDelete.String())
 	}
-	if err := db.Exec(sqlStatement).Error; err != nil {
+	if err := s.conn.ExecuteDDL(ctx, database, sqlStatement); err != nil {
 		return nil, status.Errorf(codes.Internal, "Error creating foreign key constraint: %v", err)
 	}
 
@@ -115,23 +96,7 @@ func (s *SpannerService) GetSpannerTableForeignKeyConstraint(ctx context.Context
 	instance := parentNameParts[3]
 	databaseId := parentNameParts[5]
 	tableId := parentNameParts[7]
-
-	db, err := gorm.Open(
-		spannergorm.New(
-			spannergorm.Config{
-				DriverName: "spanner",
-				DSN:        fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId),
-			},
-		),
-		&gorm.Config{
-			PrepareStmt: true,
-			Logger:      tfLogger,
-		},
-	)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "Error connecting to database: %v", err)
-	}
-	db = db.WithContext(ctx)
+	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
 
 	sqlStatement := `
 	SELECT
@@ -163,13 +128,12 @@ func (s *SpannerService) GetSpannerTableForeignKeyConstraint(ctx context.Context
 	  KEY_COLUMN_USAGE.ORDINAL_POSITION;
 	`
 
-	var result *Constraint
-	db = db.Raw(sqlStatement, tableId, name).Scan(&result)
-	if db.Error != nil {
-		return nil, status.Errorf(codes.Internal, "Error getting foreign key constraint: %v", db.Error)
-	}
-	if result == nil {
-		return nil, status.Errorf(codes.NotFound, "Foreign key constraint %s not found", name)
+	var result Constraint
+	if err := s.conn.Query(ctx, database, &result, sqlStatement, tableId, name); err != nil {
+		if status.Code(err) == codes.NotFound {
+			return nil, status.Errorf(codes.NotFound, "Foreign key constraint %s not found", name)
+		}
+		return nil, status.Errorf(codes.Internal, "Error getting foreign key constraint: %v", err)
 	}
 
 	constaint := &schema.SpannerTableForeignKeyConstraint{
@@ -204,26 +168,9 @@ func (s *SpannerService) DeleteSpannerTableForeignKeyConstraint(ctx context.Cont
 	instance := parentNameParts[3]
 	databaseId := parentNameParts[5]
 	tableId := parentNameParts[7]
+	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
 
-	db, err := gorm.Open(
-		spannergorm.New(
-			spannergorm.Config{
-				DriverName: "spanner",
-				DSN:        fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId),
-			},
-		),
-		&gorm.Config{
-			PrepareStmt: true,
-			Logger:      tfLogger,
-		},
-	)
-	if err != nil {
-		return status.Errorf(codes.Internal, "Error connecting to database: %v", err)
-	}
-	db = db.WithContext(ctx)
-
-	sqlStatement := fmt.Sprintf("ALTER TABLE `%s` DROP CONSTRAINT `%s`", tableId, name)
-	if err := db.Exec(sqlStatement).Error; err != nil {
+	if err := s.conn.ExecuteDDL(ctx, database, fmt.Sprintf("ALTER TABLE `%s` DROP CONSTRAINT `%s`", tableId, name)); err != nil {
 		return status.Errorf(codes.Internal, "Error dropping foreign key constraint: %v", err)
 	}
 

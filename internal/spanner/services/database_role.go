@@ -2,17 +2,14 @@ package services
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
-	"terraform-provider-alis/internal/utils"
-
-	spanner "cloud.google.com/go/spanner/admin/database/apiv1"
 	"cloud.google.com/go/spanner/admin/database/apiv1/databasepb"
-	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"terraform-provider-alis/internal/spanner/conn"
+	"terraform-provider-alis/internal/utils"
 )
 
 func (s *SpannerService) CreateDatabaseRole(ctx context.Context, parent string, roleId string) (*databasepb.DatabaseRole, error) {
@@ -29,40 +26,21 @@ func (s *SpannerService) CreateDatabaseRole(ctx context.Context, parent string, 
 		return nil, status.Error(codes.InvalidArgument, "Invalid argument roleId, field is required but not provided")
 	}
 
-	// "projects/my-project/instances/my-instance/database/my-db"
-	client, err := spanner.NewDatabaseAdminClient(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer client.Close()
-
-	// Get database state
-	database, err := client.GetDatabase(ctx, &databasepb.GetDatabaseRequest{
-		Name: parent,
-	})
+	// Get database dialect (also verifies the database exists)
+	dialect, err := s.conn.Dialect(ctx, parent)
 	if err != nil {
 		return nil, err
 	}
 
 	// CREATE ROLE inventory_admin;
 	var ddlStatements []string
-	if database.GetDatabaseDialect() == databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL {
+	if dialect == conn.DialectGoogleSQL {
 		ddlStatements = append(ddlStatements, fmt.Sprintf("CREATE ROLE %s", roleId))
 	}
-	if database.GetDatabaseDialect() == databasepb.DatabaseDialect_POSTGRESQL {
+	if dialect == conn.DialectPostgreSQL {
 		ddlStatements = append(ddlStatements, fmt.Sprintf("CREATE ROLE %s", roleId))
 	}
-	updateDatabaseDdlOperation, err := client.UpdateDatabaseDdl(ctx, &databasepb.UpdateDatabaseDdlRequest{
-		Database:   database.GetName(),
-		Statements: ddlStatements,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	// Wait for LRO to complete
-	err = updateDatabaseDdlOperation.Wait(ctx)
-	if err != nil {
+	if err := s.conn.ExecuteDDL(ctx, parent, ddlStatements...); err != nil {
 		return nil, err
 	}
 
@@ -79,43 +57,27 @@ func (s *SpannerService) GetDatabaseRole(ctx context.Context, name string) (*dat
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", name, utils.SpannerGoogleSqlDatabaseNameRegex, utils.SpannerPostgresSqlDatabaseNameRegex)
 	}
 
-	// "projects/my-project/instances/my-instance/database/my-db"
-	client, err := spanner.NewDatabaseAdminClient(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer client.Close()
-
 	// Decompose name to get project, instance, database
 	nameParts := strings.Split(name, "/")
 	project := nameParts[1]
 	instance := nameParts[3]
 	databaseId := nameParts[5]
+	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
 
-	var role *databasepb.DatabaseRole
-	it := client.ListDatabaseRoles(ctx, &databasepb.ListDatabaseRolesRequest{
-		Parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId),
-	})
-	for {
-		r, err := it.Next()
-		if errors.Is(err, iterator.Done) {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
+	// List all roles (unpaged) and find the requested one, preserving the
+	// historical iterate-until-match behavior.
+	roleNames, _, err := s.conn.DatabaseRoles(ctx, database, 0, "")
+	if err != nil {
+		return nil, err
+	}
 
-		if r.GetName() == name {
-			role = r
-			break
+	for _, roleName := range roleNames {
+		if roleName == name {
+			return &databasepb.DatabaseRole{Name: roleName}, nil
 		}
 	}
 
-	if role == nil {
-		return nil, status.Errorf(codes.NotFound, "Database role (%s) not found", name)
-	}
-
-	return role, nil
+	return nil, status.Errorf(codes.NotFound, "Database role (%s) not found", name)
 }
 
 func (s *SpannerService) ListDatabaseRoles(ctx context.Context, parent string, pageSize int32, pageToken string) ([]*databasepb.DatabaseRole, string, error) {
@@ -126,37 +88,14 @@ func (s *SpannerService) ListDatabaseRoles(ctx context.Context, parent string, p
 		return nil, "", status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", parent, utils.SpannerGoogleSqlDatabaseNameRegex, utils.SpannerPostgresSqlDatabaseNameRegex)
 	}
 
-	// "projects/my-project/instances/my-instance/database/my-db"
-	client, err := spanner.NewDatabaseAdminClient(ctx)
+	roleNames, nextPageToken, err := s.conn.DatabaseRoles(ctx, parent, pageSize, pageToken)
 	if err != nil {
 		return nil, "", err
 	}
-	defer client.Close()
 
-	var res []*databasepb.DatabaseRole
-	var nextPageToken string
-
-	it := client.ListDatabaseRoles(ctx, &databasepb.ListDatabaseRolesRequest{
-		Parent:    parent,
-		PageSize:  pageSize,
-		PageToken: pageToken,
-	})
-	for {
-		r, err := it.Next()
-		if errors.Is(err, iterator.Done) {
-			break
-		}
-		if err != nil {
-			return nil, "", err
-		}
-
-		res = append(res, r)
-
-		// Check if page size is reached
-		if pageSize > 0 && len(res) >= int(pageSize) {
-			nextPageToken = it.PageInfo().Token
-			break
-		}
+	res := make([]*databasepb.DatabaseRole, 0, len(roleNames))
+	for _, roleName := range roleNames {
+		res = append(res, &databasepb.DatabaseRole{Name: roleName})
 	}
 
 	return res, nextPageToken, nil
@@ -170,49 +109,26 @@ func (s *SpannerService) DeleteDatabaseRole(ctx context.Context, name string) er
 		return status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", name, utils.SpannerGoogleSqlDatabaseNameRegex, utils.SpannerPostgresSqlDatabaseNameRegex)
 	}
 
-	// "projects/my-project/instances/my-instance/database/my-db"
-	client, err := spanner.NewDatabaseAdminClient(ctx)
-	if err != nil {
-		return err
-	}
-	defer client.Close()
-
 	// Decompose name to get project, instance, database
 	nameParts := strings.Split(name, "/")
 	project := nameParts[1]
 	instance := nameParts[3]
 	databaseId := nameParts[5]
 	roleId := nameParts[7]
+	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
 
-	// Get database state
-	database, err := client.GetDatabase(ctx, &databasepb.GetDatabaseRequest{
-		Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId),
-	})
+	// Get database dialect (also verifies the database exists)
+	dialect, err := s.conn.Dialect(ctx, database)
 	if err != nil {
 		return err
 	}
 
-	// CREATE ROLE inventory_admin;
 	var ddlStatements []string
-	if database.GetDatabaseDialect() == databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL {
+	if dialect == conn.DialectGoogleSQL {
 		ddlStatements = append(ddlStatements, fmt.Sprintf("DROP ROLE %s", roleId))
 	}
-	if database.GetDatabaseDialect() == databasepb.DatabaseDialect_POSTGRESQL {
+	if dialect == conn.DialectPostgreSQL {
 		ddlStatements = append(ddlStatements, fmt.Sprintf("DROP ROLE %s", roleId))
 	}
-	updateDatabaseDdlOperation, err := client.UpdateDatabaseDdl(ctx, &databasepb.UpdateDatabaseDdlRequest{
-		Database:   database.GetName(),
-		Statements: ddlStatements,
-	})
-	if err != nil {
-		return err
-	}
-
-	// Wait for LRO to complete
-	err = updateDatabaseDdlOperation.Wait(ctx)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return s.conn.ExecuteDDL(ctx, database, ddlStatements...)
 }

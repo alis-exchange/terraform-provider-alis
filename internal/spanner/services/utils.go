@@ -7,8 +7,6 @@ import (
 	"sort"
 	"strings"
 
-	spannerAdmin "cloud.google.com/go/spanner/admin/database/apiv1"
-	"cloud.google.com/go/spanner/admin/database/apiv1/databasepb"
 	_ "github.com/googleapis/go-sql-spanner"
 	alUtils "go.alis.build/utils"
 	"google.golang.org/grpc/codes"
@@ -18,17 +16,16 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
-	"gorm.io/gorm"
+	"terraform-provider-alis/internal/spanner/conn"
 	"terraform-provider-alis/internal/spanner/schema"
 	"terraform-provider-alis/internal/utils"
 )
 
-func GetIndexes(db *gorm.DB, tableName string) ([]*SpannerTableIndex, error) {
-
-	currentDatabase := db.Migrator().CurrentDatabase()
-	// Get the indexes for the table
+func GetIndexes(ctx context.Context, cn conn.Connection, database string, tableName string) ([]*SpannerTableIndex, error) {
+	// Get the indexes for the table. The schema filter is the default schema
+	// "" (the historical gorm Migrator().CurrentDatabase() literally returned "").
 	var results []*Index
-	db = db.Raw(
+	if err := cn.Query(ctx, database, &results,
 		"SELECT i.index_name,"+
 			"i.is_unique,"+
 			"i.index_type,"+
@@ -40,8 +37,10 @@ func GetIndexes(db *gorm.DB, tableName string) ([]*SpannerTableIndex, error) {
 			" LEFT JOIN information_schema.index_columns ic ON ic.table_name = i.table_name AND ic.index_name = i.index_name"+
 			" LEFT JOIN information_schema.columns col ON col.column_name = ic.column_name AND col.table_name = ic.table_name"+
 			" WHERE i.index_name IS NOT NULL AND i.table_schema = ? AND i.table_name = ?",
-		currentDatabase, tableName,
-	).Scan(&results)
+		"", tableName,
+	); err != nil {
+		return nil, err
+	}
 
 	resultsMap := map[string]map[string]*Index{}
 	for _, r := range results {
@@ -93,7 +92,7 @@ func GetIndexes(db *gorm.DB, tableName string) ([]*SpannerTableIndex, error) {
 	return indexes, nil
 }
 
-func CreateIndex(db *gorm.DB, tableName string, index *SpannerTableIndex) error {
+func CreateIndex(ctx context.Context, cn conn.Connection, database string, tableName string, index *SpannerTableIndex) error {
 	unique := ""
 	if index.Unique != nil && index.Unique.GetValue() {
 		unique = "UNIQUE"
@@ -108,17 +107,14 @@ func CreateIndex(db *gorm.DB, tableName string, index *SpannerTableIndex) error 
 		columns = append(columns, fmt.Sprintf("%s %s", column.Name, column.Order.String()))
 	}
 
-	// Create the index
-	if err := db.Exec(fmt.Sprintf("CREATE %s INDEX %s ON %s (%s)",
+	// Create the index. Index creation is a schema change: it rides
+	// ExecuteDDL (uniform retry + LRO wait) instead of the data path.
+	return cn.ExecuteDDL(ctx, database, fmt.Sprintf("CREATE %s INDEX %s ON %s (%s)",
 		unique,
 		index.Name,
 		tableName,
 		strings.Join(columns, ", "),
-	)).Error; err != nil {
-		return err
-	}
-
-	return nil
+	))
 }
 
 func fetchDescriptorSet(ctx context.Context, fds *schema.ProtoFileDescriptorSet) ([]byte, error) {
@@ -145,22 +141,7 @@ func fetchDescriptorSet(ctx context.Context, fds *schema.ProtoFileDescriptorSet)
 }
 
 // CreateProtoBundle creates a proto bundle in a Spanner database.
-func CreateProtoBundle(ctx context.Context, databaseName string, protoPackageName string, descriptorSet []byte) error {
-	// "projects/my-project/instances/my-instance/database/my-db"
-	client, err := spannerAdmin.NewDatabaseAdminClient(ctx)
-	if err != nil {
-		return err
-	}
-	defer client.Close()
-
-	// Get database state
-	database, err := client.GetDatabase(ctx, &databasepb.GetDatabaseRequest{
-		Name: databaseName,
-	})
-	if err != nil {
-		return err
-	}
-
+func CreateProtoBundle(ctx context.Context, cn conn.Connection, databaseName string, protoPackageName string, descriptorSet []byte) error {
 	// Unmarshal the proto file descriptor set
 	fds := &descriptorpb.FileDescriptorSet{}
 	if err := proto.Unmarshal(descriptorSet, fds); err != nil {
@@ -263,26 +244,12 @@ func CreateProtoBundle(ctx context.Context, databaseName string, protoPackageNam
 	// Sort the proto package names
 	sort.Strings(protoPackageNames)
 
-	updateDatabaseDdl := func(ctx context.Context, databaseName string, statements []string, descriptorSet []byte) error {
-		// Create the proto bundle
-		updateDdlOp, err := client.UpdateDatabaseDdl(ctx, &databasepb.UpdateDatabaseDdlRequest{
-			Database:         database.GetName(),
-			Statements:       statements,
-			ProtoDescriptors: descriptorSet,
-		})
-		if err != nil {
-			return err
-		}
-
-		return updateDdlOp.Wait(ctx)
-	}
-
 	formattedProtoPackageNames := alUtils.Transform(protoPackageNames, func(name string) string {
 		return fmt.Sprintf("`%s`", name)
 	})
 
 	createStatement := fmt.Sprintf("CREATE PROTO BUNDLE (%s)", strings.Join(formattedProtoPackageNames, ", "))
-	err = updateDatabaseDdl(ctx, databaseName, []string{createStatement}, descriptorSet)
+	err = cn.ExecuteDDLWithDescriptors(ctx, databaseName, descriptorSet, createStatement)
 	if err != nil {
 		if status.Code(err) != codes.AlreadyExists && status.Code(err) != codes.InvalidArgument {
 			return err
@@ -290,7 +257,7 @@ func CreateProtoBundle(ctx context.Context, databaseName string, protoPackageNam
 
 		// Try to insert the proto bundle
 		insertStatement := fmt.Sprintf("ALTER PROTO BUNDLE INSERT (%s)", strings.Join(formattedProtoPackageNames, ", "))
-		err = updateDatabaseDdl(ctx, databaseName, []string{insertStatement}, descriptorSet)
+		err = cn.ExecuteDDLWithDescriptors(ctx, databaseName, descriptorSet, insertStatement)
 		if err != nil {
 			if status.Code(err) != codes.AlreadyExists && status.Code(err) != codes.InvalidArgument {
 				return err
@@ -298,7 +265,7 @@ func CreateProtoBundle(ctx context.Context, databaseName string, protoPackageNam
 
 			// Try to update the proto bundle
 			updateStatement := fmt.Sprintf("ALTER PROTO BUNDLE UPDATE (%s)", strings.Join(formattedProtoPackageNames, ", "))
-			err = updateDatabaseDdl(ctx, databaseName, []string{updateStatement}, descriptorSet)
+			err = cn.ExecuteDDLWithDescriptors(ctx, databaseName, descriptorSet, updateStatement)
 			if err != nil {
 				return err
 			}

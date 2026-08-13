@@ -1,0 +1,31 @@
+package spanner
+
+import (
+	"fmt"
+
+	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"terraform-provider-alis/internal"
+)
+
+// configureProviderConfig extracts the provider configuration shared by every
+// resource and data source Configure method (previously nine byte-identical
+// copies whose error text named a type that no longer exists). nil provider
+// data is a silent no-op — Terraform calls Configure before the provider is
+// configured. ok is false whenever config is unusable; a diagnostic is added
+// only for the wrong-type case.
+func configureProviderConfig(providerData any, diags *diag.Diagnostics) (*internal.ProviderConfig, bool) {
+	if providerData == nil {
+		return nil, false
+	}
+
+	config, ok := providerData.(*internal.ProviderConfig)
+	if !ok {
+		diags.AddError(
+			"Unexpected Provider Configure Type",
+			fmt.Sprintf("Expected *internal.ProviderConfig, got: %T. Please report this issue to the provider developers.", providerData),
+		)
+		return nil, false
+	}
+
+	return config, true
+}

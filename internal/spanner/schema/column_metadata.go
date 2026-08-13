@@ -12,8 +12,25 @@ import (
 	"google.golang.org/grpc/status"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	"terraform-provider-alis/internal/spanner/conn"
 	"terraform-provider-alis/internal/utils"
 )
+
+// metadataGorm resolves the quarantined gorm handle for the ColumnMetadata
+// shadow table. The metadata writes are non-fatal in production, so when the
+// Connection does not implement conn.MetadataDB (fakes never do) the helpers
+// no-op instead of failing.
+func metadataGorm(ctx context.Context, cn conn.Connection, database string) (*gorm.DB, bool, error) {
+	m, ok := cn.(conn.MetadataDB)
+	if !ok {
+		return nil, false, nil
+	}
+	db, err := m.GormDB(ctx, database)
+	if err != nil {
+		return nil, false, err
+	}
+	return db, true, nil
+}
 
 type ColumnMetadataMeta struct {
 	Type                        string `json:"type"`
@@ -61,7 +78,16 @@ type ColumnMetadata struct {
 	UpdatedAt  time.Time           // Automatically managed by GORM for update time
 }
 
-func GetColumnMetadata(db *gorm.DB, tableName string) ([]*ColumnMetadata, error) {
+func GetColumnMetadata(ctx context.Context, cn conn.Connection, database string, tableName string) ([]*ColumnMetadata, error) {
+	db, ok, err := metadataGorm(ctx, cn, database)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		// No metadata source available: callers fall back to INFORMATION_SCHEMA.
+		return nil, nil
+	}
+
 	// Create or Update ColumnMetadata table
 	if err := db.AutoMigrate(&ColumnMetadata{}); err != nil {
 		return nil, err
@@ -75,19 +101,26 @@ func GetColumnMetadata(db *gorm.DB, tableName string) ([]*ColumnMetadata, error)
 
 	return results, nil
 }
-func UpdateColumnMetadata(ctx context.Context, db *gorm.DB, tableName string, columns []*SpannerTableColumn) error {
+func UpdateColumnMetadata(ctx context.Context, cn conn.Connection, database string, tableName string, columns []*SpannerTableColumn) error {
+	db, ok, err := metadataGorm(ctx, cn, database)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return nil
+	}
+
 	// Create or Update ColumnMetadata table
 	// IMPORTANT: When tables don't depend on each other, terraform will attempt to create them in parallel.
 	// This can cause the migration to run at the same time for multiple tables, which can lead to a duplicate table error.
 	// To prevent this, we'll retry the migration a few times.
-	_, err := utils.Retry(5, 10*time.Second, func() (interface{}, error) {
+	if _, err := utils.Retry(5, 10*time.Second, func() (interface{}, error) {
 		if err := db.AutoMigrate(&ColumnMetadata{}); err != nil {
 			return nil, err
 		}
 
 		return nil, nil
-	})
-	if err != nil {
+	}); err != nil {
 		return err
 	}
 
@@ -181,14 +214,22 @@ func UpdateColumnMetadata(ctx context.Context, db *gorm.DB, tableName string, co
 
 	return nil
 }
-func DeleteColumnMetadata(db *gorm.DB, tableName string, columns []*SpannerTableColumn) error {
+func DeleteColumnMetadata(ctx context.Context, cn conn.Connection, database string, tableName string, columns []*SpannerTableColumn) error {
+	db, ok, err := metadataGorm(ctx, cn, database)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return nil
+	}
+
 	// Create or Update ColumnMetadata table
 	if err := db.AutoMigrate(&ColumnMetadata{}); err != nil {
 		return err
 	}
 
 	// Delete ColumnMetadata table
-	if columns == nil || len(columns) == 0 {
+	if len(columns) == 0 {
 		deleteRes := db.Where("table_name = ?", tableName).Delete(&ColumnMetadata{})
 		if deleteRes.Error != nil {
 			return deleteRes.Error

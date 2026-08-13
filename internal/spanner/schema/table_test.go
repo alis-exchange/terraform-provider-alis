@@ -8,10 +8,8 @@ import (
 	"sort"
 	"testing"
 
-	spannerAdmin "cloud.google.com/go/spanner/admin/database/apiv1"
-	spannergorm "github.com/googleapis/go-gorm-spanner"
 	"google.golang.org/protobuf/types/known/wrapperspb"
-	"gorm.io/gorm"
+	"terraform-provider-alis/internal/spanner/conn"
 )
 
 var (
@@ -522,7 +520,7 @@ func TestSpannerTable_Create(t1 *testing.T) {
 				Schema:     tt.fields.Schema,
 				Interleave: tt.fields.Interleave,
 			}
-			got, err := t.Create(tt.args.ctx)
+			got, err := t.Create(tt.args.ctx, conn.New(conn.Options{}))
 			if (err != nil) != tt.wantErr {
 				t1.Errorf("Create() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -574,7 +572,7 @@ func TestSpannerTable_Get(t1 *testing.T) {
 				Interleave: tt.fields.Interleave,
 			}
 
-			got, err := t.Get(tt.args.ctx, tt.args.name)
+			got, err := t.Get(tt.args.ctx, conn.New(conn.Options{}), tt.args.name)
 			if (err != nil) != tt.wantErr {
 				t1.Errorf("Get() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -594,8 +592,7 @@ func TestSpannerTable_Delete(t1 *testing.T) {
 		Interleave *SpannerTableInterleave
 	}
 	type args struct {
-		ctx         context.Context
-		adminClient *spannerAdmin.DatabaseAdminClient
+		ctx context.Context
 	}
 	tests := []struct {
 		name    string
@@ -624,29 +621,13 @@ func TestSpannerTable_Delete(t1 *testing.T) {
 				Schema:     tt.fields.Schema,
 				Interleave: tt.fields.Interleave,
 			}
-			err := t.Delete(tt.args.ctx)
+			err := t.Delete(tt.args.ctx, conn.New(conn.Options{}))
 			if (err != nil) != tt.wantErr {
 				t1.Errorf("Delete() error = %v, wantErr %v", err, tt.wantErr)
 			}
 
-			db, err := gorm.Open(
-				spannergorm.New(
-					spannergorm.Config{
-						DriverName: "spanner",
-						DSN:        t.GetDatabase(),
-					},
-				),
-				&gorm.Config{
-					PrepareStmt: true,
-				},
-			)
-			if err != nil {
-				t1.Errorf("gorm.Open() error = %v", err)
-				return
-			}
-
 			// Delete column metadata
-			if err := DeleteColumnMetadata(db, t.GetTableId(), []*SpannerTableColumn{}); err != nil {
+			if err := DeleteColumnMetadata(tt.args.ctx, conn.New(conn.Options{}), t.GetDatabase(), t.GetTableId(), []*SpannerTableColumn{}); err != nil {
 				t1.Errorf("DeleteColumnMetadata() error = %v", err)
 			}
 		})

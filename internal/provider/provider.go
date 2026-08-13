@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"terraform-provider-alis/internal"
+	"terraform-provider-alis/internal/spanner/conn"
 	"terraform-provider-alis/internal/spanner"
 	spannerservices "terraform-provider-alis/internal/spanner/services"
 	"terraform-provider-alis/internal/utils"
@@ -149,7 +150,9 @@ func (p *googleProvider) Configure(ctx context.Context, req provider.ConfigureRe
 	// type Configure methods.
 	providerConfig := &internal.ProviderConfig{
 		GoogleProjectId: config.Project.ValueString(),
-		SpannerService:  spannerservices.NewSpannerService(googleCreds),
+		// conn.New is the single place the resolved credentials reach every
+		// Spanner client (review ARCH-2 — they were previously dropped).
+		SpannerService: spannerservices.NewSpannerService(conn.New(conn.Options{Credentials: googleCreds})),
 	}
 	resp.DataSourceData = providerConfig
 	resp.ResourceData = providerConfig

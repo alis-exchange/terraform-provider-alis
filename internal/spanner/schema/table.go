@@ -2,21 +2,16 @@ package schema
 
 import (
 	"context"
-	"errors"
+	"database/sql"
 	"fmt"
 	"strconv"
 	"strings"
 
-	"cloud.google.com/go/spanner"
-	spannerAdmin "cloud.google.com/go/spanner/admin/database/apiv1"
-	"cloud.google.com/go/spanner/admin/database/apiv1/databasepb"
-	spannergorm "github.com/googleapis/go-gorm-spanner"
 	"go.alis.build/alog"
-	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/wrapperspb"
-	"gorm.io/gorm"
+	"terraform-provider-alis/internal/spanner/conn"
 )
 
 // SpannerTable represents a Spanner table.
@@ -249,35 +244,11 @@ func (t *SpannerTable) deleteDdl() (string, error) {
 }
 
 // Create creates the table in Spanner.
-func (t *SpannerTable) Create(ctx context.Context) (*SpannerTable, error) {
+func (t *SpannerTable) Create(ctx context.Context, cn conn.Connection) (*SpannerTable, error) {
 	// If table is nil, return gracefully.
 	if t == nil {
 		return t, nil
 	}
-
-	// Initialize the admin client.
-	adminClient, err := spannerAdmin.NewDatabaseAdminClient(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create admin client: %w", err)
-	}
-	defer adminClient.Close()
-
-	// Initialize gorm client
-	gormDb, err := gorm.Open(
-		spannergorm.New(
-			spannergorm.Config{
-				DriverName: "spanner",
-				DSN:        t.GetDatabase(),
-			},
-		),
-		&gorm.Config{
-			PrepareStmt: true,
-		},
-	)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "error connecting to database: %v", err)
-	}
-	gormDb = gormDb.WithContext(ctx)
 
 	// Generate table DDL
 	ddl, err := t.createDdl()
@@ -286,20 +257,11 @@ func (t *SpannerTable) Create(ctx context.Context) (*SpannerTable, error) {
 	}
 
 	// Update the database schema.
-	op, err := adminClient.UpdateDatabaseDdl(ctx, &databasepb.UpdateDatabaseDdlRequest{
-		Database:   t.GetDatabase(),
-		Statements: []string{ddl},
-	})
-	if err != nil {
+	if err := cn.ExecuteDDL(ctx, t.GetDatabase(), ddl); err != nil {
 		return nil, err
 	}
 
-	// Wait for the operation to complete.
-	if err := op.Wait(ctx); err != nil {
-		return nil, err
-	}
-
-	if err := UpdateColumnMetadata(ctx, gormDb, t.GetTableId(), t.GetSchema().GetColumns()); err != nil {
+	if err := UpdateColumnMetadata(ctx, cn, t.GetDatabase(), t.GetTableId(), t.GetSchema().GetColumns()); err != nil {
 		// This is not a fatal error, so we log it and continue
 		alog.Errorf(ctx, "error updating column metadata: %v", err)
 	}
@@ -307,7 +269,31 @@ func (t *SpannerTable) Create(ctx context.Context) (*SpannerTable, error) {
 	return t, nil
 }
 
-func (t *SpannerTable) Get(ctx context.Context, name string) (*SpannerTable, error) {
+// tableInfoRow, informationSchemaColumnRow, and primaryKeyRow mirror the
+// INFORMATION_SCHEMA shapes previously read via a raw spanner.Client with
+// spanner.NullString scanning; sql.NullString preserves the NULL semantics.
+type tableInfoRow struct {
+	TableName       sql.NullString `gorm:"column:TABLE_NAME"`
+	ParentTableName sql.NullString `gorm:"column:PARENT_TABLE_NAME"`
+	OnDeleteAction  sql.NullString `gorm:"column:ON_DELETE_ACTION"`
+	InterleaveType  sql.NullString `gorm:"column:INTERLEAVE_TYPE"`
+}
+
+type informationSchemaColumnRow struct {
+	ColumnName     sql.NullString `gorm:"column:COLUMN_NAME"`
+	SpannerType    sql.NullString `gorm:"column:SPANNER_TYPE"`
+	IsNullable     sql.NullString `gorm:"column:IS_NULLABLE"`
+	ColumnDefault  sql.NullString `gorm:"column:COLUMN_DEFAULT"`
+	IsGenerated    sql.NullString `gorm:"column:IS_GENERATED"`
+	IsStored       sql.NullString `gorm:"column:IS_STORED"`
+	GenerationExpr sql.NullString `gorm:"column:GENERATION_EXPRESSION"`
+}
+
+type primaryKeyRow struct {
+	ColumnName sql.NullString `gorm:"column:COLUMN_NAME"`
+}
+
+func (t *SpannerTable) Get(ctx context.Context, cn conn.Connection, name string) (*SpannerTable, error) {
 	// If table is nil, initialize it.
 	if t == nil || t.GetName() == "" {
 		t = &SpannerTable{
@@ -316,38 +302,8 @@ func (t *SpannerTable) Get(ctx context.Context, name string) (*SpannerTable, err
 		}
 	}
 
-	// Initialize the admin client.
-	adminClient, err := spannerAdmin.NewDatabaseAdminClient(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create admin client: %w", err)
-	}
-	defer adminClient.Close()
-
-	// Initialize the database client.
-	dbClient, err := spanner.NewClient(ctx, t.GetDatabase())
-	if err != nil {
-		return nil, fmt.Errorf("failed to create database client: %w", err)
-	}
-
-	// Initialize gorm client
-	gormDb, err := gorm.Open(
-		spannergorm.New(
-			spannergorm.Config{
-				DriverName: "spanner",
-				DSN:        t.GetDatabase(),
-			},
-		),
-		&gorm.Config{
-			PrepareStmt: true,
-		},
-	)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "error connecting to database: %v", err)
-	}
-	gormDb = gormDb.WithContext(ctx)
-
 	// Get column metadata
-	columnMetadata, err := GetColumnMetadata(gormDb, t.GetTableId())
+	columnMetadata, err := GetColumnMetadata(ctx, cn, t.GetDatabase(), t.GetTableId())
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "error getting column metadata: %v", err)
 	}
@@ -355,35 +311,26 @@ func (t *SpannerTable) Get(ctx context.Context, name string) (*SpannerTable, err
 	// Check INFORMATION_SCHEMA for table
 	var interleave *SpannerTableInterleave
 	{
-		stmt := spanner.NewStatement(`SELECT TABLE_NAME,PARENT_TABLE_NAME,ON_DELETE_ACTION,INTERLEAVE_TYPE FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = @table`)
-		stmt.Params["table"] = t.GetTableId()
-
-		iter := dbClient.Single().Query(ctx, stmt)
-		defer iter.Stop()
-
-		row, err := iter.Next()
-		if errors.Is(err, iterator.Done) {
-			return nil, ErrTableNotFound{
-				table: t.GetName(),
-				err:   err,
+		var row tableInfoRow
+		if err := cn.Query(ctx, t.GetDatabase(), &row,
+			`SELECT TABLE_NAME,PARENT_TABLE_NAME,ON_DELETE_ACTION,INTERLEAVE_TYPE FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = ?`,
+			t.GetTableId()); err != nil {
+			if status.Code(err) == codes.NotFound {
+				return nil, ErrTableNotFound{
+					table: t.GetName(),
+					err:   err,
+				}
 			}
-		}
-		if err != nil {
 			return nil, err
 		}
 
-		var tableName, parentTableName, onDeleteAction, interleaveType spanner.NullString
-		if err := row.Columns(&tableName, &parentTableName, &onDeleteAction, &interleaveType); err != nil {
-			return nil, err
-		}
-
-		if parentTableName.Valid && parentTableName.StringVal != "" && interleaveType.Valid && interleaveType.StringVal != "" {
+		if row.ParentTableName.Valid && row.ParentTableName.String != "" && row.InterleaveType.Valid && row.InterleaveType.String != "" {
 			interleave = &SpannerTableInterleave{
-				ParentTable: parentTableName.StringVal,
+				ParentTable: row.ParentTableName.String,
 			}
 
-			if interleaveType.StringVal == "IN PARENT" {
-				interleave.OnDelete = SpannerTableConstraintActionFromString(onDeleteAction.StringVal)
+			if row.InterleaveType.String == "IN PARENT" {
+				interleave.OnDelete = SpannerTableConstraintActionFromString(row.OnDeleteAction.String)
 			}
 		}
 	}
@@ -397,28 +344,24 @@ func (t *SpannerTable) Get(ctx context.Context, name string) (*SpannerTable, err
 	// Get columns from INFORMATION_SCHEMA
 	var columns []*SpannerTableColumn
 	{
-		stmt := spanner.NewStatement(`SELECT COLUMN_NAME,SPANNER_TYPE,IS_NULLABLE,COLUMN_DEFAULT,IS_GENERATED,IS_STORED,GENERATION_EXPRESSION FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @table ORDER BY ORDINAL_POSITION`)
-		stmt.Params["table"] = t.GetTableId()
+		var rows []*informationSchemaColumnRow
+		if err := cn.Query(ctx, t.GetDatabase(), &rows,
+			`SELECT COLUMN_NAME,SPANNER_TYPE,IS_NULLABLE,COLUMN_DEFAULT,IS_GENERATED,IS_STORED,GENERATION_EXPRESSION FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = ? ORDER BY ORDINAL_POSITION`,
+			t.GetTableId()); err != nil {
+			return nil, err
+		}
 
-		iter := dbClient.Single().Query(ctx, stmt)
-		defer iter.Stop()
-
-		for {
-			row, err := iter.Next()
-			if errors.Is(err, iterator.Done) {
-				break
-			}
-			if err != nil {
-				return nil, err
-			}
-
-			var columnName, spannerType, isNullable, columnDefault, isGenerated, isStored, generationExpr spanner.NullString
-			if err := row.Columns(&columnName, &spannerType, &isNullable, &columnDefault, &isGenerated, &isStored, &generationExpr); err != nil {
-				return nil, err
-			}
+		for _, r := range rows {
+			columnName := r.ColumnName
+			spannerType := r.SpannerType
+			isNullable := r.IsNullable
+			columnDefault := r.ColumnDefault
+			isGenerated := r.IsGenerated
+			isStored := r.IsStored
+			generationExpr := r.GenerationExpr
 
 			column := &SpannerTableColumn{
-				Name: columnName.StringVal,
+				Name: columnName.String,
 			}
 
 			if metadata, ok := columnMetadataMap[column.Name]; ok && metadata.Metadata != nil {
@@ -536,11 +479,11 @@ func (t *SpannerTable) Get(ctx context.Context, name string) (*SpannerTable, err
 			} else {
 				// Handle Type
 				if spannerType.Valid {
-					column.Type = parseSpannerType(spannerType.StringVal)
+					column.Type = parseSpannerType(spannerType.String)
 				}
 
 				// Handle Size
-				size := parseSpannerSize(spannerType.StringVal)
+				size := parseSpannerSize(spannerType.String)
 				if size != "" && size != "MAX" {
 					sizeInt64, err := strconv.ParseInt(size, 10, 64)
 					if err != nil {
@@ -551,7 +494,7 @@ func (t *SpannerTable) Get(ctx context.Context, name string) (*SpannerTable, err
 				}
 
 				// Handle Proto Package
-				protoPackage := parseSpannerProtoPackage(spannerType.StringVal)
+				protoPackage := parseSpannerProtoPackage(spannerType.String)
 				if protoPackage != "" {
 					column.ProtoFileDescriptorSet = &ProtoFileDescriptorSet{
 						ProtoPackage: wrapperspb.String(protoPackage),
@@ -560,25 +503,25 @@ func (t *SpannerTable) Get(ctx context.Context, name string) (*SpannerTable, err
 
 				// Handle Nullable
 				if isNullable.Valid {
-					column.Required = wrapperspb.Bool(isNullable.StringVal == "NO")
+					column.Required = wrapperspb.Bool(isNullable.String == "NO")
 				}
 
 				// Handle Default
 				if columnDefault.Valid {
-					column.DefaultValue = wrapperspb.String(columnDefault.StringVal)
+					column.DefaultValue = wrapperspb.String(columnDefault.String)
 				}
 
 				// Handle Generated
 				if isGenerated.Valid {
-					column.IsComputed = wrapperspb.Bool(isGenerated.StringVal == "ALWAYS")
+					column.IsComputed = wrapperspb.Bool(isGenerated.String == "ALWAYS")
 				}
 				if column.GetIsComputed().GetValue() && generationExpr.Valid {
-					column.ComputationDdl = wrapperspb.String(generationExpr.StringVal)
+					column.ComputationDdl = wrapperspb.String(generationExpr.String)
 				}
 
 				// Handle Stored
 				if isStored.Valid {
-					column.IsStored = wrapperspb.Bool(isStored.StringVal == "YES")
+					column.IsStored = wrapperspb.Bool(isStored.String == "YES")
 				}
 			}
 
@@ -588,28 +531,16 @@ func (t *SpannerTable) Get(ctx context.Context, name string) (*SpannerTable, err
 
 	// Get primary keys from INFORMATION_SCHEMA
 	{
-		stmt := spanner.NewStatement(`SELECT COLUMN_NAME, ORDINAL_POSITION FROM INFORMATION_SCHEMA.INDEX_COLUMNS WHERE TABLE_NAME = @table AND INDEX_NAME = 'PRIMARY_KEY' ORDER BY ORDINAL_POSITION`)
-		stmt.Params["table"] = t.GetTableId()
-
-		iter := dbClient.Single().Query(ctx, stmt)
-		defer iter.Stop()
+		var rows []*primaryKeyRow
+		if err := cn.Query(ctx, t.GetDatabase(), &rows,
+			`SELECT COLUMN_NAME, ORDINAL_POSITION FROM INFORMATION_SCHEMA.INDEX_COLUMNS WHERE TABLE_NAME = ? AND INDEX_NAME = 'PRIMARY_KEY' ORDER BY ORDINAL_POSITION`,
+			t.GetTableId()); err != nil {
+			return nil, err
+		}
 
 		var primaryKeys []string
-		for {
-			row, err := iter.Next()
-			if errors.Is(err, iterator.Done) {
-				break
-			}
-			if err != nil {
-				return nil, err
-			}
-
-			var columnName spanner.NullString
-			if err := row.Column(0, &columnName); err != nil {
-				return nil, err
-			}
-
-			primaryKeys = append(primaryKeys, columnName.StringVal)
+		for _, r := range rows {
+			primaryKeys = append(primaryKeys, r.ColumnName.String)
 		}
 
 		for _, column := range columns {
@@ -631,39 +562,15 @@ func (t *SpannerTable) Get(ctx context.Context, name string) (*SpannerTable, err
 	return t, nil
 }
 
-func (t *SpannerTable) Update(ctx context.Context, existingTable *SpannerTable) (*SpannerTable, error) {
+func (t *SpannerTable) Update(ctx context.Context, cn conn.Connection, existingTable *SpannerTable) (*SpannerTable, error) {
 	// If table is nil, return gracefully.
 	if t == nil {
 		return t, nil
 	}
 
-	// Initialize the admin client.
-	adminClient, err := spannerAdmin.NewDatabaseAdminClient(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create admin client: %w", err)
-	}
-	defer adminClient.Close()
-
-	// Initialize gorm client
-	gormDb, err := gorm.Open(
-		spannergorm.New(
-			spannergorm.Config{
-				DriverName: "spanner",
-				DSN:        t.GetDatabase(),
-			},
-		),
-		&gorm.Config{
-			PrepareStmt: true,
-		},
-	)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "error connecting to database: %v", err)
-	}
-	gormDb = gormDb.WithContext(ctx)
-
 	defer func() {
 		// Update column metadata
-		if err := UpdateColumnMetadata(ctx, gormDb, t.GetTableId(), t.GetSchema().GetColumns()); err != nil {
+		if err := UpdateColumnMetadata(ctx, cn, t.GetDatabase(), t.GetTableId(), t.GetSchema().GetColumns()); err != nil {
 			// This is not a fatal error, so we log it and continue
 			alog.Errorf(ctx, "error updating column metadata: %v", err)
 		}
@@ -692,22 +599,13 @@ func (t *SpannerTable) Update(ctx context.Context, existingTable *SpannerTable) 
 	}
 
 	// Update the database schema.
-	op, err := adminClient.UpdateDatabaseDdl(ctx, &databasepb.UpdateDatabaseDdlRequest{
-		Database:   t.GetDatabase(),
-		Statements: statements,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	// Wait for the operation to complete.
-	if err := op.Wait(ctx); err != nil {
+	if err := cn.ExecuteDDL(ctx, t.GetDatabase(), statements...); err != nil {
 		return nil, err
 	}
 
 	// Delete removed columns from column metadata
 	if len(droppedColumns) > 0 {
-		if err := DeleteColumnMetadata(gormDb, t.GetTableId(), droppedColumns); err != nil {
+		if err := DeleteColumnMetadata(ctx, cn, t.GetDatabase(), t.GetTableId(), droppedColumns); err != nil {
 			// This is not a fatal error, so we log it and continue
 			alog.Errorf(ctx, "error deleting column metadata: %v", err)
 		}
@@ -716,35 +614,11 @@ func (t *SpannerTable) Update(ctx context.Context, existingTable *SpannerTable) 
 	return t, nil
 }
 
-func (t *SpannerTable) Delete(ctx context.Context) error {
+func (t *SpannerTable) Delete(ctx context.Context, cn conn.Connection) error {
 	// If table is nil, return gracefully.
 	if t == nil {
 		return nil
 	}
-
-	// Initialize the admin client.
-	adminClient, err := spannerAdmin.NewDatabaseAdminClient(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to create admin client: %w", err)
-	}
-	defer adminClient.Close()
-
-	// Initialize gorm client
-	gormDb, err := gorm.Open(
-		spannergorm.New(
-			spannergorm.Config{
-				DriverName: "spanner",
-				DSN:        t.GetDatabase(),
-			},
-		),
-		&gorm.Config{
-			PrepareStmt: true,
-		},
-	)
-	if err != nil {
-		return status.Errorf(codes.Internal, "error connecting to database: %v", err)
-	}
-	gormDb = gormDb.WithContext(ctx)
 
 	// Generate table DDL
 	ddl, err := t.deleteDdl()
@@ -753,21 +627,12 @@ func (t *SpannerTable) Delete(ctx context.Context) error {
 	}
 
 	// Update the database schema.
-	op, err := adminClient.UpdateDatabaseDdl(ctx, &databasepb.UpdateDatabaseDdlRequest{
-		Database:   t.GetDatabase(),
-		Statements: []string{ddl},
-	})
-	if err != nil {
-		return err
-	}
-
-	// Wait for the operation to complete.
-	if err := op.Wait(ctx); err != nil {
+	if err := cn.ExecuteDDL(ctx, t.GetDatabase(), ddl); err != nil {
 		return err
 	}
 
 	// Delete column metadata
-	if err := DeleteColumnMetadata(gormDb, t.GetTableId(), []*SpannerTableColumn{}); err != nil {
+	if err := DeleteColumnMetadata(ctx, cn, t.GetDatabase(), t.GetTableId(), []*SpannerTableColumn{}); err != nil {
 		// This is not a fatal error, so we log it and continue
 		alog.Errorf(ctx, "error deleting column metadata: %v", err)
 	}

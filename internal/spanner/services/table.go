@@ -116,7 +116,7 @@ func (s *SpannerService) CreateSpannerTable(ctx context.Context, parent string, 
 		column.GetProtoFileDescriptorSet().SetFileDescriptorSet(fds)
 
 		// Create proto bundle
-		if err := CreateProtoBundle(ctx, fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId), column.GetProtoFileDescriptorSet().GetProtoPackage().GetValue(), fdsBytes); err != nil {
+		if err := CreateProtoBundle(ctx, s.conn, fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId), column.GetProtoFileDescriptorSet().GetProtoPackage().GetValue(), fdsBytes); err != nil {
 			return nil, status.Errorf(codes.Internal, "Error creating proto bundle: %v", err)
 		}
 
@@ -124,7 +124,7 @@ func (s *SpannerService) CreateSpannerTable(ctx context.Context, parent string, 
 
 	// Create table
 	_, err := utils.Retry(3, 5*time.Second, func() (interface{}, error) {
-		_, err := table.Create(ctx)
+		_, err := table.Create(ctx, s.conn)
 		if err != nil {
 			if status.Code(err) == codes.DeadlineExceeded || status.Code(err) == codes.Unavailable {
 				return nil, err
@@ -167,7 +167,7 @@ func (s *SpannerService) GetSpannerTable(ctx context.Context, name string) (*sch
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", name, utils.SpannerGoogleSqlTableNameRegex, utils.SpannerPostgresSqlTableNameRegex)
 	}
 
-	table, err := (&schema.SpannerTable{}).Get(ctx, name)
+	table, err := (&schema.SpannerTable{}).Get(ctx, s.conn, name)
 	if err != nil {
 		if (errors.Is(err, schema.ErrTableNotFound{})) {
 			return nil, status.Errorf(codes.NotFound, "Table (%s) not found", name)
@@ -310,12 +310,12 @@ func (s *SpannerService) UpdateSpannerTable(ctx context.Context, table *schema.S
 		column.GetProtoFileDescriptorSet().SetFileDescriptorSet(fds)
 
 		// Create proto bundle
-		if err := CreateProtoBundle(ctx, fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId), column.GetProtoFileDescriptorSet().GetProtoPackage().GetValue(), fdsBytes); err != nil {
+		if err := CreateProtoBundle(ctx, s.conn, fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId), column.GetProtoFileDescriptorSet().GetProtoPackage().GetValue(), fdsBytes); err != nil {
 			return nil, status.Errorf(codes.Internal, "Error creating proto bundle: %v", err)
 		}
 	}
 
-	_, err = table.Update(ctx, existingTable)
+	_, err = table.Update(ctx, s.conn, existingTable)
 	if err != nil {
 		return nil, err
 	}
@@ -347,7 +347,7 @@ func (s *SpannerService) DeleteSpannerTable(ctx context.Context, name string) (*
 		return nil, err
 	}
 
-	err = table.Delete(ctx)
+	err = table.Delete(ctx, s.conn)
 	if err != nil {
 		return nil, err
 	}

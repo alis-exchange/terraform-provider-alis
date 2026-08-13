@@ -6,16 +6,12 @@ import (
 	"strconv"
 	"strings"
 
-	"terraform-provider-alis/internal/spanner/schema"
-	"terraform-provider-alis/internal/utils"
-
-	spanner "cloud.google.com/go/spanner/admin/database/apiv1"
-	"cloud.google.com/go/spanner/admin/database/apiv1/databasepb"
-	spannergorm "github.com/googleapis/go-gorm-spanner"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/wrapperspb"
-	"gorm.io/gorm"
+	"terraform-provider-alis/internal/spanner/conn"
+	"terraform-provider-alis/internal/spanner/schema"
+	"terraform-provider-alis/internal/utils"
 )
 
 func (s *SpannerService) CreateSpannerSequence(ctx context.Context, parent string, sequence *schema.SpannerSequence) (*schema.SpannerSequence, error) {
@@ -32,17 +28,8 @@ func (s *SpannerService) CreateSpannerSequence(ctx context.Context, parent strin
 		return nil, status.Error(codes.InvalidArgument, "Invalid argument sequence.name, field is required but not provided")
 	}
 
-	// "projects/my-project/instances/my-instance/database/my-db"
-	client, err := spanner.NewDatabaseAdminClient(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer client.Close()
-
-	// Get database state
-	database, err := client.GetDatabase(ctx, &databasepb.GetDatabaseRequest{
-		Name: parent,
-	})
+	// Get database dialect (also verifies the database exists)
+	dialect, err := s.conn.Dialect(ctx, parent)
 	if err != nil {
 		return nil, err
 	}
@@ -53,23 +40,13 @@ func (s *SpannerService) CreateSpannerSequence(ctx context.Context, parent strin
 		return nil, err
 	}
 	var ddlStatements []string
-	if database.GetDatabaseDialect() == databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL {
+	if dialect == conn.DialectGoogleSQL {
 		ddlStatements = append(ddlStatements, ddl)
 	}
-	if database.GetDatabaseDialect() == databasepb.DatabaseDialect_POSTGRESQL {
+	if dialect == conn.DialectPostgreSQL {
 		ddlStatements = append(ddlStatements, ddl)
 	}
-	updateDatabaseDdlOperation, err := client.UpdateDatabaseDdl(ctx, &databasepb.UpdateDatabaseDdlRequest{
-		Database:   database.GetName(),
-		Statements: ddlStatements,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	// Wait for LRO to complete
-	err = updateDatabaseDdlOperation.Wait(ctx)
-	if err != nil {
+	if err := s.conn.ExecuteDDL(ctx, parent, ddlStatements...); err != nil {
 		return nil, err
 	}
 
@@ -94,46 +71,12 @@ func (s *SpannerService) GetSpannerSequence(ctx context.Context, name string) (*
 	instanceId := sequenceNameParts[3]
 	databaseId := sequenceNameParts[5]
 	sequenceId := sequenceNameParts[7]
+	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", projectId, instanceId, databaseId)
 
-	db, err := gorm.Open(
-		spannergorm.New(
-			spannergorm.Config{
-				DriverName: "spanner",
-				DSN:        fmt.Sprintf("projects/%s/instances/%s/databases/%s", projectId, instanceId, databaseId),
-			},
-		),
-		&gorm.Config{
-			PrepareStmt: true,
-			Logger:      tfLogger,
-		},
-	)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "Error connecting to database: %v", err)
-	}
-	db = db.WithContext(ctx)
-
-	// 	SELECT
-	//     s.NAME AS SEQUENCE_NAME,
-	//     ARRAY(
-	//         SELECT AS STRUCT
-	//             o.OPTION_NAME,
-	//             o.OPTION_VALUE,
-	//             o.OPTION_TYPE
-	//         FROM
-	//             INFORMATION_SCHEMA.SEQUENCE_OPTIONS o
-	//         WHERE
-	//             o.CATALOG = s.CATALOG
-	//             AND o.SCHEMA = s.SCHEMA
-	//             AND o.NAME = s.NAME
-	//     ) AS OPTIONS
-	// FROM
-	//     INFORMATION_SCHEMA.SEQUENCES s
-	// WHERE
-	//     s.NAME = 'test_sequence';
 	var rows []*SequenceRow
-	res := db.Raw("SELECT s.CATALOG, s.SCHEMA, s.NAME AS SEQUENCE_NAME, s.DATA_TYPE, o.OPTION_NAME, o.OPTION_VALUE, o.OPTION_TYPE FROM INFORMATION_SCHEMA.SEQUENCES s LEFT JOIN INFORMATION_SCHEMA.SEQUENCE_OPTIONS o ON s.CATALOG = o.CATALOG AND s.SCHEMA = o.SCHEMA AND s.NAME = o.NAME WHERE s.NAME = ?", sequenceId).Scan(&rows)
-	if res.Error != nil {
-		return nil, status.Errorf(codes.Internal, "Error getting sequence: %v", res.Error)
+	if err := s.conn.Query(ctx, database, &rows,
+		"SELECT s.CATALOG, s.SCHEMA, s.NAME AS SEQUENCE_NAME, s.DATA_TYPE, o.OPTION_NAME, o.OPTION_VALUE, o.OPTION_TYPE FROM INFORMATION_SCHEMA.SEQUENCES s LEFT JOIN INFORMATION_SCHEMA.SEQUENCE_OPTIONS o ON s.CATALOG = o.CATALOG AND s.SCHEMA = o.SCHEMA AND s.NAME = o.NAME WHERE s.NAME = ?", sequenceId); err != nil {
+		return nil, status.Errorf(codes.Internal, "Error getting sequence: %v", err)
 	}
 
 	if len(rows) == 0 {
@@ -241,17 +184,10 @@ func (s *SpannerService) UpdateSpannerSequence(ctx context.Context, sequence *sc
 	projectId := sequenceNameParts[1]
 	instanceId := sequenceNameParts[3]
 	databaseId := sequenceNameParts[5]
+	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", projectId, instanceId, databaseId)
 
-	client, err := spanner.NewDatabaseAdminClient(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer client.Close()
-
-	// Get database state
-	database, err := client.GetDatabase(ctx, &databasepb.GetDatabaseRequest{
-		Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s", projectId, instanceId, databaseId),
-	})
+	// Get database dialect (also verifies the database exists)
+	dialect, err := s.conn.Dialect(ctx, database)
 	if err != nil {
 		return nil, err
 	}
@@ -261,23 +197,13 @@ func (s *SpannerService) UpdateSpannerSequence(ctx context.Context, sequence *sc
 		return nil, err
 	}
 	var ddlStatements []string
-	if database.GetDatabaseDialect() == databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL {
+	if dialect == conn.DialectGoogleSQL {
 		ddlStatements = append(ddlStatements, ddl)
 	}
-	if database.GetDatabaseDialect() == databasepb.DatabaseDialect_POSTGRESQL {
+	if dialect == conn.DialectPostgreSQL {
 		ddlStatements = append(ddlStatements, ddl)
 	}
-	updateDatabaseDdlOperation, err := client.UpdateDatabaseDdl(ctx, &databasepb.UpdateDatabaseDdlRequest{
-		Database:   database.GetName(),
-		Statements: ddlStatements,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	// Wait for LRO to complete
-	err = updateDatabaseDdlOperation.Wait(ctx)
-	if err != nil {
+	if err := s.conn.ExecuteDDL(ctx, database, ddlStatements...); err != nil {
 		return nil, err
 	}
 
@@ -298,17 +224,10 @@ func (s *SpannerService) DeleteSpannerSequence(ctx context.Context, name string)
 	projectId := sequenceNameParts[1]
 	instanceId := sequenceNameParts[3]
 	databaseId := sequenceNameParts[5]
+	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", projectId, instanceId, databaseId)
 
-	client, err := spanner.NewDatabaseAdminClient(ctx)
-	if err != nil {
-		return err
-	}
-	defer client.Close()
-
-	// Get database state
-	database, err := client.GetDatabase(ctx, &databasepb.GetDatabaseRequest{
-		Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s", projectId, instanceId, databaseId),
-	})
+	// Get database dialect (also verifies the database exists)
+	dialect, err := s.conn.Dialect(ctx, database)
 	if err != nil {
 		return err
 	}
@@ -322,25 +241,11 @@ func (s *SpannerService) DeleteSpannerSequence(ctx context.Context, name string)
 		return err
 	}
 	var ddlStatements []string
-	if database.GetDatabaseDialect() == databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL {
+	if dialect == conn.DialectGoogleSQL {
 		ddlStatements = append(ddlStatements, ddl)
 	}
-	if database.GetDatabaseDialect() == databasepb.DatabaseDialect_POSTGRESQL {
+	if dialect == conn.DialectPostgreSQL {
 		ddlStatements = append(ddlStatements, ddl)
 	}
-	updateDatabaseDdlOperation, err := client.UpdateDatabaseDdl(ctx, &databasepb.UpdateDatabaseDdlRequest{
-		Database:   database.GetName(),
-		Statements: ddlStatements,
-	})
-	if err != nil {
-		return err
-	}
-
-	// Wait for LRO to complete
-	err = updateDatabaseDdlOperation.Wait(ctx)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return s.conn.ExecuteDDL(ctx, database, ddlStatements...)
 }

@@ -7,13 +7,10 @@ import (
 	"strconv"
 	"strings"
 
-	"terraform-provider-alis/internal/utils"
-
-	spannergorm "github.com/googleapis/go-gorm-spanner"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/wrapperspb"
-	"gorm.io/gorm"
+	"terraform-provider-alis/internal/utils"
 )
 
 func (s *SpannerService) CreateSpannerTableRowDeletionPolicy(ctx context.Context, parent string, ttl *SpannerTableRowDeletionPolicy) (*SpannerTableRowDeletionPolicy, error) {
@@ -48,32 +45,16 @@ func (s *SpannerService) CreateSpannerTableRowDeletionPolicy(ctx context.Context
 	instance := parentNameParts[3]
 	databaseId := parentNameParts[5]
 	tableId := parentNameParts[7]
-
-	db, err := gorm.Open(
-		spannergorm.New(
-			spannergorm.Config{
-				DriverName: "spanner",
-				DSN:        fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId),
-			},
-		),
-		&gorm.Config{
-			PrepareStmt: true,
-			Logger:      tfLogger,
-		},
-	)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "Error connecting to database: %v", err)
-	}
-	db = db.WithContext(ctx)
+	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
 
 	// Get parent table
-	_, err = s.GetSpannerTable(ctx, parent)
-	if err != nil {
+	if _, err := s.GetSpannerTable(ctx, parent); err != nil {
 		return nil, err
 	}
 
-	// Create the deletion policy
-	if err := db.Exec(fmt.Sprintf("ALTER TABLE %s ADD ROW DELETION POLICY (OLDER_THAN(%s, INTERVAL %d DAY))", tableId, ttl.Column, ttl.Duration.GetValue())).Error; err != nil {
+	// Create the deletion policy. Schema changes ride ExecuteDDL: uniform
+	// retry and LRO wait come from the Connection module.
+	if err := s.conn.ExecuteDDL(ctx, database, fmt.Sprintf("ALTER TABLE %s ADD ROW DELETION POLICY (OLDER_THAN(%s, INTERVAL %d DAY))", tableId, ttl.Column, ttl.Duration.GetValue())); err != nil {
 		return nil, status.Errorf(codes.Internal, "Error creating row deletion policy: %v", err)
 	}
 
@@ -94,27 +75,10 @@ func (s *SpannerService) GetSpannerTableRowDeletionPolicy(ctx context.Context, p
 	instance := parentNameParts[3]
 	databaseId := parentNameParts[5]
 	tableId := parentNameParts[7]
-
-	db, err := gorm.Open(
-		spannergorm.New(
-			spannergorm.Config{
-				DriverName: "spanner",
-				DSN:        fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId),
-			},
-		),
-		&gorm.Config{
-			PrepareStmt: true,
-			Logger:      tfLogger,
-		},
-	)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "Error connecting to database: %v", err)
-	}
-	db = db.WithContext(ctx)
+	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
 
 	// Get parent table
-	_, err = s.GetSpannerTable(ctx, parent)
-	if err != nil {
+	if _, err := s.GetSpannerTable(ctx, parent); err != nil {
 		return nil, err
 	}
 
@@ -122,13 +86,15 @@ func (s *SpannerService) GetSpannerTableRowDeletionPolicy(ctx context.Context, p
 		TABLE_NAME                     string
 		ROW_DELETION_POLICY_EXPRESSION string
 	}
-	var policy *RowDeletionPolicy
-	err = db.Raw("SELECT TABLE_NAME, ROW_DELETION_POLICY_EXPRESSION FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = ? AND ROW_DELETION_POLICY_EXPRESSION IS NOT NULL", tableId).Scan(&policy).Error
-	if err != nil {
+	var policy RowDeletionPolicy
+	if err := s.conn.Query(ctx, database, &policy,
+		"SELECT TABLE_NAME, ROW_DELETION_POLICY_EXPRESSION FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = ? AND ROW_DELETION_POLICY_EXPRESSION IS NOT NULL", tableId); err != nil {
+		if status.Code(err) == codes.NotFound {
+			return nil, status.Errorf(codes.NotFound, "Row deletion policy not found")
+		}
 		return nil, status.Errorf(codes.Internal, "Error getting row deletion policy: %v", err)
 	}
-
-	if policy == nil || policy.ROW_DELETION_POLICY_EXPRESSION == "" {
+	if policy.ROW_DELETION_POLICY_EXPRESSION == "" {
 		return nil, status.Errorf(codes.NotFound, "Row deletion policy not found")
 	}
 
@@ -139,7 +105,7 @@ func (s *SpannerService) GetSpannerTableRowDeletionPolicy(ctx context.Context, p
 	matches := re.FindStringSubmatch(policy.ROW_DELETION_POLICY_EXPRESSION)
 
 	if len(matches) != 3 {
-		return nil, status.Errorf(codes.Internal, "Error parsing row deletion policy: %v", err)
+		return nil, status.Errorf(codes.Internal, "Error parsing row deletion policy: unexpected expression %q", policy.ROW_DELETION_POLICY_EXPRESSION)
 	}
 
 	column := matches[1]
@@ -187,32 +153,15 @@ func (s *SpannerService) UpdateSpannerTableRowDeletionPolicy(ctx context.Context
 	instance := parentNameParts[3]
 	databaseId := parentNameParts[5]
 	tableId := parentNameParts[7]
-
-	db, err := gorm.Open(
-		spannergorm.New(
-			spannergorm.Config{
-				DriverName: "spanner",
-				DSN:        fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId),
-			},
-		),
-		&gorm.Config{
-			PrepareStmt: true,
-			Logger:      tfLogger,
-		},
-	)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "Error connecting to database: %v", err)
-	}
-	db = db.WithContext(ctx)
+	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
 
 	// Get parent table
-	_, err = s.GetSpannerTable(ctx, parent)
-	if err != nil {
+	if _, err := s.GetSpannerTable(ctx, parent); err != nil {
 		return nil, err
 	}
 
-	// Create the deletion policy
-	if err := db.Exec(fmt.Sprintf("ALTER TABLE %s REPLACE ROW DELETION POLICY (OLDER_THAN(%s, INTERVAL %d DAY))", tableId, ttl.Column, ttl.Duration.GetValue())).Error; err != nil {
+	// Replace the deletion policy
+	if err := s.conn.ExecuteDDL(ctx, database, fmt.Sprintf("ALTER TABLE %s REPLACE ROW DELETION POLICY (OLDER_THAN(%s, INTERVAL %d DAY))", tableId, ttl.Column, ttl.Duration.GetValue())); err != nil {
 		return nil, status.Errorf(codes.Internal, "Error creating row deletion policy: %v", err)
 	}
 
@@ -233,32 +182,15 @@ func (s *SpannerService) DeleteSpannerTableRowDeletionPolicy(ctx context.Context
 	instance := parentNameParts[3]
 	databaseId := parentNameParts[5]
 	tableId := parentNameParts[7]
-
-	db, err := gorm.Open(
-		spannergorm.New(
-			spannergorm.Config{
-				DriverName: "spanner",
-				DSN:        fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId),
-			},
-		),
-		&gorm.Config{
-			PrepareStmt: true,
-			Logger:      tfLogger,
-		},
-	)
-	if err != nil {
-		return status.Errorf(codes.Internal, "Error connecting to database: %v", err)
-	}
-	db = db.WithContext(ctx)
+	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
 
 	// Get parent table
-	_, err = s.GetSpannerTable(ctx, parent)
-	if err != nil {
+	if _, err := s.GetSpannerTable(ctx, parent); err != nil {
 		return err
 	}
 
-	// Create the deletion policy
-	if err := db.Exec(fmt.Sprintf("ALTER TABLE %s DROP ROW DELETION POLICY", tableId)).Error; err != nil {
+	// Drop the deletion policy
+	if err := s.conn.ExecuteDDL(ctx, database, fmt.Sprintf("ALTER TABLE %s DROP ROW DELETION POLICY", tableId)); err != nil {
 		return status.Errorf(codes.Internal, "Error creating row deletion policy: %v", err)
 	}
 
