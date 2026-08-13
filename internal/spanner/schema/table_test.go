@@ -65,24 +65,21 @@ func Test_SpannerTable_createDdl(t1 *testing.T) {
 							IsComputed:     wrapperspb.Bool(false),
 							ComputationDdl: nil,
 
-							AutoCreateTime:         wrapperspb.Bool(true),
-							AutoUpdateTime:         wrapperspb.Bool(true),
-							Type:                   SpannerTableDataTypeInt64.String(),
-							Size:                   wrapperspb.Int64(255),
-							Required:               wrapperspb.Bool(true),
-							DefaultValue:           wrapperspb.String("(GET_NEXT_SEQUENCE_VALUE(SEQUENCE MySequence))"),
-							ProtoFileDescriptorSet: nil,
+							AutoUpdateTime: wrapperspb.Bool(true),
+							Type:           SpannerTableDataTypeInt64.String(),
+							Size:           wrapperspb.Int64(255),
+							Required:       wrapperspb.Bool(true),
+							DefaultValue:   wrapperspb.String("(GET_NEXT_SEQUENCE_VALUE(SEQUENCE MySequence))"),
 						},
 						{
-							Name:                   "name",
-							IsPrimaryKey:           wrapperspb.Bool(true),
-							IsComputed:             wrapperspb.Bool(false),
-							ComputationDdl:         nil,
-							Type:                   SpannerTableDataTypeString.String(),
-							Size:                   wrapperspb.Int64(255),
-							Required:               wrapperspb.Bool(true),
-							DefaultValue:           nil,
-							ProtoFileDescriptorSet: nil,
+							Name:           "name",
+							IsPrimaryKey:   wrapperspb.Bool(true),
+							IsComputed:     wrapperspb.Bool(false),
+							ComputationDdl: nil,
+							Type:           SpannerTableDataTypeString.String(),
+							Size:           wrapperspb.Int64(255),
+							Required:       wrapperspb.Bool(true),
+							DefaultValue:   nil,
 						},
 						{
 							Name:           "proto",
@@ -90,9 +87,7 @@ func Test_SpannerTable_createDdl(t1 *testing.T) {
 							IsComputed:     wrapperspb.Bool(false),
 							ComputationDdl: nil,
 							Type:           SpannerTableDataTypeProto.String(),
-							ProtoFileDescriptorSet: &ProtoFileDescriptorSet{
-								ProtoPackage: wrapperspb.String(`play.nn.app.v1.App`),
-							},
+							ProtoPackage:   wrapperspb.String(`play.nn.app.v1.App`),
 						},
 						{
 							Name:           "update_time",
@@ -209,9 +204,7 @@ func TestSpannerTable_alterDdl(t1 *testing.T) {
 							IsPrimaryKey: wrapperspb.Bool(false),
 							Required:     wrapperspb.Bool(true),
 							Type:         "PROTO",
-							ProtoFileDescriptorSet: &ProtoFileDescriptorSet{
-								ProtoPackage: wrapperspb.String("alis.open.iam.v1.User"),
-							},
+							ProtoPackage: wrapperspb.String("alis.open.iam.v1.User"),
 						},
 						{
 							Name:           "user_name",
@@ -310,10 +303,8 @@ func TestSpannerTable_alterDdl(t1 *testing.T) {
 								Name:         "user",
 								IsPrimaryKey: wrapperspb.Bool(false),
 
-								Type: "PROTO",
-								ProtoFileDescriptorSet: &ProtoFileDescriptorSet{
-									ProtoPackage: wrapperspb.String("alis.open.iam.v1.User"),
-								},
+								Type:         "PROTO",
+								ProtoPackage: wrapperspb.String("alis.open.iam.v1.User"),
 							},
 							{
 								Name:         "user_name",
@@ -464,10 +455,8 @@ func TestSpannerTable_Create(t1 *testing.T) {
 							Name:         "user",
 							IsPrimaryKey: wrapperspb.Bool(false),
 
-							Type: "PROTO",
-							ProtoFileDescriptorSet: &ProtoFileDescriptorSet{
-								ProtoPackage: wrapperspb.String("alis.open.iam.v1.User"),
-							},
+							Type:         "PROTO",
+							ProtoPackage: wrapperspb.String("alis.open.iam.v1.User"),
 						},
 						{
 							Name:         "user_name",
@@ -624,11 +613,6 @@ func TestSpannerTable_Delete(t1 *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t1.Errorf("Delete() error = %v, wantErr %v", err, tt.wantErr)
 			}
-
-			// Delete column metadata
-			if err := DeleteColumnMetadata(tt.args.ctx, conn.New(conn.Options{}), t.GetDatabase(), t.GetTableId(), []*SpannerTableColumn{}); err != nil {
-				t1.Errorf("DeleteColumnMetadata() error = %v", err)
-			}
 		})
 	}
 }
@@ -716,6 +700,22 @@ func Test_parseSpannerType(t *testing.T) {
 			name: "parseSpannerType.PROTO",
 			args: args{
 				columnType: "PROTO<my.example.package.Message>",
+			},
+			want: "PROTO",
+		},
+		{
+			// INFORMATION_SCHEMA surfaces proto columns as a backticked
+			// fully-qualified name, not the PROTO<...> shape.
+			name: "parseSpannerType.BacktickedProtoName",
+			args: args{
+				columnType: "`my.example.package.Message`",
+			},
+			want: "PROTO",
+		},
+		{
+			name: "parseSpannerType.BareProtoName",
+			args: args{
+				columnType: "my.example.package.Message",
 			},
 			want: "PROTO",
 		},
@@ -908,6 +908,22 @@ func Test_parseSpannerProtoPackage(t *testing.T) {
 			name: "parseSpannerProtoPackage.PROTO",
 			args: args{
 				columnType: "PROTO<my.example.package.Message>",
+			},
+			want: "my.example.package.Message",
+		},
+		{
+			// INFORMATION_SCHEMA surfaces proto columns as a backticked
+			// fully-qualified name, not the PROTO<...> shape.
+			name: "parseSpannerProtoPackage.BacktickedProtoName",
+			args: args{
+				columnType: "`my.example.package.Message`",
+			},
+			want: "my.example.package.Message",
+		},
+		{
+			name: "parseSpannerProtoPackage.BareProtoName",
+			args: args{
+				columnType: "my.example.package.Message",
 			},
 			want: "my.example.package.Message",
 		},

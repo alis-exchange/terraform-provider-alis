@@ -2,7 +2,6 @@ package spanner
 
 import (
 	"context"
-	"strings"
 
 	tableschema "terraform-provider-alis/internal/spanner/schema"
 
@@ -62,22 +61,8 @@ func tableColumnsToSchema(ctx context.Context, list types.List) ([]*tableschema.
 			col.DefaultValue = wrapperspb.String(column.DefaultValue.ValueString())
 		}
 
-		if !column.ProtoPackage.IsNull() || !column.FileDescriptor.IsNull() {
-			col.ProtoFileDescriptorSet = &tableschema.ProtoFileDescriptorSet{}
-
-			if !column.ProtoPackage.IsNull() {
-				col.ProtoFileDescriptorSet.ProtoPackage = wrapperspb.String(column.ProtoPackage.ValueString())
-			}
-			if !column.FileDescriptor.IsNull() {
-				col.ProtoFileDescriptorSet.FileDescriptorSetPath = wrapperspb.String(column.FileDescriptor.ValueString())
-
-				if strings.HasPrefix(column.FileDescriptor.ValueString(), "gcs:") {
-					col.ProtoFileDescriptorSet.FileDescriptorSetPathSource = tableschema.ProtoFileDescriptorSetSourceGcs
-				}
-				if strings.HasPrefix(column.FileDescriptor.ValueString(), "url:") {
-					col.ProtoFileDescriptorSet.FileDescriptorSetPathSource = tableschema.ProtoFileDescriptorSetSourceUrl
-				}
-			}
+		if !column.ProtoPackage.IsNull() {
+			col.ProtoPackage = wrapperspb.String(column.ProtoPackage.ValueString())
 		}
 
 		result = append(result, col)
@@ -130,13 +115,8 @@ func tableColumnsToModel(ctx context.Context, columns []*tableschema.SpannerTabl
 		if column.DefaultValue != nil {
 			col.DefaultValue = types.StringValue(column.DefaultValue.GetValue())
 		}
-		if column.ProtoFileDescriptorSet != nil {
-			if column.ProtoFileDescriptorSet.ProtoPackage != nil {
-				col.ProtoPackage = types.StringValue(column.ProtoFileDescriptorSet.ProtoPackage.GetValue())
-			}
-			if column.ProtoFileDescriptorSet.FileDescriptorSetPath != nil {
-				col.FileDescriptor = types.StringValue(column.ProtoFileDescriptorSet.FileDescriptorSetPath.GetValue())
-			}
+		if column.ProtoPackage != nil {
+			col.ProtoPackage = types.StringValue(column.ProtoPackage.GetValue())
 		}
 
 		cols = append(cols, col)

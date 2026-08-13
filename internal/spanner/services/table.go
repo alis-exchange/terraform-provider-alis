@@ -13,8 +13,6 @@ import (
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
@@ -65,19 +63,9 @@ func (s *SpannerService) CreateSpannerTable(ctx context.Context, parent string, 
 			return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.schema.columns[%d].type, field is required but not provided", i)
 		}
 
-		// If column type is PROTO ensure proto file descriptor set is provided
-		if column.Type == schema.SpannerTableDataTypeProto.String() {
-			if column.GetProtoFileDescriptorSet() == nil {
-				return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.schema.columns[%d].proto_file_descriptor_set, field is required but not provided", i)
-			}
-
-			if column.GetProtoFileDescriptorSet().GetProtoPackage() == nil {
-				return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.schema.columns[%d].proto_file_descriptor_set.proto_package, field is required but not provided", i)
-			}
-
-			//if column.ProtoFileDescriptorSet.FileDescriptorSetPath == nil {
-			//	return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.schema.columns[%d].proto_file_descriptor_set.file_descriptor_set_path, field is required but not provided", i)
-			//}
+		// If column type is PROTO ensure the proto package is provided
+		if column.Type == schema.SpannerTableDataTypeProto.String() && column.GetProtoPackage().GetValue() == "" {
+			return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.schema.columns[%d].proto_package, field is required but not provided", i)
 		}
 	}
 
@@ -86,39 +74,6 @@ func (s *SpannerService) CreateSpannerTable(ctx context.Context, parent string, 
 
 	if _, err := names.ParseDatabase(parent); err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s): %v", parent, err)
-	}
-
-	// Check if we have any PROTO columns and create the necessary proto bundles
-	for _, column := range table.GetSchema().GetColumns() {
-		if column.GetType() != schema.SpannerTableDataTypeProto.String() {
-			continue
-		}
-
-		// If file descriptor set path is not provided, skip
-		// In such cases, we assume the user has already created the proto bundle(s)
-		if column.GetProtoFileDescriptorSet().GetFileDescriptorSetPath() == nil || column.GetProtoFileDescriptorSet().GetFileDescriptorSetPath().GetValue() == "" {
-			continue
-		}
-
-		fdsBytes, err := fetchDescriptorSet(ctx, column.GetProtoFileDescriptorSet())
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "Error fetching proto file descriptor set: %v", err)
-		}
-
-		// Unmarshal the proto file descriptor set
-		fds := &descriptorpb.FileDescriptorSet{}
-		if err := proto.Unmarshal(fdsBytes, fds); err != nil {
-			return nil, status.Errorf(codes.Internal, "Error unmarshalling proto file descriptor set: %v", err)
-		}
-
-		// Update the column proto file descriptor set with the fds
-		column.GetProtoFileDescriptorSet().SetFileDescriptorSet(fds)
-
-		// Create proto bundle
-		if err := CreateProtoBundle(ctx, s.conn, parent, column.GetProtoFileDescriptorSet().GetProtoPackage().GetValue(), fdsBytes); err != nil {
-			return nil, status.Errorf(codes.Internal, "Error creating proto bundle: %v", err)
-		}
-
 	}
 
 	// Create table
@@ -228,19 +183,9 @@ func (s *SpannerService) UpdateSpannerTable(ctx context.Context, table *schema.S
 						return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.schema.columns[%d].type, field is required but not provided", i)
 					}
 
-					// If column type is PROTO ensure proto file descriptor set is provided
-					if column.GetType() == schema.SpannerTableDataTypeProto.String() {
-						if column.GetProtoFileDescriptorSet() == nil {
-							return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.schema.columns[%d].proto_file_descriptor_set, field is required but not provided", i)
-						}
-
-						if column.GetProtoFileDescriptorSet().GetProtoPackage() == nil {
-							return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.schema.columns[%d].proto_file_descriptor_set.proto_package, field is required but not provided", i)
-						}
-
-						//if column.ProtoFileDescriptorSet.FileDescriptorSetPath == nil {
-						//	return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.schema.columns[%d].proto_file_descriptor_set.file_descriptor_set_path, field is required but not provided", i)
-						//}
+					// If column type is PROTO ensure the proto package is provided
+					if column.GetType() == schema.SpannerTableDataTypeProto.String() && column.GetProtoPackage().GetValue() == "" {
+						return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.schema.columns[%d].proto_package, field is required but not provided", i)
 					}
 				}
 
@@ -279,38 +224,6 @@ func (s *SpannerService) UpdateSpannerTable(ctx context.Context, table *schema.S
 	// If table does not exist and allow missing is set, create the table
 	if existingTable == nil {
 		return s.CreateSpannerTable(ctx, tableName.DatabaseName().String(), tableId, table)
-	}
-
-	// Check if we have any PROTO columns and create the necessary proto bundles
-	for _, column := range table.GetSchema().GetColumns() {
-		if column.GetType() != schema.SpannerTableDataTypeProto.String() {
-			continue
-		}
-
-		// If file descriptor set path is not provided, skip
-		// In such cases, we assume the user has already created the proto bundle(s)
-		if column.GetProtoFileDescriptorSet().GetFileDescriptorSetPath() == nil || column.GetProtoFileDescriptorSet().GetFileDescriptorSetPath().GetValue() == "" {
-			continue
-		}
-
-		fdsBytes, err := fetchDescriptorSet(ctx, column.GetProtoFileDescriptorSet())
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "Error fetching proto file descriptor set: %v", err)
-		}
-
-		// Unmarshal the proto file descriptor set
-		fds := &descriptorpb.FileDescriptorSet{}
-		if err := proto.Unmarshal(fdsBytes, fds); err != nil {
-			return nil, status.Errorf(codes.Internal, "Error unmarshalling proto file descriptor set: %v", err)
-		}
-
-		// Update the column proto file descriptor set with the fds
-		column.GetProtoFileDescriptorSet().SetFileDescriptorSet(fds)
-
-		// Create proto bundle
-		if err := CreateProtoBundle(ctx, s.conn, tableName.DatabaseName().String(), column.GetProtoFileDescriptorSet().GetProtoPackage().GetValue(), fdsBytes); err != nil {
-			return nil, status.Errorf(codes.Internal, "Error creating proto bundle: %v", err)
-		}
 	}
 
 	_, err = table.Update(ctx, s.conn, existingTable)

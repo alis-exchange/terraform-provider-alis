@@ -48,10 +48,9 @@ resource "alis_google_spanner_table" "example" {
         type = "BYTES",
       },
       {
-        name            = "proto_test",
-        type            = "PROTO",
-        proto_package   = "com.example.Message",
-        file_descriptor = "gcs:gs://path/to/my/descriptorset.pb",
+        name          = "proto_test",
+        type          = "PROTO",
+        proto_package = "com.example.Message",
       },
       {
         name            = "computed_column",

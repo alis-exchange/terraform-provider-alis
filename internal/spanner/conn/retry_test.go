@@ -119,10 +119,4 @@ func TestWithRetry(t *testing.T) {
 		}
 	})
 
-	t.Run("fake does not implement MetadataDB and wrapper preserves that", func(t *testing.T) {
-		c := conn.WithRetry(connfake.New(), fastPolicy(1))
-		if _, ok := c.(conn.MetadataDB); ok {
-			t.Error("retry-wrapped fake must not satisfy MetadataDB — the gorm quarantine no-ops under fakes")
-		}
-	})
 }

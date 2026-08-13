@@ -11,7 +11,6 @@ import (
 	"terraform-provider-alis/internal/spanner/conn"
 	"terraform-provider-alis/internal/spanner/names"
 
-	"go.alis.build/alog"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -259,11 +258,6 @@ func (t *SpannerTable) Create(ctx context.Context, cn conn.Connection) (*Spanner
 		return nil, err
 	}
 
-	if err := UpdateColumnMetadata(ctx, cn, t.GetDatabase(), t.GetTableId(), t.GetSchema().GetColumns()); err != nil {
-		// This is not a fatal error, so we log it and continue
-		alog.Errorf(ctx, "error updating column metadata: %v", err)
-	}
-
 	return t, nil
 }
 
@@ -291,6 +285,12 @@ type primaryKeyRow struct {
 	ColumnName sql.NullString `gorm:"column:COLUMN_NAME"`
 }
 
+type columnOptionRow struct {
+	ColumnName  sql.NullString `gorm:"column:COLUMN_NAME"`
+	OptionName  sql.NullString `gorm:"column:OPTION_NAME"`
+	OptionValue sql.NullString `gorm:"column:OPTION_VALUE"`
+}
+
 func (t *SpannerTable) Get(ctx context.Context, cn conn.Connection, name string) (*SpannerTable, error) {
 	// If table is nil, initialize it.
 	if t == nil || t.GetName() == "" {
@@ -298,12 +298,6 @@ func (t *SpannerTable) Get(ctx context.Context, cn conn.Connection, name string)
 			Name:   name,
 			Schema: &SpannerTableSchema{},
 		}
-	}
-
-	// Get column metadata
-	columnMetadata, err := GetColumnMetadata(ctx, cn, t.GetDatabase(), t.GetTableId())
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "error getting column metadata: %v", err)
 	}
 
 	// Check INFORMATION_SCHEMA for table
@@ -333,12 +327,6 @@ func (t *SpannerTable) Get(ctx context.Context, cn conn.Connection, name string)
 		}
 	}
 
-	// Get column metadata
-	columnMetadataMap := map[string]*ColumnMetadata{}
-	for _, metadata := range columnMetadata {
-		columnMetadataMap[metadata.ColumnName] = metadata
-	}
-
 	// Get columns from INFORMATION_SCHEMA
 	var columns []*SpannerTableColumn
 	{
@@ -362,165 +350,48 @@ func (t *SpannerTable) Get(ctx context.Context, cn conn.Connection, name string)
 				Name: columnName.String,
 			}
 
-			if metadata, ok := columnMetadataMap[column.Name]; ok && metadata.Metadata != nil {
+			// Handle Type
+			if spannerType.Valid {
+				column.Type = parseSpannerType(spannerType.String)
+			}
 
-				// Populate primary keys if present
-				switch metadata.Metadata.IsPrimaryKey {
-				case "true":
-					column.IsPrimaryKey = wrapperspb.Bool(true)
-				case "false":
-					column.IsPrimaryKey = wrapperspb.Bool(false)
+			// Handle Size
+			size := parseSpannerSize(spannerType.String)
+			if size != "" && size != "MAX" {
+				sizeInt64, err := strconv.ParseInt(size, 10, 64)
+				if err != nil {
+					return nil, fmt.Errorf("invalid column size: %w", err)
 				}
 
-				// Populate type if present
-				switch metadata.Metadata.Type {
-				case "nil":
-				default:
-					column.Type = metadata.Metadata.Type
-				}
+				column.Size = wrapperspb.Int64(sizeInt64)
+			}
 
-				// Populate computed if present
-				switch metadata.Metadata.IsComputed {
-				case "true":
-					column.IsComputed = wrapperspb.Bool(true)
-				case "false":
-					column.IsComputed = wrapperspb.Bool(false)
-				}
+			// Handle Proto Package
+			if protoPackage := parseSpannerProtoPackage(spannerType.String); protoPackage != "" {
+				column.ProtoPackage = wrapperspb.String(protoPackage)
+			}
 
-				// Populate computation ddl if present
-				switch metadata.Metadata.ComputationDdl {
-				case "nil":
-				default:
-					column.ComputationDdl = wrapperspb.String(metadata.Metadata.ComputationDdl)
-				}
+			// Handle Nullable
+			if isNullable.Valid {
+				column.Required = wrapperspb.Bool(isNullable.String == "NO")
+			}
 
-				// Populate stored if present
-				switch metadata.Metadata.IsStored {
-				case "true":
-					column.IsStored = wrapperspb.Bool(true)
-				case "false":
-					column.IsStored = wrapperspb.Bool(false)
-				}
+			// Handle Default
+			if columnDefault.Valid {
+				column.DefaultValue = wrapperspb.String(columnDefault.String)
+			}
 
-				// Populate auto create time if present
-				switch metadata.Metadata.AutoCreateTime {
-				case "true":
-					column.AutoCreateTime = wrapperspb.Bool(true)
-				case "false":
-					column.AutoCreateTime = wrapperspb.Bool(false)
-				}
+			// Handle Generated
+			if isGenerated.Valid {
+				column.IsComputed = wrapperspb.Bool(isGenerated.String == "ALWAYS")
+			}
+			if column.GetIsComputed().GetValue() && generationExpr.Valid {
+				column.ComputationDdl = wrapperspb.String(generationExpr.String)
+			}
 
-				// Populate auto update time if present
-				switch metadata.Metadata.AutoUpdateTime {
-				case "true":
-					column.AutoUpdateTime = wrapperspb.Bool(true)
-				case "false":
-					column.AutoUpdateTime = wrapperspb.Bool(false)
-				}
-
-				// Populate size if present
-				switch metadata.Metadata.Size {
-				case "nil":
-				default:
-					// Convert string to int64
-					size, err := strconv.ParseInt(metadata.Metadata.Size, 10, 64)
-					if err != nil {
-						return nil, status.Errorf(codes.Internal, "Error converting size to int64: %v", err)
-					}
-
-					column.Size = wrapperspb.Int64(size)
-				}
-
-				// Populate nullable if present
-				switch metadata.Metadata.Required {
-				case "true":
-					column.Required = wrapperspb.Bool(true)
-				case "false":
-					column.Required = wrapperspb.Bool(false)
-				}
-
-				// Populate default value if present
-				switch metadata.Metadata.DefaultValue {
-				case "nil":
-				default:
-					column.DefaultValue = wrapperspb.String(metadata.Metadata.DefaultValue)
-				}
-
-				// Populate proto package
-				var protoPackage string
-				switch metadata.Metadata.ProtoPackage {
-				case "nil":
-				default:
-					protoPackage = metadata.Metadata.ProtoPackage
-				}
-
-				// Populate proto file descriptor set
-				var fileDescriptorSetPath string
-				switch metadata.Metadata.FileDescriptorSetPath {
-				case "nil":
-				default:
-					fileDescriptorSetPath = metadata.Metadata.FileDescriptorSetPath
-				}
-
-				// Populate ProtoFileDescriptorSet
-				if protoPackage != "" || fileDescriptorSetPath != "" {
-					column.ProtoFileDescriptorSet = &ProtoFileDescriptorSet{}
-
-					if protoPackage != "" {
-						column.ProtoFileDescriptorSet.ProtoPackage = wrapperspb.String(protoPackage)
-					}
-
-					if fileDescriptorSetPath != "" {
-						column.ProtoFileDescriptorSet.FileDescriptorSetPath = wrapperspb.String(fileDescriptorSetPath)
-					}
-				}
-			} else {
-				// Handle Type
-				if spannerType.Valid {
-					column.Type = parseSpannerType(spannerType.String)
-				}
-
-				// Handle Size
-				size := parseSpannerSize(spannerType.String)
-				if size != "" && size != "MAX" {
-					sizeInt64, err := strconv.ParseInt(size, 10, 64)
-					if err != nil {
-						return nil, fmt.Errorf("invalid column size: %w", err)
-					}
-
-					column.Size = wrapperspb.Int64(sizeInt64)
-				}
-
-				// Handle Proto Package
-				protoPackage := parseSpannerProtoPackage(spannerType.String)
-				if protoPackage != "" {
-					column.ProtoFileDescriptorSet = &ProtoFileDescriptorSet{
-						ProtoPackage: wrapperspb.String(protoPackage),
-					}
-				}
-
-				// Handle Nullable
-				if isNullable.Valid {
-					column.Required = wrapperspb.Bool(isNullable.String == "NO")
-				}
-
-				// Handle Default
-				if columnDefault.Valid {
-					column.DefaultValue = wrapperspb.String(columnDefault.String)
-				}
-
-				// Handle Generated
-				if isGenerated.Valid {
-					column.IsComputed = wrapperspb.Bool(isGenerated.String == "ALWAYS")
-				}
-				if column.GetIsComputed().GetValue() && generationExpr.Valid {
-					column.ComputationDdl = wrapperspb.String(generationExpr.String)
-				}
-
-				// Handle Stored
-				if isStored.Valid {
-					column.IsStored = wrapperspb.Bool(isStored.String == "YES")
-				}
+			// Handle Stored
+			if isStored.Valid {
+				column.IsStored = wrapperspb.Bool(isStored.String == "YES")
 			}
 
 			columns = append(columns, column)
@@ -550,6 +421,32 @@ func (t *SpannerTable) Get(ctx context.Context, cn conn.Connection, name string)
 		}
 	}
 
+	// Column options carry what the COLUMNS view does not:
+	// allow_commit_timestamp is the DDL form of auto_update_time.
+	{
+		var rows []*columnOptionRow
+		if err := cn.Query(ctx, t.GetDatabase(), &rows,
+			`SELECT COLUMN_NAME, OPTION_NAME, OPTION_VALUE FROM INFORMATION_SCHEMA.COLUMN_OPTIONS WHERE TABLE_NAME = ?`,
+			t.GetTableId()); err != nil {
+			return nil, err
+		}
+
+		allowCommitByColumn := map[string]string{}
+		for _, r := range rows {
+			if r.OptionName.String == "allow_commit_timestamp" {
+				allowCommitByColumn[r.ColumnName.String] = r.OptionValue.String
+			}
+		}
+		for _, column := range columns {
+			switch allowCommitByColumn[column.GetName()] {
+			case "TRUE":
+				column.AutoUpdateTime = wrapperspb.Bool(true)
+			case "FALSE":
+				column.AutoUpdateTime = wrapperspb.Bool(false)
+			}
+		}
+	}
+
 	// Set columns
 	if t.GetSchema() == nil {
 		t.Schema = &SpannerTableSchema{}
@@ -566,14 +463,6 @@ func (t *SpannerTable) Update(ctx context.Context, cn conn.Connection, existingT
 		return t, nil
 	}
 
-	defer func() {
-		// Update column metadata
-		if err := UpdateColumnMetadata(ctx, cn, t.GetDatabase(), t.GetTableId(), t.GetSchema().GetColumns()); err != nil {
-			// This is not a fatal error, so we log it and continue
-			alog.Errorf(ctx, "error updating column metadata: %v", err)
-		}
-	}()
-
 	// Compare tables
 	identical, err := t.compare(existingTable)
 	if err != nil {
@@ -586,7 +475,7 @@ func (t *SpannerTable) Update(ctx context.Context, cn conn.Connection, existingT
 	}
 
 	// Generate alter DDL
-	statements, droppedColumns, err := t.AlterDdl(existingTable)
+	statements, _, err := t.AlterDdl(existingTable)
 	if err != nil {
 		return nil, err
 	}
@@ -599,14 +488,6 @@ func (t *SpannerTable) Update(ctx context.Context, cn conn.Connection, existingT
 	// Update the database schema.
 	if err := cn.ExecuteDDL(ctx, t.GetDatabase(), statements...); err != nil {
 		return nil, err
-	}
-
-	// Delete removed columns from column metadata
-	if len(droppedColumns) > 0 {
-		if err := DeleteColumnMetadata(ctx, cn, t.GetDatabase(), t.GetTableId(), droppedColumns); err != nil {
-			// This is not a fatal error, so we log it and continue
-			alog.Errorf(ctx, "error deleting column metadata: %v", err)
-		}
 	}
 
 	return t, nil
@@ -627,12 +508,6 @@ func (t *SpannerTable) Delete(ctx context.Context, cn conn.Connection) error {
 	// Update the database schema.
 	if err := cn.ExecuteDDL(ctx, t.GetDatabase(), ddl); err != nil {
 		return err
-	}
-
-	// Delete column metadata
-	if err := DeleteColumnMetadata(ctx, cn, t.GetDatabase(), t.GetTableId(), []*SpannerTableColumn{}); err != nil {
-		// This is not a fatal error, so we log it and continue
-		alog.Errorf(ctx, "error deleting column metadata: %v", err)
 	}
 
 	return nil
@@ -737,6 +612,12 @@ func parseSpannerType(columnType string) string {
 		return "PROTO"
 	}
 
+	// INFORMATION_SCHEMA surfaces proto columns as a (possibly backticked)
+	// fully-qualified message name rather than a PROTO<...> shape.
+	if strings.HasPrefix(columnType, "`") || strings.Contains(columnType, ".") {
+		return "PROTO"
+	}
+
 	return columnType
 }
 
@@ -788,6 +669,15 @@ func parseSpannerProtoPackage(columnType string) string {
 
 		// Return the proto package
 		return trimmedType
+	}
+
+	// INFORMATION_SCHEMA surfaces proto columns as a (possibly backticked)
+	// fully-qualified message name rather than a PROTO<...> shape.
+	if strings.HasPrefix(columnType, "`") {
+		return strings.Trim(columnType, "`")
+	}
+	if strings.Contains(columnType, ".") && !strings.ContainsAny(columnType, "<(") {
+		return columnType
 	}
 
 	return ""

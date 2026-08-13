@@ -203,11 +203,9 @@ func TestCreateSpannerTable(t *testing.T) {
 								Type: "BYTES",
 							},
 							{
-								Name: "User",
-								Type: "PROTO",
-								ProtoFileDescriptorSet: &schema.ProtoFileDescriptorSet{
-									ProtoPackage: wrapperspb.String("alis.open.iam.v1.User"),
-								},
+								Name:         "User",
+								Type:         "PROTO",
+								ProtoPackage: wrapperspb.String("alis.open.iam.v1.User"),
 							},
 							{
 								Name:           "user_name",
@@ -348,11 +346,9 @@ func TestUpdateSpannerTable(t *testing.T) {
 								Type: "BYTES",
 							},
 							{
-								Name: "User",
-								Type: "PROTO",
-								ProtoFileDescriptorSet: &schema.ProtoFileDescriptorSet{
-									ProtoPackage: wrapperspb.String("alis.open.iam.v1.User"),
-								},
+								Name:         "User",
+								Type:         "PROTO",
+								ProtoPackage: wrapperspb.String("alis.open.iam.v1.User"),
 							},
 							{
 								Name:           "user_name",
@@ -834,37 +830,6 @@ func TestSpannerService_DeleteDatabaseRole(t *testing.T) {
 			}
 			if err := s.DeleteDatabaseRole(tt.args.ctx, tt.args.name); (err != nil) != tt.wantErr {
 				t.Errorf("DeleteDatabaseRole() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
-func TestCreateProtoBundle(t *testing.T) {
-	skipIfNoIntegrationEnv(t)
-	type args struct {
-		ctx              context.Context
-		databaseName     string
-		protoPackageName string
-		descriptorSet    []byte
-	}
-	tests := []struct {
-		name    string
-		args    args
-		wantErr bool
-	}{
-		{
-			name: "CreateProtoBundle",
-			args: args{
-				ctx:              context.Background(),
-				databaseName:     fmt.Sprintf("projects/%s/instances/%s/databases/%s", TestProject, TestInstance, "tf-test"),
-				protoPackageName: "alis.px.services.data.v2.SpannerTest",
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if err := CreateProtoBundle(tt.args.ctx, conn.New(conn.Options{}), tt.args.databaseName, tt.args.protoPackageName, tt.args.descriptorSet); (err != nil) != tt.wantErr {
-				t.Errorf("CreateProtoBundle() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}

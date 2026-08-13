@@ -8,6 +8,38 @@ import (
 )
 
 // SpannerTableColumn represents a Spanner table column.
+// PreserveUnsetBooleans collapses hydrated boolean attributes back to unset
+// where the prior state left them unset and hydration answered "false".
+// INFORMATION_SCHEMA always answers explicitly, but an explicit false and an
+// absent boolean produce identical DDL, so preferring the prior shape keeps
+// refresh from flagging phantom diffs on attributes the config omitted.
+// Hydrated true always survives: that is real drift.
+func PreserveUnsetBooleans(prior, hydrated []*SpannerTableColumn) {
+	priorByName := make(map[string]*SpannerTableColumn, len(prior))
+	for _, c := range prior {
+		priorByName[c.Name] = c
+	}
+
+	collapse := func(priorV, hydratedV *wrapperspb.BoolValue) *wrapperspb.BoolValue {
+		if priorV == nil && !hydratedV.GetValue() {
+			return nil
+		}
+		return hydratedV
+	}
+
+	for _, h := range hydrated {
+		p, ok := priorByName[h.Name]
+		if !ok {
+			continue
+		}
+		h.IsPrimaryKey = collapse(p.IsPrimaryKey, h.IsPrimaryKey)
+		h.IsComputed = collapse(p.IsComputed, h.IsComputed)
+		h.IsStored = collapse(p.IsStored, h.IsStored)
+		h.AutoUpdateTime = collapse(p.AutoUpdateTime, h.AutoUpdateTime)
+		h.Required = collapse(p.Required, h.Required)
+	}
+}
+
 type SpannerTableColumn struct {
 	// The name of the column.
 	//
@@ -24,9 +56,6 @@ type SpannerTableColumn struct {
 	// Whether the generated column is stored
 	// This is only valid for computed columns
 	IsStored *wrapperspb.BoolValue
-	// Whether the column should auto-generate a create time
-	// This is only valid for TIMESTAMP columns
-	AutoCreateTime *wrapperspb.BoolValue
 	// Whether the column should auto-generate an update time
 	// This is only valid for TIMESTAMP columns
 	AutoUpdateTime *wrapperspb.BoolValue
@@ -43,10 +72,11 @@ type SpannerTableColumn struct {
 	//
 	// Accepts any type of value given that the value is valid for the column type.
 	DefaultValue *wrapperspb.StringValue
-	// The proto file descriptor set for the column.
+	// The fully-qualified proto message name for the column.
 	//
-	// This is typically paired with PROTO columns.
-	ProtoFileDescriptorSet *ProtoFileDescriptorSet
+	// Required for PROTO columns. The proto bundle carrying the message must
+	// already exist in the database; the provider does not manage bundles.
+	ProtoPackage *wrapperspb.StringValue
 }
 
 func (c *SpannerTableColumn) GetName() string {
@@ -89,14 +119,6 @@ func (c *SpannerTableColumn) GetIsStored() *wrapperspb.BoolValue {
 	return c.IsStored
 }
 
-func (c *SpannerTableColumn) GetAutoCreateTime() *wrapperspb.BoolValue {
-	if c == nil {
-		return nil
-	}
-
-	return c.AutoCreateTime
-}
-
 func (c *SpannerTableColumn) GetAutoUpdateTime() *wrapperspb.BoolValue {
 	if c == nil {
 		return nil
@@ -137,12 +159,12 @@ func (c *SpannerTableColumn) GetDefaultValue() *wrapperspb.StringValue {
 	return c.DefaultValue
 }
 
-func (c *SpannerTableColumn) GetProtoFileDescriptorSet() *ProtoFileDescriptorSet {
+func (c *SpannerTableColumn) GetProtoPackage() *wrapperspb.StringValue {
 	if c == nil {
 		return nil
 	}
 
-	return c.ProtoFileDescriptorSet
+	return c.ProtoPackage
 }
 
 // PrimaryKey returns true if the column is a primary key.
@@ -160,13 +182,11 @@ func (c *SpannerTableColumn) ddl() (string, error) {
 	{
 		if c.GetType() == SpannerTableDataTypeProto.String() {
 			// Ensure proto package is set
-			if c.GetProtoFileDescriptorSet() == nil ||
-				c.GetProtoFileDescriptorSet().GetProtoPackage() == nil ||
-				c.GetProtoFileDescriptorSet().GetProtoPackage().GetValue() == "" {
+			if c.GetProtoPackage().GetValue() == "" {
 				return "", fmt.Errorf("proto_package is required for proto column %s", c.GetName())
 			}
 
-			ddl += fmt.Sprintf(" `%s`", c.GetProtoFileDescriptorSet().GetProtoPackage().GetValue())
+			ddl += fmt.Sprintf(" `%s`", c.GetProtoPackage().GetValue())
 		} else {
 			ddl += fmt.Sprintf(" %s", c.GetType())
 		}
@@ -252,13 +272,11 @@ func (c *SpannerTableColumn) alterDdl(existingColumn *SpannerTableColumn) ([]str
 		{
 			if c.GetType() == SpannerTableDataTypeProto.String() {
 				// Ensure proto package is set
-				if c.GetProtoFileDescriptorSet() == nil ||
-					c.GetProtoFileDescriptorSet().GetProtoPackage() == nil ||
-					c.GetProtoFileDescriptorSet().GetProtoPackage().GetValue() == "" {
+				if c.GetProtoPackage().GetValue() == "" {
 					return nil, fmt.Errorf("proto_package is required for proto column %s", c.GetName())
 				}
 
-				ddl += fmt.Sprintf(" `%s`", c.GetProtoFileDescriptorSet().GetProtoPackage().GetValue())
+				ddl += fmt.Sprintf(" `%s`", c.GetProtoPackage().GetValue())
 			} else {
 				ddl += fmt.Sprintf(" %s", c.GetType())
 			}
@@ -404,10 +422,6 @@ func (c *SpannerTableColumn) compare(other *SpannerTableColumn) bool {
 		return false
 	}
 
-	if c.GetAutoCreateTime().GetValue() != other.GetAutoCreateTime().GetValue() {
-		return false
-	}
-
 	if c.GetAutoUpdateTime().GetValue() != other.GetAutoUpdateTime().GetValue() {
 		return false
 	}
@@ -424,7 +438,7 @@ func (c *SpannerTableColumn) compare(other *SpannerTableColumn) bool {
 		return false
 	}
 
-	if !c.GetProtoFileDescriptorSet().compare(other.GetProtoFileDescriptorSet()) {
+	if c.GetProtoPackage().GetValue() != other.GetProtoPackage().GetValue() {
 		return false
 	}
 

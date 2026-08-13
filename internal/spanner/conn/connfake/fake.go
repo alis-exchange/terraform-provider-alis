@@ -1,9 +1,7 @@
 // Package connfake is the in-memory adapter for the Connection port. It
 // records every call in order, serves canned query results, and injects
 // errors — the test surface for call choreography, retry policy, and
-// schema-drift scenarios. It deliberately does NOT implement
-// conn.MetadataDB: column-metadata writes no-op under the fake, matching
-// their non-fatal production semantics.
+// schema-drift scenarios.
 package connfake
 
 import (

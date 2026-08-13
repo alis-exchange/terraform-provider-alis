@@ -61,10 +61,7 @@ type gcpConn struct {
 	dialects map[string]Dialect
 }
 
-var (
-	_ Connection = (*gcpConn)(nil)
-	_ MetadataDB = (*gcpConn)(nil)
-)
+var _ Connection = (*gcpConn)(nil)
 
 func newGCPAdapter(opts Options) *gcpConn {
 	return &gcpConn{
@@ -260,10 +257,6 @@ func (g *gcpConn) DatabaseRoles(ctx context.Context, database string, pageSize i
 	}
 
 	return names, nextPageToken, nil
-}
-
-func (g *gcpConn) GormDB(ctx context.Context, database string) (*gorm.DB, error) {
-	return g.session(ctx, database)
 }
 
 func (g *gcpConn) Close() error {

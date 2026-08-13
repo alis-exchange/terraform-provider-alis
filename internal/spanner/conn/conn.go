@@ -2,8 +2,7 @@
 // and Spanner. Callers speak DDL/SQL strings and plain structs; every Google
 // client, credential, logger, retry policy, and session pool lives behind this
 // interface. No other package in the repo may construct a Spanner admin client,
-// data client, or gorm handle directly — the one sanctioned exception is the
-// MetadataDB quarantine below.
+// data client, or gorm handle directly.
 package conn
 
 import (
@@ -12,7 +11,6 @@ import (
 
 	googleoauth "golang.org/x/oauth2/google"
 	"google.golang.org/api/option"
-	"gorm.io/gorm"
 )
 
 // Dialect is owned by this module so callers and fakes never import databasepb.
@@ -77,15 +75,6 @@ type Connection interface {
 	// Close releases all cached clients and pools. Called once at provider
 	// teardown; idempotent.
 	Close() error
-}
-
-// MetadataDB is the quarantined gorm escape hatch. Only
-// schema/column_metadata.go may type-assert for it; absence is a no-op,
-// matching the metadata writes' non-fatal production semantics. Implemented
-// only by the GCP adapter (never by fakes) — deliberately a one-adapter seam,
-// marked for removal when metadata writes become parameterized DML.
-type MetadataDB interface {
-	GormDB(ctx context.Context, database string) (*gorm.DB, error)
 }
 
 // Options configures the GCP adapter. The zero value is valid: ADC

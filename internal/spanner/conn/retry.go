@@ -8,7 +8,6 @@ import (
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"gorm.io/gorm"
 )
 
 const (
@@ -34,16 +33,9 @@ func DefaultRetryable(err error) bool {
 }
 
 // WithRetry wraps any Connection — including the fake — with the uniform
-// retry policy. If inner implements MetadataDB the wrapper forwards the
-// capability (without retry: it only hands out a session); otherwise the
-// wrapped value deliberately does not satisfy MetadataDB, so the gorm
-// quarantine stays a no-op under fakes.
+// retry policy.
 func WithRetry(inner Connection, p RetryPolicy) Connection {
-	r := &retryConn{inner: inner, policy: p.withDefaults()}
-	if m, ok := inner.(MetadataDB); ok {
-		return &retryMetadataConn{retryConn: r, meta: m}
-	}
-	return r
+	return &retryConn{inner: inner, policy: p.withDefaults()}
 }
 
 func (p RetryPolicy) withDefaults() RetryPolicy {
@@ -62,15 +54,6 @@ func (p RetryPolicy) withDefaults() RetryPolicy {
 type retryConn struct {
 	inner  Connection
 	policy RetryPolicy
-}
-
-type retryMetadataConn struct {
-	*retryConn
-	meta MetadataDB
-}
-
-func (r *retryMetadataConn) GormDB(ctx context.Context, database string) (*gorm.DB, error) {
-	return r.meta.GormDB(ctx, database)
 }
 
 func (r *retryConn) do(ctx context.Context, op func() error) error {

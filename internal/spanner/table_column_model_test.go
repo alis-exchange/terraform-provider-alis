@@ -23,7 +23,6 @@ func fullColumnModel() spannerTableColumn {
 		Required:       types.BoolValue(true),
 		DefaultValue:   types.StringValue("'x'"),
 		ProtoPackage:   types.StringValue("com.example.Msg"),
-		FileDescriptor: types.StringValue("gcs:gs://bucket/fds.pb"),
 	}
 }
 
@@ -75,11 +74,8 @@ func TestTableColumnsToSchema(t *testing.T) {
 	if full.AutoUpdateTime == nil || full.AutoUpdateTime.GetValue() {
 		t.Errorf("AutoUpdateTime = %v, want explicit false", full.AutoUpdateTime)
 	}
-	if full.ProtoFileDescriptorSet == nil ||
-		full.ProtoFileDescriptorSet.ProtoPackage.GetValue() != "com.example.Msg" ||
-		full.ProtoFileDescriptorSet.FileDescriptorSetPath.GetValue() != "gcs:gs://bucket/fds.pb" ||
-		full.ProtoFileDescriptorSet.FileDescriptorSetPathSource != tableschema.ProtoFileDescriptorSetSourceGcs {
-		t.Errorf("proto FDS lost or wrong source: %+v", full.ProtoFileDescriptorSet)
+	if full.GetProtoPackage().GetValue() != "com.example.Msg" {
+		t.Errorf("proto package lost: %v", full.ProtoPackage)
 	}
 
 	minimal := got[1]
@@ -89,21 +85,8 @@ func TestTableColumnsToSchema(t *testing.T) {
 	// Null model attributes must stay nil wrappers (absent), not become explicit false/zero.
 	if minimal.IsPrimaryKey != nil || minimal.IsComputed != nil || minimal.IsStored != nil ||
 		minimal.AutoUpdateTime != nil || minimal.Size != nil || minimal.Required != nil ||
-		minimal.DefaultValue != nil || minimal.ProtoFileDescriptorSet != nil {
+		minimal.DefaultValue != nil || minimal.ProtoPackage != nil {
 		t.Errorf("minimal column grew explicit values: %+v", minimal)
-	}
-}
-
-func TestTableColumnsToSchema_URLSource(t *testing.T) {
-	col := minimalColumnModel()
-	col.FileDescriptor = types.StringValue("url:https://example.com/fds.pb")
-
-	got, d := tableColumnsToSchema(context.Background(), columnList(t, []spannerTableColumn{col}))
-	if d.HasError() {
-		t.Fatalf("tableColumnsToSchema: %v", d)
-	}
-	if got[0].ProtoFileDescriptorSet.FileDescriptorSetPathSource != tableschema.ProtoFileDescriptorSetSourceUrl {
-		t.Errorf("source = %v, want Url", got[0].ProtoFileDescriptorSet.FileDescriptorSetPathSource)
 	}
 }
 

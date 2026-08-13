@@ -204,6 +204,28 @@ func TestEmulator_SupportMatrix(t *testing.T) {
 		t.Log("proto bundles supported")
 	})
 
+	t.Run("column options surfacing (allow_commit_timestamp)", func(t *testing.T) {
+		cn, db := conntest.Setup(t, databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL)
+		if err := cn.ExecuteDDL(ctx, db,
+			"CREATE TABLE opts (id INT64, update_time TIMESTAMP OPTIONS (allow_commit_timestamp=true)) PRIMARY KEY (id)"); err != nil {
+			t.Fatalf("create table: %v", err)
+		}
+		type optRow struct {
+			ColumnName  string `gorm:"column:COLUMN_NAME"`
+			OptionName  string `gorm:"column:OPTION_NAME"`
+			OptionValue string `gorm:"column:OPTION_VALUE"`
+		}
+		var rows []optRow
+		if err := cn.Query(ctx, db, &rows,
+			"SELECT COLUMN_NAME, OPTION_NAME, OPTION_VALUE FROM INFORMATION_SCHEMA.COLUMN_OPTIONS WHERE TABLE_NAME = ?", "opts"); err != nil {
+			t.Skipf("COLUMN_OPTIONS not queryable: %v", err)
+		}
+		if len(rows) == 0 {
+			t.Skip("COLUMN_OPTIONS empty: allow_commit_timestamp not surfaced")
+		}
+		t.Logf("COLUMN_OPTIONS rows: %+v", rows)
+	})
+
 	t.Run("PostgreSQL dialect database", func(t *testing.T) {
 		cn, db, err := conntest.TrySetup(t, databasepb.DatabaseDialect_POSTGRESQL)
 		if err != nil {

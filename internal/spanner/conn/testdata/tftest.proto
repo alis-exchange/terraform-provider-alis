@@ -1,0 +1,11 @@
+// Minimal message for probing PROTO column support against the emulator.
+// Regenerate the descriptor set with:
+//   protoc --descriptor_set_out=tftest.pb --include_imports -I . tftest.proto
+syntax = "proto3";
+
+package tftest;
+
+message Simple {
+  string name = 1;
+  int64 value = 2;
+}

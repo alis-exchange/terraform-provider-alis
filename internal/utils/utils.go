@@ -36,9 +36,16 @@ func GetGoogleCredentials(ctx context.Context, projectId string, credentialsStr 
 		}
 	}
 
+	// The returned token source outlives the calling RPC: it is cached in
+	// clients for the provider's whole lifetime and fetches tokens lazily.
+	// oauth2 binds the token-refresh HTTP client to the context given here,
+	// so a request-scoped ctx would make every refresh after that request
+	// fail with "context canceled".
+	tokenCtx := context.Background()
+
 	// If credentialsStr are provided, use them
 	if credentialsStr != "" {
-		creds, err := googleoauth.CredentialsFromJSON(ctx, []byte(credentialsStr), scopes...)
+		creds, err := googleoauth.CredentialsFromJSON(tokenCtx, []byte(credentialsStr), scopes...)
 		if err != nil {
 			return nil, err
 		}
@@ -66,7 +73,7 @@ func GetGoogleCredentials(ctx context.Context, projectId string, credentialsStr 
 	}
 
 	// If no credentialsStr or access token is provided, use Application Default Credentials
-	creds, err := googleoauth.FindDefaultCredentials(ctx, scopes...)
+	creds, err := googleoauth.FindDefaultCredentials(tokenCtx, scopes...)
 	if err != nil {
 		return nil, err
 	}

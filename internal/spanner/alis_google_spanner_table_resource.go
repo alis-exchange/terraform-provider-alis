@@ -71,7 +71,6 @@ type spannerTableColumn struct {
 	Required       types.Bool   `tfsdk:"required"`
 	DefaultValue   types.String `tfsdk:"default_value"`
 	ProtoPackage   types.String `tfsdk:"proto_package"`
-	FileDescriptor types.String `tfsdk:"file_descriptor"`
 }
 
 func (o spannerTableColumn) attrTypes() map[string]attr.Type {
@@ -87,7 +86,6 @@ func (o spannerTableColumn) attrTypes() map[string]attr.Type {
 		"required":         types.BoolType,
 		"default_value":    types.StringType,
 		"proto_package":    types.StringType,
-		"file_descriptor":  types.StringType,
 	}
 }
 
@@ -230,20 +228,6 @@ func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaReques
 										"The name must be a valid package name including the message name.\n" +
 										"This field is only required for columns of type `PROTO`\n" +
 										"Example: \"com.example.Message\", where `com.example` is the package name and `Message` is the message name.",
-								},
-								"file_descriptor": schema.StringAttribute{
-									Optional: true,
-									Description: "The url/path to the file descriptor set of the column.\n" +
-										"The file descriptor set must be a valid file descriptor set containing the specified `proto_package`.\n" +
-										"The path must point to a valid `.pb` file.\n" +
-										"You can generate one using the `protoc` compiler. See https://cloud.google.com/spanner/docs/reference/standard-sql/protocol-buffers#create_a_protocol_buffer.\n" +
-										"This field is only compatible for columns of type `PROTO`.\n" +
-										"**This field is not required if the database is already populated with the necessary proto bundles.**\n" +
-										"One of the following prefixes must be used to indicate the location of the file descriptor set:\n" +
-										"	- **gcs:** - Indicates the file is stored in a Google Cloud Storage Bucket.\n" +
-										"	Example: \"gcs:gs://path/to/your/file.pb\".\n" +
-										"	- **url:** - **Experimental**. Indicates the file is stored on a remote server accessible via HTTPS.\n" +
-										"	Example: \"url:https://path/to/your/file.pb\".",
 								},
 							},
 						},
@@ -415,6 +399,18 @@ func (r *spannerTableResource) Read(ctx context.Context, req resource.ReadReques
 	if table.Schema != nil {
 		s := &spannerTableSchema{}
 		if table.Schema.Columns != nil {
+			// INFORMATION_SCHEMA answers every boolean explicitly; collapse
+			// hydrated false back to unset where the prior state left the
+			// attribute unset, so refresh doesn't flag phantom diffs on
+			// booleans the config omitted.
+			if state.Schema != nil {
+				priorColumns, d := tableColumnsToSchema(ctx, state.Schema.Columns)
+				diags.Append(d...)
+				if !d.HasError() {
+					tableschema.PreserveUnsetBooleans(priorColumns, table.Schema.Columns)
+				}
+			}
+
 			generatedList, d := tableColumnsToModel(ctx, table.Schema.Columns)
 			diags.Append(d...)
 
@@ -616,7 +612,9 @@ func (r *spannerTableResource) ValidateConfig(ctx context.Context, req resource.
 	}
 
 	for i, column := range columns {
-		// If column type is PROTO, check if proto_package and file_descriptor are provided
+		// If column type is PROTO, check if proto_package is provided. The
+		// proto bundle itself must already exist in the database; the provider
+		// does not manage bundles.
 		if column.Type.ValueString() == "PROTO" {
 			if column.ProtoPackage.IsNull() {
 				resp.Diagnostics.AddAttributeWarning(
@@ -626,16 +624,6 @@ func (r *spannerTableResource) ValidateConfig(ctx context.Context, req resource.
 						"The resource may return unexpected results.",
 				)
 			}
-
-			// TODO: Uncomment when file_descriptor is required
-			//if column.FileDescriptor.IsNull() {
-			//	resp.Diagnostics.AddAttributeWarning(
-			//		path.Root("schema.columns").AtListIndex(i).AtName("file_descriptor"),
-			//		"Missing Column Configuration",
-			//		"Expected file_descriptor to be configured for columns of type PROTO. "+
-			//			"The resource may return unexpected results.",
-			//	)
-			//}
 		}
 
 		// If column is computed, check if computation_ddl is provided
@@ -656,12 +644,6 @@ func (r *spannerTableResource) ValidateConfig(ctx context.Context, req resource.
 
 func (r *spannerTableResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {
 	return []resource.ConfigValidator{
-
-		//resourcevalidator.RequiredTogether(
-		//	path.MatchRoot("schema.columns").AtAnyListIndex().AtName("type").AtSetValue(types.StringValue("PROTO")),
-		//	path.MatchRoot("schema.columns").AtAnyListIndex().AtName("proto_package"),
-		//	path.MatchRoot("schema.columns").AtAnyListIndex().AtName("file_descriptor"),
-		//),
 
 		//resourcevalidator.Conflicting(),
 		//resourcevalidator.Conflicting(

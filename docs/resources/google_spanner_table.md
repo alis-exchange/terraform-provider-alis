@@ -66,10 +66,9 @@ resource "alis_google_spanner_table" "example" {
         type = "BYTES",
       },
       {
-        name            = "proto_test",
-        type            = "PROTO",
-        proto_package   = "com.example.Message",
-        file_descriptor = "gcs:gs://path/to/my/descriptorset.pb",
+        name          = "proto_test",
+        type          = "PROTO",
+        proto_package = "com.example.Message",
       },
       {
         name            = "computed_column",
@@ -155,17 +154,6 @@ Example: `column1 + column2`, or `proto_column.field`.
 It must be valid for the column type: literals (e.g. `10.0` for `FLOAT64`, `"true"` for `BOOL` or `STRING`) or Spanner default expressions.
 Examples of expressions: `GENERATE_UUID()` for a `STRING` (or `BYTES`) primary key; `GET_NEXT_SEQUENCE_VALUE(SEQUENCE my_sequence)` for an `INT64` column when `my_sequence` exists in the same database.
 Do not wrap the value in an extra pair of parentheses; the provider emits `DEFAULT (<this value>)`.
-- `file_descriptor` (String) The url/path to the file descriptor set of the column.
-The file descriptor set must be a valid file descriptor set containing the specified `proto_package`.
-The path must point to a valid `.pb` file.
-You can generate one using the `protoc` compiler. See https://cloud.google.com/spanner/docs/reference/standard-sql/protocol-buffers#create_a_protocol_buffer.
-This field is only compatible for columns of type `PROTO`.
-**This field is not required if the database is already populated with the necessary proto bundles.**
-One of the following prefixes must be used to indicate the location of the file descriptor set:
-	- **gcs:** - Indicates the file is stored in a Google Cloud Storage Bucket.
-	Example: "gcs:gs://path/to/your/file.pb".
-	- **url:** - **Experimental**. Indicates the file is stored on a remote server accessible via HTTPS.
-	Example: "url:https://path/to/your/file.pb".
 - `is_computed` (Boolean) Indicates if the column is a computed column.
 Computed columns are generated values based on other columns in the table.
 A common use case is to generate a column from a PROTO column field.
