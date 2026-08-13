@@ -115,39 +115,51 @@ func (p *googleProvider) Configure(ctx context.Context, req provider.ConfigureRe
 
 	tflog.Debug(ctx, "Initializing alis provider")
 
-	// Perform validation of provider configuration
-	//if config.Host.IsUnknown() {
-	//	resp.Diagnostics.AddAttributeError(
-	//		path.Root("host"),
-	//		"Unknown DB API Host",
-	//		"The provider cannot create the DB API client as there is an unknown configuration value for the DB API host. "+
-	//			"Either target apply the source of the value first, set the value statically in the configuration, or use the ALIS_OS_DB_HOST environment variable.",
-	//	)
-	//}
-	//
-	//if resp.Diagnostics.HasError() {
-	//	return
-	//}
+	// Unknown values would silently read as empty strings below (e.g. an
+	// unknown credentials attribute degrading to Application Default
+	// Credentials), so reject them up front per the framework guidance.
+	if config.Credentials.IsUnknown() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("credentials"),
+			"Unknown Google Credentials",
+			"The provider cannot configure Google Cloud clients because credentials is only known after apply. "+
+				"Target-apply the source of the value first, or set it statically in the configuration.",
+		)
+	}
+	if config.AccessToken.IsUnknown() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("access_token"),
+			"Unknown Google Access Token",
+			"The provider cannot configure Google Cloud clients because access_token is only known after apply. "+
+				"Target-apply the source of the value first, or set it statically in the configuration.",
+		)
+	}
+	if config.Project.IsUnknown() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("project"),
+			"Unknown Google Cloud Project",
+			"The provider cannot configure Google Cloud clients because project is only known after apply. "+
+				"Target-apply the source of the value first, or set it statically in the configuration.",
+		)
+	}
+	if resp.Diagnostics.HasError() {
+		return
+	}
 
-	// Default values to environment variables, but override
-	// with Terraform configuration value if set.
+	// Read configured values
 	credentials := config.Credentials.ValueString()
 	accessToken := config.AccessToken.ValueString()
 
 	// Get Google Cloud credentials
 	googleCreds, err := utils.GetGoogleCredentials(ctx, config.Project.ValueString(), credentials, accessToken)
 	if err != nil {
-		resp.Diagnostics.AddError("Failed to get Google Cloud credentials",
-			"Ensure that either credentials or access_token is specified or that the plugin is running in an ADC environment: "+err.Error())
+		resp.Diagnostics.AddError("Unable to Resolve Google Cloud Credentials",
+			"Ensure that either credentials or access_token is specified, or that the provider is running in an environment with Application Default Credentials: "+utils.ErrDetail(err))
 		return
 	}
 	if googleCreds == nil {
-		resp.Diagnostics.AddError("Failed to get Google Cloud credentials",
-			"Ensure that either credentials or access_token is specified or that the plugin is running in an ADC environment.")
-		return
-	}
-
-	if resp.Diagnostics.HasError() {
+		resp.Diagnostics.AddError("Missing Google Cloud Credentials",
+			"No credentials were resolved. Specify either credentials or access_token, or run the provider in an environment with Application Default Credentials.")
 		return
 	}
 

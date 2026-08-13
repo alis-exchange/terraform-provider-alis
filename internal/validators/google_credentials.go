@@ -34,12 +34,18 @@ func (v googleCredentialsValidator) ValidateString(ctx context.Context, request 
 
 	value := request.ConfigValue.ValueString()
 
-	// if this is a path and we can stat it, assume it's ok
+	// If this is a path and we can stat it, assume it's ok; unreadable or
+	// malformed file contents still fail later, at provider Configure.
 	if _, err := os.Stat(value); err == nil {
 		return
 	}
-	if _, err := googleoauth.CredentialsFromJSON(context.Background(), []byte(value)); err != nil {
-		response.Diagnostics.AddError("JSON credentials are not valid", err.Error())
+	if _, err := googleoauth.CredentialsFromJSON(ctx, []byte(value)); err != nil {
+		// Deliberately does not echo the value: credentials are secret.
+		response.Diagnostics.AddAttributeError(
+			request.Path,
+			"Invalid Google Credentials",
+			"Value is neither a path to an existing credentials file nor valid Google credentials JSON: "+err.Error(),
+		)
 	}
 }
 

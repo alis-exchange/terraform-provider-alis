@@ -150,7 +150,10 @@ func (r *tableIamBindingResource) Create(ctx context.Context, req resource.Creat
 		case "DELETE":
 			permissions = append(permissions, services.TablePolicyBindingPermission_DELETE)
 		default:
-			resp.Diagnostics.AddError(
+			// Unreachable while the schema validator enforces the same set of
+			// values; kept as a guard against the two drifting apart.
+			resp.Diagnostics.AddAttributeError(
+				path.Root("permissions"),
 				"Invalid Permission",
 				"Invalid permission ("+permission.ValueString()+") provided. Valid permissions are: `SELECT`, `INSERT`, `UPDATE`, `DELETE`.",
 			)
@@ -158,8 +161,10 @@ func (r *tableIamBindingResource) Create(ctx context.Context, req resource.Creat
 		}
 	}
 
+	tableName := names.TableName{Project: project, Instance: instance, Database: database, Table: table}.String()
+
 	binding, err := r.config.SpannerService.SetTableIamBinding(ctx,
-		names.TableName{Project: project, Instance: instance, Database: database, Table: table}.String(),
+		tableName,
 		&services.TablePolicyBinding{
 			Role:        role,
 			Permissions: permissions,
@@ -167,8 +172,8 @@ func (r *tableIamBindingResource) Create(ctx context.Context, req resource.Creat
 	)
 	if err != nil {
 		resp.Diagnostics.AddError(
-			"Error Updating IAM Policy",
-			"Could not update IAM Policy Binding for ("+role+") in Table ("+plan.Table.ValueString()+"): "+err.Error(),
+			"Error Creating Table IAM Binding",
+			"Could not create IAM binding for Role ("+role+") on Table ("+tableName+"): "+utils.ErrDetail(err),
 		)
 		return
 	}
@@ -207,10 +212,9 @@ func (r *tableIamBindingResource) Read(ctx context.Context, req resource.ReadReq
 	table := state.Table.ValueString()
 	role := state.Role.ValueString()
 
-	binding, err := r.config.SpannerService.GetTableIamBinding(ctx,
-		names.TableName{Project: project, Instance: instance, Database: database, Table: table}.String(),
-		role,
-	)
+	tableName := names.TableName{Project: project, Instance: instance, Database: database, Table: table}.String()
+
+	binding, err := r.config.SpannerService.GetTableIamBinding(ctx, tableName, role)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			resp.State.RemoveResource(ctx)
@@ -219,8 +223,8 @@ func (r *tableIamBindingResource) Read(ctx context.Context, req resource.ReadReq
 		}
 
 		resp.Diagnostics.AddError(
-			"Error Reading IAM Policy",
-			"Could not read IAM Policy for Table ("+state.Table.ValueString()+"): "+err.Error(),
+			"Error Reading Table IAM Binding",
+			"Could not read IAM binding for Role ("+role+") on Table ("+tableName+"): "+utils.ErrDetail(err),
 		)
 		return
 	}
@@ -278,7 +282,10 @@ func (r *tableIamBindingResource) Update(ctx context.Context, req resource.Updat
 		case "DELETE":
 			permissions = append(permissions, services.TablePolicyBindingPermission_DELETE)
 		default:
-			resp.Diagnostics.AddError(
+			// Unreachable while the schema validator enforces the same set of
+			// values; kept as a guard against the two drifting apart.
+			resp.Diagnostics.AddAttributeError(
+				path.Root("permissions"),
 				"Invalid Permission",
 				"Invalid permission ("+permission.ValueString()+") provided. Valid permissions are: `SELECT`, `INSERT`, `UPDATE`, `DELETE`.",
 			)
@@ -286,8 +293,10 @@ func (r *tableIamBindingResource) Update(ctx context.Context, req resource.Updat
 		}
 	}
 
+	tableName := names.TableName{Project: project, Instance: instance, Database: database, Table: table}.String()
+
 	binding, err := r.config.SpannerService.SetTableIamBinding(ctx,
-		names.TableName{Project: project, Instance: instance, Database: database, Table: table}.String(),
+		tableName,
 		&services.TablePolicyBinding{
 			Role:        role,
 			Permissions: permissions,
@@ -295,8 +304,8 @@ func (r *tableIamBindingResource) Update(ctx context.Context, req resource.Updat
 	)
 	if err != nil {
 		resp.Diagnostics.AddError(
-			"Error Updating IAM Policy",
-			"Could not update IAM Policy Binding for ("+role+") in Table ("+plan.Table.ValueString()+"): "+err.Error(),
+			"Error Updating Table IAM Binding",
+			"Could not update IAM binding for Role ("+role+") on Table ("+tableName+"): "+utils.ErrDetail(err),
 		)
 		return
 	}
@@ -343,14 +352,13 @@ func (r *tableIamBindingResource) Delete(ctx context.Context, req resource.Delet
 	table := state.Table.ValueString()
 	role := state.Role.ValueString()
 
-	err := r.config.SpannerService.DeleteTableIamBinding(ctx,
-		names.TableName{Project: project, Instance: instance, Database: database, Table: table}.String(),
-		role,
-	)
+	tableName := names.TableName{Project: project, Instance: instance, Database: database, Table: table}.String()
+
+	err := r.config.SpannerService.DeleteTableIamBinding(ctx, tableName, role)
 	if err != nil {
 		resp.Diagnostics.AddError(
-			"Error Deleting IAM Policy",
-			"Could not delete IAM Policy Binding for ("+role+") in Table ("+state.Table.ValueString()+"): "+err.Error(),
+			"Error Deleting Table IAM Binding",
+			"Could not delete IAM binding for Role ("+role+") on Table ("+tableName+"): "+utils.ErrDetail(err),
 		)
 		return
 	}
@@ -361,7 +369,7 @@ func (r *tableIamBindingResource) ImportState(ctx context.Context, req resource.
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Invalid Import ID",
-			"Import ID must be in the format projects/{project}/instances/{instance}/databases/{database}/tables/{table}/tableRoles/{role}: "+err.Error(),
+			"Import ID ("+req.ID+") must be in the format projects/{project}/instances/{instance}/databases/{database}/tables/{table}/tableRoles/{role}: "+err.Error(),
 		)
 		return
 	}
@@ -369,7 +377,7 @@ func (r *tableIamBindingResource) ImportState(ctx context.Context, req resource.
 	if !regexp.MustCompile(utils.SpannerGoogleSqlTableRoleNameRegex).MatchString(req.ID) && !regexp.MustCompile(utils.SpannerPostgresSqlTableRoleNameRegex).MatchString(req.ID) {
 		resp.Diagnostics.AddError(
 			"Invalid Import ID",
-			"Import ID must be in the format projects/{project}/instances/{instance}/databases/{database}/tables/{table}/tableRoles/{role}",
+			"Import ID ("+req.ID+") contains an invalid project, instance, database, table or role ID. Expected format: projects/{project}/instances/{instance}/databases/{database}/tables/{table}/tableRoles/{role}.",
 		)
 		return
 	}

@@ -2,8 +2,8 @@ package validators
 
 import (
 	"context"
-	"fmt"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/helpers/validatordiag"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 )
 
@@ -34,7 +34,11 @@ func (v stringNotEmptyValidator) ValidateString(ctx context.Context, request val
 	value := request.ConfigValue.ValueString()
 
 	if value == "" {
-		response.Diagnostics.AddError("expected a non-empty string", fmt.Sprintf("%s was set to `%s`", request.Path, value))
+		response.Diagnostics.Append(validatordiag.InvalidAttributeValueLengthDiagnostic(
+			request.Path,
+			v.Description(ctx),
+			value,
+		))
 	}
 }
 

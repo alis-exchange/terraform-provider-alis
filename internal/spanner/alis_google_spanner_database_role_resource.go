@@ -5,6 +5,7 @@ import (
 
 	"terraform-provider-alis/internal"
 	"terraform-provider-alis/internal/spanner/names"
+	"terraform-provider-alis/internal/utils"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -114,14 +115,14 @@ func (r *databaseRoleResource) Create(ctx context.Context, req resource.CreateRe
 	database := plan.Database.ValueString()
 	role := plan.Role.ValueString()
 
-	existingRole, err := r.config.SpannerService.GetDatabaseRole(
-		ctx,
-		names.DatabaseRoleName{Project: project, Instance: instance, Database: database, Role: role}.String(),
-	)
+	databaseName := names.DatabaseName{Project: project, Instance: instance, Database: database}.String()
+	roleName := names.DatabaseRoleName{Project: project, Instance: instance, Database: database, Role: role}.String()
+
+	existingRole, err := r.config.SpannerService.GetDatabaseRole(ctx, roleName)
 	if err != nil && status.Code(err) != codes.NotFound {
 		resp.Diagnostics.AddError(
-			"Error Creating Database Role",
-			"Could not read Role ("+role+") in Database ("+database+"): "+err.Error(),
+			"Error Checking Existing Database Role",
+			"Could not verify whether Role ("+roleName+") already exists: "+utils.ErrDetail(err),
 		)
 		return
 	}
@@ -132,15 +133,11 @@ func (r *databaseRoleResource) Create(ctx context.Context, req resource.CreateRe
 		return
 	}
 
-	_, err = r.config.SpannerService.CreateDatabaseRole(
-		ctx,
-		names.DatabaseName{Project: project, Instance: instance, Database: database}.String(),
-		role,
-	)
+	_, err = r.config.SpannerService.CreateDatabaseRole(ctx, databaseName, role)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Creating Database Role",
-			"Could not read create Role ("+plan.Role.ValueString()+") in Database ("+plan.Database.ValueString()+"): "+err.Error(),
+			"Could not create Role ("+role+") in Database ("+databaseName+"): "+utils.ErrDetail(err),
 		)
 		return
 	}
@@ -169,10 +166,9 @@ func (r *databaseRoleResource) Read(ctx context.Context, req resource.ReadReques
 	database := state.Database.ValueString()
 	role := state.Role.ValueString()
 
-	_, err := r.config.SpannerService.GetDatabaseRole(
-		ctx,
-		names.DatabaseRoleName{Project: project, Instance: instance, Database: database, Role: role}.String(),
-	)
+	roleName := names.DatabaseRoleName{Project: project, Instance: instance, Database: database, Role: role}.String()
+
+	_, err := r.config.SpannerService.GetDatabaseRole(ctx, roleName)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			resp.State.RemoveResource(ctx)
@@ -182,7 +178,7 @@ func (r *databaseRoleResource) Read(ctx context.Context, req resource.ReadReques
 
 		resp.Diagnostics.AddError(
 			"Error Reading Database Role",
-			"Could not read Role ("+role+") in Database ("+database+"): "+err.Error(),
+			"Could not read Role ("+roleName+"): "+utils.ErrDetail(err),
 		)
 		return
 	}
@@ -239,11 +235,13 @@ func (r *databaseRoleResource) Delete(ctx context.Context, req resource.DeleteRe
 	database := state.Database.ValueString()
 	role := state.Role.ValueString()
 
-	err := r.config.SpannerService.DeleteDatabaseRole(ctx, names.DatabaseRoleName{Project: project, Instance: instance, Database: database, Role: role}.String())
+	roleName := names.DatabaseRoleName{Project: project, Instance: instance, Database: database, Role: role}.String()
+
+	err := r.config.SpannerService.DeleteDatabaseRole(ctx, roleName)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Deleting Database Role",
-			"Could not delete Role ("+role+") in Database ("+database+"): "+err.Error(),
+			"Could not delete Role ("+roleName+"): "+utils.ErrDetail(err),
 		)
 		return
 	}
@@ -254,7 +252,7 @@ func (r *databaseRoleResource) ImportState(ctx context.Context, req resource.Imp
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Invalid Import ID",
-			"Import ID must be in the format projects/{project}/instances/{instance}/databases/{database}/databaseRoles/{role}: "+err.Error(),
+			"Import ID ("+req.ID+") must be in the format projects/{project}/instances/{instance}/databases/{database}/databaseRoles/{role}: "+err.Error(),
 		)
 		return
 	}

@@ -2,7 +2,6 @@ package spanner
 
 import (
 	"context"
-	"fmt"
 	"regexp"
 
 	"terraform-provider-alis/internal"
@@ -23,7 +22,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -193,9 +191,6 @@ func (r *spannerTableIndexResource) Create(ctx context.Context, req resource.Cre
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
-		tflog.Error(ctx,
-			fmt.Sprintf("Error reading state: %v", resp.Diagnostics),
-		)
 		return
 	}
 
@@ -223,11 +218,10 @@ func (r *spannerTableIndexResource) Create(ctx context.Context, req resource.Cre
 
 	columns := make([]spannerTableIndexColumn, 0, len(plan.Columns.Elements()))
 	d := plan.Columns.ElementsAs(ctx, &columns, false)
-	if d.HasError() {
-		tflog.Error(ctx, fmt.Sprintf("Error reading index columns: %v", d))
+	resp.Diagnostics.Append(d...)
+	if resp.Diagnostics.HasError() {
 		return
 	}
-	diags.Append(d...)
 
 	for _, column := range columns {
 		order := services.SpannerTableIndexColumnOrder_ASC
@@ -247,15 +241,14 @@ func (r *spannerTableIndexResource) Create(ctx context.Context, req resource.Cre
 		index.Unique = wrapperspb.Bool(plan.Unique.ValueBool())
 	}
 
-	// Create table
-	_, err := r.config.SpannerService.CreateSpannerTableIndex(ctx,
-		names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String(),
-		index,
-	)
+	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String()
+
+	// Create index
+	_, err := r.config.SpannerService.CreateSpannerTableIndex(ctx, tableName, index)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Creating Index",
-			"Could not create Index ("+plan.Name.ValueString()+"): "+err.Error(),
+			"Could not create Index ("+indexName+") on Table ("+tableName+"): "+utils.ErrDetail(err),
 		)
 		return
 	}
@@ -267,9 +260,6 @@ func (r *spannerTableIndexResource) Create(ctx context.Context, req resource.Cre
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
-		tflog.Error(ctx,
-			fmt.Sprintf("Error reading state: %v", resp.Diagnostics),
-		)
 		return
 	}
 }
@@ -281,9 +271,6 @@ func (r *spannerTableIndexResource) Read(ctx context.Context, req resource.ReadR
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
-		tflog.Error(ctx,
-			fmt.Sprintf("Error reading state: %v", resp.Diagnostics),
-		)
 		return
 	}
 
@@ -308,7 +295,7 @@ func (r *spannerTableIndexResource) Read(ctx context.Context, req resource.ReadR
 
 		resp.Diagnostics.AddError(
 			"Error Reading Index",
-			"Could not read Index ("+state.Name.ValueString()+"): "+err.Error(),
+			"Could not read Index ("+indexName+") on Table ("+names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String()+"): "+utils.ErrDetail(err),
 		)
 		return
 	}
@@ -332,16 +319,16 @@ func (r *spannerTableIndexResource) Read(ctx context.Context, req resource.ReadR
 	generatedList, d := types.ListValueFrom(ctx, types.ObjectType{
 		AttrTypes: spannerTableIndexColumn{}.attrTypes(),
 	}, columns)
-	diags.Append(d...)
+	resp.Diagnostics.Append(d...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 	state.Columns = generatedList
 
 	// Set refreshed state
 	diags = resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
-		tflog.Error(ctx,
-			fmt.Sprintf("Error reading state: %v", resp.Diagnostics),
-		)
 		return
 	}
 }
@@ -398,15 +385,14 @@ func (r *spannerTableIndexResource) Delete(ctx context.Context, req resource.Del
 	tableId := state.Table.ValueString()
 	indexName := state.Name.ValueString()
 
-	// Delete existing database
-	_, err := r.config.SpannerService.DeleteSpannerTableIndex(ctx,
-		names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String(),
-		indexName,
-	)
+	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String()
+
+	// Delete existing index
+	_, err := r.config.SpannerService.DeleteSpannerTableIndex(ctx, tableName, indexName)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Deleting Index",
-			"Could not delete Index ("+state.Name.ValueString()+"): "+err.Error(),
+			"Could not delete Index ("+indexName+") on Table ("+tableName+"): "+utils.ErrDetail(err),
 		)
 		return
 	}
@@ -417,7 +403,7 @@ func (r *spannerTableIndexResource) ImportState(ctx context.Context, req resourc
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Invalid Import ID",
-			"Import ID must be in the format projects/{project}/instances/{instance}/databases/{database}/tables/{table}/indexes/{index}: "+err.Error(),
+			"Import ID ("+req.ID+") must be in the format projects/{project}/instances/{instance}/databases/{database}/tables/{table}/indexes/{index}: "+err.Error(),
 		)
 		return
 	}
@@ -425,7 +411,7 @@ func (r *spannerTableIndexResource) ImportState(ctx context.Context, req resourc
 	if !regexp.MustCompile(utils.SpannerGoogleSqlTableIndexNameRegex).MatchString(req.ID) && !regexp.MustCompile(utils.SpannerPostgresSqlTableIndexNameRegex).MatchString(req.ID) {
 		resp.Diagnostics.AddError(
 			"Invalid Import ID",
-			"Import ID must be in the format projects/{project}/instances/{instance}/databases/{database}/tables/{table}/indexes/{index}",
+			"Import ID ("+req.ID+") contains an invalid project, instance, database, table or index ID. Expected format: projects/{project}/instances/{instance}/databases/{database}/tables/{table}/indexes/{index}.",
 		)
 		return
 	}

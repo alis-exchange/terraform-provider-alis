@@ -198,13 +198,13 @@ func (r *databaseSequenceResource) Create(ctx context.Context, req resource.Crea
 	databaseId := plan.Database.ValueString()
 	sequenceId := plan.Sequence.ValueString()
 
-	existingSequence, err := r.config.SpannerService.GetSpannerSequence(ctx,
-		names.SequenceName{Project: project, Instance: instance, Database: databaseId, Sequence: sequenceId}.String(),
-	)
+	sequenceName := names.SequenceName{Project: project, Instance: instance, Database: databaseId, Sequence: sequenceId}.String()
+
+	existingSequence, err := r.config.SpannerService.GetSpannerSequence(ctx, sequenceName)
 	if err != nil && status.Code(err) != codes.NotFound {
 		resp.Diagnostics.AddError(
-			"Error Creating Database Sequence",
-			"Could not read Sequence ("+sequenceId+") in Database ("+databaseId+"): "+err.Error(),
+			"Error Checking Existing Database Sequence",
+			"Could not verify whether Sequence ("+sequenceName+") already exists: "+utils.ErrDetail(err),
 		)
 		return
 	}
@@ -217,7 +217,7 @@ func (r *databaseSequenceResource) Create(ctx context.Context, req resource.Crea
 
 	// Create sequence from plan
 	sequence := &sequenceschema.SpannerSequence{
-		Name: names.SequenceName{Project: project, Instance: instance, Database: databaseId, Sequence: sequenceId}.String(),
+		Name: sequenceName,
 	}
 
 	// Populate options if any
@@ -254,7 +254,7 @@ func (r *databaseSequenceResource) Create(ctx context.Context, req resource.Crea
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Creating Database Sequence",
-			"Could not read create Sequence ("+sequenceId+") in Database ("+databaseId+"): "+err.Error(),
+			"Could not create Sequence ("+sequenceName+"): "+utils.ErrDetail(err),
 		)
 		return
 	}
@@ -283,9 +283,9 @@ func (r *databaseSequenceResource) Read(ctx context.Context, req resource.ReadRe
 	databaseId := state.Database.ValueString()
 	sequenceId := state.Sequence.ValueString()
 
-	sequence, err := r.config.SpannerService.GetSpannerSequence(ctx,
-		names.SequenceName{Project: project, Instance: instance, Database: databaseId, Sequence: sequenceId}.String(),
-	)
+	sequenceName := names.SequenceName{Project: project, Instance: instance, Database: databaseId, Sequence: sequenceId}.String()
+
+	sequence, err := r.config.SpannerService.GetSpannerSequence(ctx, sequenceName)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			resp.State.RemoveResource(ctx)
@@ -295,7 +295,7 @@ func (r *databaseSequenceResource) Read(ctx context.Context, req resource.ReadRe
 
 		resp.Diagnostics.AddError(
 			"Error Reading Database Sequence",
-			"Could not read Sequence ("+sequenceId+") in Database ("+databaseId+"): "+err.Error(),
+			"Could not read Sequence ("+sequenceName+"): "+utils.ErrDetail(err),
 		)
 		return
 	}
@@ -311,9 +311,10 @@ func (r *databaseSequenceResource) Read(ctx context.Context, req resource.ReadRe
 		}
 
 		if sequence.Options.SkipRange != nil {
+			// GetValue is nil-safe; either bound may be unset.
 			options.SkipRange = &spannerSequenceSkipRange{
-				Min: types.Int64Value(sequence.Options.SkipRange.Min.Value),
-				Max: types.Int64Value(sequence.Options.SkipRange.Max.Value),
+				Min: types.Int64Value(sequence.Options.SkipRange.Min.GetValue()),
+				Max: types.Int64Value(sequence.Options.SkipRange.Max.GetValue()),
 			}
 		}
 
@@ -355,9 +356,11 @@ func (r *databaseSequenceResource) Update(ctx context.Context, req resource.Upda
 	databaseId := plan.Database.ValueString()
 	sequenceId := plan.Sequence.ValueString()
 
+	sequenceName := names.SequenceName{Project: project, Instance: instanceName, Database: databaseId, Sequence: sequenceId}.String()
+
 	// Generate sequence from plan
 	sequence := &sequenceschema.SpannerSequence{
-		Name: names.SequenceName{Project: project, Instance: instanceName, Database: databaseId, Sequence: sequenceId}.String(),
+		Name: sequenceName,
 	}
 
 	// Populate options if any
@@ -391,7 +394,7 @@ func (r *databaseSequenceResource) Update(ctx context.Context, req resource.Upda
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Updating Database Sequence",
-			"Could not update Sequence ("+sequenceId+") in Database ("+databaseId+"): "+err.Error(),
+			"Could not update Sequence ("+sequenceName+"): "+utils.ErrDetail(err),
 		)
 		return
 	}
@@ -431,11 +434,13 @@ func (r *databaseSequenceResource) Delete(ctx context.Context, req resource.Dele
 	database := state.Database.ValueString()
 	sequenceId := state.Sequence.ValueString()
 
-	err := r.config.SpannerService.DeleteSpannerSequence(ctx, names.SequenceName{Project: project, Instance: instance, Database: database, Sequence: sequenceId}.String())
+	sequenceName := names.SequenceName{Project: project, Instance: instance, Database: database, Sequence: sequenceId}.String()
+
+	err := r.config.SpannerService.DeleteSpannerSequence(ctx, sequenceName)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Deleting Database Sequence",
-			"Could not delete Sequence ("+sequenceId+") in Database ("+database+"): "+err.Error(),
+			"Could not delete Sequence ("+sequenceName+"): "+utils.ErrDetail(err),
 		)
 		return
 	}
@@ -448,7 +453,7 @@ func (r *databaseSequenceResource) ImportState(ctx context.Context, req resource
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Invalid Import ID",
-			"Import ID must be in the format projects/{project}/instances/{instance}/databases/{database}/sequences/{sequence}: "+err.Error(),
+			"Import ID ("+req.ID+") must be in the format projects/{project}/instances/{instance}/databases/{database}/sequences/{sequence}: "+err.Error(),
 		)
 		return
 	}

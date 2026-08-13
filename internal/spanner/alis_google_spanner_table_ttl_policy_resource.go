@@ -2,7 +2,6 @@ package spanner
 
 import (
 	"context"
-	"fmt"
 	"regexp"
 
 	"terraform-provider-alis/internal"
@@ -20,7 +19,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -134,9 +132,6 @@ func (r *spannerTableTtlPolicyResource) Create(ctx context.Context, req resource
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
-		tflog.Error(ctx,
-			fmt.Sprintf("Error reading state: %v", resp.Diagnostics),
-		)
 		return
 	}
 
@@ -160,15 +155,14 @@ func (r *spannerTableTtlPolicyResource) Create(ctx context.Context, req resource
 		Duration: wrapperspb.Int64(plan.Ttl.ValueInt64()),
 	}
 
+	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String()
+
 	// Create row deletion policy
-	_, err := r.config.SpannerService.CreateSpannerTableRowDeletionPolicy(ctx,
-		names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String(),
-		policy,
-	)
+	_, err := r.config.SpannerService.CreateSpannerTableRowDeletionPolicy(ctx, tableName, policy)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Creating TTL Policy",
-			"Could not create TTL Policy: "+err.Error(),
+			"Could not create TTL Policy on Table ("+tableName+"): "+utils.ErrDetail(err),
 		)
 		return
 	}
@@ -177,9 +171,6 @@ func (r *spannerTableTtlPolicyResource) Create(ctx context.Context, req resource
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
-		tflog.Error(ctx,
-			fmt.Sprintf("Error reading state: %v", resp.Diagnostics),
-		)
 		return
 	}
 }
@@ -191,9 +182,6 @@ func (r *spannerTableTtlPolicyResource) Read(ctx context.Context, req resource.R
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
-		tflog.Error(ctx,
-			fmt.Sprintf("Error reading state: %v", resp.Diagnostics),
-		)
 		return
 	}
 
@@ -203,8 +191,10 @@ func (r *spannerTableTtlPolicyResource) Read(ctx context.Context, req resource.R
 	databaseId := state.Database.ValueString()
 	tableId := state.Table.ValueString()
 
+	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String()
+
 	// Get policy from API
-	policy, err := r.config.SpannerService.GetSpannerTableRowDeletionPolicy(ctx, names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String())
+	policy, err := r.config.SpannerService.GetSpannerTableRowDeletionPolicy(ctx, tableName)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			resp.State.RemoveResource(ctx)
@@ -214,7 +204,7 @@ func (r *spannerTableTtlPolicyResource) Read(ctx context.Context, req resource.R
 
 		resp.Diagnostics.AddError(
 			"Error Reading TTL Policy",
-			"Could not read TTL Policy: "+err.Error(),
+			"Could not read TTL Policy on Table ("+tableName+"): "+utils.ErrDetail(err),
 		)
 		return
 	}
@@ -229,9 +219,6 @@ func (r *spannerTableTtlPolicyResource) Read(ctx context.Context, req resource.R
 	diags = resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
-		tflog.Error(ctx,
-			fmt.Sprintf("Error reading state: %v", resp.Diagnostics),
-		)
 		return
 	}
 }
@@ -265,15 +252,14 @@ func (r *spannerTableTtlPolicyResource) Update(ctx context.Context, req resource
 		Duration: wrapperspb.Int64(plan.Ttl.ValueInt64()),
 	}
 
+	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String()
+
 	// Update row deletion policy
-	_, err := r.config.SpannerService.UpdateSpannerTableRowDeletionPolicy(ctx,
-		names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String(),
-		policy,
-	)
+	_, err := r.config.SpannerService.UpdateSpannerTableRowDeletionPolicy(ctx, tableName, policy)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Updating TTL Policy",
-			"Could not update TTL Policy: "+err.Error(),
+			"Could not update TTL Policy on Table ("+tableName+"): "+utils.ErrDetail(err),
 		)
 		return
 	}
@@ -310,12 +296,14 @@ func (r *spannerTableTtlPolicyResource) Delete(ctx context.Context, req resource
 	databaseId := state.Database.ValueString()
 	tableId := state.Table.ValueString()
 
-	// Delete existing database
-	err := r.config.SpannerService.DeleteSpannerTableRowDeletionPolicy(ctx, names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String())
+	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String()
+
+	// Delete existing row deletion policy
+	err := r.config.SpannerService.DeleteSpannerTableRowDeletionPolicy(ctx, tableName)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Deleting TTL Policy",
-			"Could not delete TTL Policy: "+err.Error(),
+			"Could not delete TTL Policy on Table ("+tableName+"): "+utils.ErrDetail(err),
 		)
 		return
 	}
@@ -326,7 +314,7 @@ func (r *spannerTableTtlPolicyResource) ImportState(ctx context.Context, req res
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Invalid Import ID",
-			"Import ID must be in the format projects/{project}/instances/{instance}/databases/{database}/tables/{table}: "+err.Error(),
+			"Import ID ("+req.ID+") must be in the format projects/{project}/instances/{instance}/databases/{database}/tables/{table}: "+err.Error(),
 		)
 		return
 	}
@@ -334,7 +322,7 @@ func (r *spannerTableTtlPolicyResource) ImportState(ctx context.Context, req res
 	if !regexp.MustCompile(utils.SpannerGoogleSqlTableNameRegex).MatchString(req.ID) && !regexp.MustCompile(utils.SpannerPostgresSqlTableNameRegex).MatchString(req.ID) {
 		resp.Diagnostics.AddError(
 			"Invalid Import ID",
-			"Import ID must be in the format projects/{project}/instances/{instance}/databases/{database}/tables/{table}",
+			"Import ID ("+req.ID+") contains an invalid project, instance, database or table ID. Expected format: projects/{project}/instances/{instance}/databases/{database}/tables/{table}.",
 		)
 		return
 	}

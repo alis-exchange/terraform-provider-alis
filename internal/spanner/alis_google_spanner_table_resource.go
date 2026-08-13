@@ -2,7 +2,6 @@ package spanner
 
 import (
 	"context"
-	"fmt"
 	"regexp"
 
 	"terraform-provider-alis/internal"
@@ -24,7 +23,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
@@ -312,9 +310,6 @@ func (r *spannerTableResource) Create(ctx context.Context, req resource.CreateRe
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
-		tflog.Error(ctx,
-			fmt.Sprintf("Error reading state: %v", resp.Diagnostics),
-		)
 		return
 	}
 
@@ -340,11 +335,13 @@ func (r *spannerTableResource) Create(ctx context.Context, req resource.CreateRe
 	databaseId := plan.Database.ValueString()
 	tableId := plan.Name.ValueString()
 
+	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String()
+
 	// Populate schema if any
 	if plan.Schema != nil {
 		columns, d := tableColumnsToSchema(ctx, plan.Schema.Columns)
-		if d.HasError() {
-			tflog.Error(ctx, fmt.Sprintf("Error reading columns: %v", d))
+		resp.Diagnostics.Append(d...)
+		if resp.Diagnostics.HasError() {
 			return
 		}
 		table.Schema = &tableschema.SpannerTableSchema{
@@ -364,7 +361,7 @@ func (r *spannerTableResource) Create(ctx context.Context, req resource.CreateRe
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Creating Table",
-			"Could not create Table ("+plan.Name.ValueString()+"): "+err.Error(),
+			"Could not create Table ("+tableName+"): "+utils.ErrDetail(err),
 		)
 		return
 	}
@@ -376,9 +373,6 @@ func (r *spannerTableResource) Create(ctx context.Context, req resource.CreateRe
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
-		tflog.Error(ctx,
-			fmt.Sprintf("Error reading state: %v", resp.Diagnostics),
-		)
 		return
 	}
 }
@@ -390,9 +384,6 @@ func (r *spannerTableResource) Read(ctx context.Context, req resource.ReadReques
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
-		tflog.Error(ctx,
-			fmt.Sprintf("Error reading state: %v", resp.Diagnostics),
-		)
 		return
 	}
 
@@ -402,10 +393,10 @@ func (r *spannerTableResource) Read(ctx context.Context, req resource.ReadReques
 	databaseId := state.Database.ValueString()
 	tableId := state.Name.ValueString()
 
+	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String()
+
 	// Get table from API
-	table, err := r.config.SpannerService.GetSpannerTable(ctx,
-		names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String(),
-	)
+	table, err := r.config.SpannerService.GetSpannerTable(ctx, tableName)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			resp.State.RemoveResource(ctx)
@@ -415,7 +406,7 @@ func (r *spannerTableResource) Read(ctx context.Context, req resource.ReadReques
 
 		resp.Diagnostics.AddError(
 			"Error Reading Table",
-			"Could not read Table ("+state.Name.ValueString()+"): "+err.Error(),
+			"Could not read Table ("+tableName+"): "+utils.ErrDetail(err),
 		)
 		return
 	}
@@ -433,15 +424,18 @@ func (r *spannerTableResource) Read(ctx context.Context, req resource.ReadReques
 			// booleans the config omitted.
 			if state.Schema != nil {
 				priorColumns, d := tableColumnsToSchema(ctx, state.Schema.Columns)
-				diags.Append(d...)
-				if !d.HasError() {
-					tableschema.PreserveUnsetBooleans(priorColumns, table.Schema.Columns)
+				resp.Diagnostics.Append(d...)
+				if resp.Diagnostics.HasError() {
+					return
 				}
+				tableschema.PreserveUnsetBooleans(priorColumns, table.Schema.Columns)
 			}
 
 			generatedList, d := tableColumnsToModel(ctx, table.Schema.Columns)
-			diags.Append(d...)
-
+			resp.Diagnostics.Append(d...)
+			if resp.Diagnostics.HasError() {
+				return
+			}
 			s.Columns = generatedList
 		}
 
@@ -457,9 +451,6 @@ func (r *spannerTableResource) Read(ctx context.Context, req resource.ReadReques
 	diags = resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
-		tflog.Error(ctx,
-			fmt.Sprintf("Error reading state: %v", resp.Diagnostics),
-		)
 		return
 	}
 }
@@ -492,8 +483,9 @@ func (r *spannerTableResource) Update(ctx context.Context, req resource.UpdateRe
 	tableId := plan.Name.ValueString()
 
 	// Generate table from plan
+	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String()
 	table := &tableschema.SpannerTable{
-		Name: names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String(),
+		Name: tableName,
 		Schema: &tableschema.SpannerTableSchema{
 			Columns: nil,
 		},
@@ -502,8 +494,8 @@ func (r *spannerTableResource) Update(ctx context.Context, req resource.UpdateRe
 	// Populate schema if any
 	if plan.Schema != nil {
 		columns, d := tableColumnsToSchema(ctx, plan.Schema.Columns)
-		if d.HasError() {
-			tflog.Error(ctx, fmt.Sprintf("Error reading columns: %v", d))
+		resp.Diagnostics.Append(d...)
+		if resp.Diagnostics.HasError() {
 			return
 		}
 		table.Schema = &tableschema.SpannerTableSchema{
@@ -520,8 +512,8 @@ func (r *spannerTableResource) Update(ctx context.Context, req resource.UpdateRe
 	}, false)
 	if err != nil {
 		resp.Diagnostics.AddError(
-			"Error Creating Table",
-			"Could not create Table ("+plan.Name.ValueString()+"): "+err.Error(),
+			"Error Updating Table",
+			"Could not update Table ("+tableName+"): "+utils.ErrDetail(err),
 		)
 		return
 	}
@@ -561,21 +553,24 @@ func (r *spannerTableResource) Delete(ctx context.Context, req resource.DeleteRe
 	databaseId := state.Database.ValueString()
 	tableId := state.Name.ValueString()
 
+	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String()
+
 	// Check if prevent_destroy is set to true
 	if state.PreventDestroy.ValueBool() {
-		resp.Diagnostics.AddError(
+		resp.Diagnostics.AddAttributeError(
+			path.Root("prevent_destroy"),
 			"Error Deleting Table",
-			"Table ("+state.Name.ValueString()+") is protected from deletion by terraform configuration. Set `prevent_destroy` to false.",
+			"Table ("+tableName+") is protected from deletion by the Terraform configuration. Set `prevent_destroy` to false to allow deletion.",
 		)
 		return
 	}
 
-	// Delete existing database
-	_, err := r.config.SpannerService.DeleteSpannerTable(ctx, names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String())
+	// Delete existing table
+	_, err := r.config.SpannerService.DeleteSpannerTable(ctx, tableName)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Deleting Table",
-			"Could not delete Table ("+state.Name.ValueString()+"): "+err.Error(),
+			"Could not delete Table ("+tableName+"): "+utils.ErrDetail(err),
 		)
 		return
 	}
@@ -586,15 +581,15 @@ func (r *spannerTableResource) ImportState(ctx context.Context, req resource.Imp
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Invalid Import ID",
-			"Import ID must be in the format projects/{project}/instances/{instance}/databases/{database}/tables/{table}: "+err.Error(),
+			"Import ID ("+req.ID+") must be in the format projects/{project}/instances/{instance}/databases/{database}/tables/{table}: "+err.Error(),
 		)
 		return
 	}
 
-	if !regexp.MustCompile(utils.SpannerGoogleSqlTableIdRegex).MatchString(req.ID) && !regexp.MustCompile(utils.SpannerPostgresSqlTableIdRegex).MatchString(req.ID) {
+	if !regexp.MustCompile(utils.SpannerGoogleSqlTableNameRegex).MatchString(req.ID) && !regexp.MustCompile(utils.SpannerPostgresSqlTableNameRegex).MatchString(req.ID) {
 		resp.Diagnostics.AddError(
 			"Invalid Import ID",
-			"Import ID must be a valid Spanner Table ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions",
+			"Import ID ("+req.ID+") contains an invalid project, instance, database or table ID. See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions for table naming conventions.",
 		)
 		return
 	}
@@ -647,7 +642,7 @@ func (r *spannerTableResource) ValidateConfig(ctx context.Context, req resource.
 	// Check if at least one column is provided
 	if data.Schema.Columns.IsNull() || len(data.Schema.Columns.Elements()) == 0 {
 		resp.Diagnostics.AddAttributeWarning(
-			path.Root("schema.columns"),
+			path.Root("schema").AtName("columns"),
 			"Missing Column Configuration",
 			"Expected at least one column to be configured. "+
 				"The resource may return unexpected results.",
@@ -658,7 +653,7 @@ func (r *spannerTableResource) ValidateConfig(ctx context.Context, req resource.
 	columns := make([]spannerTableColumn, 0, len(data.Schema.Columns.Elements()))
 	d := data.Schema.Columns.ElementsAs(ctx, &columns, false)
 	resp.Diagnostics.Append(d...)
-	if d.HasError() {
+	if resp.Diagnostics.HasError() {
 		return
 	}
 
@@ -669,7 +664,7 @@ func (r *spannerTableResource) ValidateConfig(ctx context.Context, req resource.
 		if column.Type.ValueString() == "PROTO" {
 			if column.ProtoPackage.IsNull() {
 				resp.Diagnostics.AddAttributeWarning(
-					path.Root("schema.columns").AtListIndex(i).AtName("proto_package"),
+					path.Root("schema").AtName("columns").AtListIndex(i).AtName("proto_package"),
 					"Missing Column Configuration",
 					"Expected proto_package to be configured for columns of type PROTO. "+
 						"The resource may return unexpected results.",
@@ -681,7 +676,7 @@ func (r *spannerTableResource) ValidateConfig(ctx context.Context, req resource.
 		if !column.IsComputed.IsNull() && column.IsComputed.ValueBool() {
 			if column.ComputationDdl.IsNull() || column.ComputationDdl.ValueString() == "" {
 				resp.Diagnostics.AddAttributeWarning(
-					path.Root("schema.columns").AtListIndex(i).AtName("computation_ddl"),
+					path.Root("schema").AtName("columns").AtListIndex(i).AtName("computation_ddl"),
 					"Missing Column Configuration",
 					"Expected computation_ddl to be configured for computed columns. "+
 						"The resource may return unexpected results.",
@@ -689,8 +684,6 @@ func (r *spannerTableResource) ValidateConfig(ctx context.Context, req resource.
 			}
 		}
 	}
-
-	return
 }
 
 func (r *spannerTableResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {

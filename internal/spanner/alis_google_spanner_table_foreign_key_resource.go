@@ -2,7 +2,6 @@ package spanner
 
 import (
 	"context"
-	"fmt"
 	"regexp"
 
 	"terraform-provider-alis/internal"
@@ -20,7 +19,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -186,9 +184,6 @@ func (r *spannerTableForeignKeyResource) Create(ctx context.Context, req resourc
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
-		tflog.Error(ctx,
-			fmt.Sprintf("Error reading state: %v", resp.Diagnostics),
-		)
 		return
 	}
 
@@ -215,15 +210,14 @@ func (r *spannerTableForeignKeyResource) Create(ctx context.Context, req resourc
 		OnDelete:         tableschema.SpannerTableConstraintActionFromString(plan.OnDelete.ValueString()),
 	}
 
-	// Create row deletion policy
-	_, err := r.config.SpannerService.CreateSpannerTableForeignKeyConstraint(ctx,
-		names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String(),
-		constraint,
-	)
+	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String()
+
+	// Create foreign key constraint
+	_, err := r.config.SpannerService.CreateSpannerTableForeignKeyConstraint(ctx, tableName, constraint)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Creating Foreign Key Constraint",
-			"Could not create Foreign Key Constraint: "+err.Error(),
+			"Could not create Foreign Key Constraint ("+constraint.Name+") on Table ("+tableName+"): "+utils.ErrDetail(err),
 		)
 		return
 	}
@@ -232,9 +226,6 @@ func (r *spannerTableForeignKeyResource) Create(ctx context.Context, req resourc
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
-		tflog.Error(ctx,
-			fmt.Sprintf("Error reading state: %v", resp.Diagnostics),
-		)
 		return
 	}
 }
@@ -246,9 +237,6 @@ func (r *spannerTableForeignKeyResource) Read(ctx context.Context, req resource.
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
-		tflog.Error(ctx,
-			fmt.Sprintf("Error reading state: %v", resp.Diagnostics),
-		)
 		return
 	}
 
@@ -259,8 +247,10 @@ func (r *spannerTableForeignKeyResource) Read(ctx context.Context, req resource.
 	tableId := state.Table.ValueString()
 	name := state.Name.ValueString()
 
-	// Get policy from API
-	constraint, err := r.config.SpannerService.GetSpannerTableForeignKeyConstraint(ctx, names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String(), name)
+	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String()
+
+	// Get constraint from API
+	constraint, err := r.config.SpannerService.GetSpannerTableForeignKeyConstraint(ctx, tableName, name)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			resp.State.RemoveResource(ctx)
@@ -270,7 +260,7 @@ func (r *spannerTableForeignKeyResource) Read(ctx context.Context, req resource.
 
 		resp.Diagnostics.AddError(
 			"Error Reading Foreign Key Constraint",
-			"Could not read Foreign Key Constraint: "+err.Error(),
+			"Could not read Foreign Key Constraint ("+name+") on Table ("+tableName+"): "+utils.ErrDetail(err),
 		)
 		return
 	}
@@ -286,9 +276,6 @@ func (r *spannerTableForeignKeyResource) Read(ctx context.Context, req resource.
 	diags = resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
-		tflog.Error(ctx,
-			fmt.Sprintf("Error reading state: %v", resp.Diagnostics),
-		)
 		return
 	}
 }
@@ -334,12 +321,14 @@ func (r *spannerTableForeignKeyResource) Delete(ctx context.Context, req resourc
 	tableId := state.Table.ValueString()
 	name := state.Name.ValueString()
 
-	// Delete existing database
-	err := r.config.SpannerService.DeleteSpannerTableForeignKeyConstraint(ctx, names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String(), name)
+	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String()
+
+	// Delete existing foreign key constraint
+	err := r.config.SpannerService.DeleteSpannerTableForeignKeyConstraint(ctx, tableName, name)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Deleting Foreign Key Constraint",
-			"Could not delete Foreign Key Constraint: "+err.Error(),
+			"Could not delete Foreign Key Constraint ("+name+") on Table ("+tableName+"): "+utils.ErrDetail(err),
 		)
 		return
 	}
@@ -361,7 +350,7 @@ func (r *spannerTableForeignKeyResource) ImportState(ctx context.Context, req re
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Invalid Import ID",
-			"Import ID must be in the format projects/{project}/instances/{instance}/databases/{database}/tables/{table}/constraints/{constraint}: "+err.Error(),
+			"Import ID ("+req.ID+") must be in the format projects/{project}/instances/{instance}/databases/{database}/tables/{table}/constraints/{constraint}: "+err.Error(),
 		)
 		return
 	}

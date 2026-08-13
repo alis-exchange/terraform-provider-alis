@@ -124,6 +124,11 @@ func tableColumnsToModel(ctx context.Context, columns []*tableschema.SpannerTabl
 
 	list, d := types.ListValueFrom(ctx, objectType, cols)
 	diags.Append(d...)
+	if diags.HasError() {
+		// Fail safe: a zero-value types.List surfaces as an opaque
+		// type-conversion error downstream if a caller misses the diags.
+		return types.ListNull(objectType), diags
+	}
 	return list, diags
 }
 

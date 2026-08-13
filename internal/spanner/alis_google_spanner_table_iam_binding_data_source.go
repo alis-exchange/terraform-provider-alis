@@ -5,12 +5,11 @@ import (
 
 	"terraform-provider-alis/internal"
 	"terraform-provider-alis/internal/spanner/names"
+	"terraform-provider-alis/internal/utils"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 // Ensure the implementation satisfies the expected interfaces.
@@ -94,18 +93,17 @@ func (r *tableIamBindingDataSource) Read(ctx context.Context, req datasource.Rea
 	table := state.Table.ValueString()
 	role := state.Role.ValueString()
 
-	binding, err := r.config.SpannerService.GetTableIamBinding(ctx,
-		names.TableName{Project: project, Instance: instance, Database: database, Table: table}.String(),
-		role,
-	)
+	tableName := names.TableName{Project: project, Instance: instance, Database: database, Table: table}.String()
+
+	binding, err := r.config.SpannerService.GetTableIamBinding(ctx, tableName, role)
 	if err != nil {
-		if status.Code(err) != codes.NotFound {
-			resp.Diagnostics.AddError(
-				"Error Reading IAM Policy",
-				"Could not read IAM Policy for Table ("+state.Table.ValueString()+"): "+err.Error(),
-			)
-			return
-		}
+		// A missing binding is an error for a data source: silently returning
+		// null permissions would hide a misconfigured role reference.
+		resp.Diagnostics.AddError(
+			"Error Reading Table IAM Binding",
+			"Could not read IAM binding for Role ("+role+") on Table ("+tableName+"): "+utils.ErrDetail(err),
+		)
+		return
 	}
 
 	// Map response body to state
