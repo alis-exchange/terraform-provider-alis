@@ -11,6 +11,7 @@ import (
 	"terraform-provider-alis/internal/utils"
 	"terraform-provider-alis/internal/validators"
 
+	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -58,6 +59,7 @@ type spannerTableModel struct {
 	Schema         *spannerTableSchema     `tfsdk:"schema"`
 	Interleave     *spannerTableInterleave `tfsdk:"interleave"`
 	PreventDestroy types.Bool              `tfsdk:"prevent_destroy"`
+	Timeouts       timeouts.Value          `tfsdk:"timeouts"`
 }
 
 type spannerTableSchema struct {
@@ -111,8 +113,15 @@ func (r *spannerTableResource) Metadata(_ context.Context, req resource.Metadata
 }
 
 // Schema defines the schema for the resource.
-func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *spannerTableResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Blocks: map[string]schema.Block{
+			"timeouts": timeouts.Block(ctx, timeouts.Opts{
+				Create: true,
+				Update: true,
+				Delete: true,
+			}),
+		},
 		Attributes: map[string]schema.Attribute{
 			"name": schema.StringAttribute{
 				Required: true,
@@ -309,6 +318,14 @@ func (r *spannerTableResource) Create(ctx context.Context, req resource.CreateRe
 		return
 	}
 
+	createTimeout, diags := plan.Timeouts.Create(ctx, 0)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	ctx, cancel := withTimeout(ctx, createTimeout)
+	defer cancel()
+
 	// Generate table from plan
 	table := &tableschema.SpannerTable{
 		Name: "",
@@ -460,6 +477,14 @@ func (r *spannerTableResource) Update(ctx context.Context, req resource.UpdateRe
 		return
 	}
 
+	updateTimeout, diags := plan.Timeouts.Update(ctx, 0)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	ctx, cancel := withTimeout(ctx, updateTimeout)
+	defer cancel()
+
 	// Get project and instance name
 	project := plan.Project.ValueString()
 	instanceName := plan.Instance.ValueString()
@@ -521,6 +546,14 @@ func (r *spannerTableResource) Delete(ctx context.Context, req resource.DeleteRe
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	deleteTimeout, diags := state.Timeouts.Delete(ctx, 0)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	ctx, cancel := withTimeout(ctx, deleteTimeout)
+	defer cancel()
 
 	// Get project and instance name
 	project := state.Project.ValueString()

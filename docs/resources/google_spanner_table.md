@@ -121,6 +121,7 @@ The name must satisfy the expression `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`
 - `interleave` (Attributes) The interleave configuration of the table. (see [below for nested schema](#nestedatt--interleave))
 - `prevent_destroy` (Boolean) Prevent the table from being destroyed.
 **This only applies to the terraform state and does not prevent the actual table from being deleted via another source.**
+- `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
 <a id="nestedatt--schema"></a>
 ### Nested Schema for `schema`
@@ -193,6 +194,16 @@ Supported values are `CASCADE`, `NO_ACTION`.
 Setting this value to `CASCADE` signifies that when a row from the parent table is deleted, its child rows are automatically deleted as well.
 The default value is `NO_ACTION`.
 **Changing this value will cause a table replace**.
+
+
+<a id="nestedblock--timeouts"></a>
+### Nested Schema for `timeouts`
+
+Optional:
+
+- `create` (String) A string that can be [parsed as a duration](https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as "30s" or "2h45m". Valid time units are "s" (seconds), "m" (minutes), "h" (hours).
+- `delete` (String) A string that can be [parsed as a duration](https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as "30s" or "2h45m". Valid time units are "s" (seconds), "m" (minutes), "h" (hours). Setting a timeout for a Delete operation is only applicable if changes are saved into state before the destroy operation occurs.
+- `update` (String) A string that can be [parsed as a duration](https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as "30s" or "2h45m". Valid time units are "s" (seconds), "m" (minutes), "h" (hours).
 
 
 

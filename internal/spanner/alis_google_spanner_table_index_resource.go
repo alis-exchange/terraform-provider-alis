@@ -11,6 +11,7 @@ import (
 	"terraform-provider-alis/internal/utils"
 	"terraform-provider-alis/internal/validators"
 
+	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -45,13 +46,14 @@ type spannerTableIndexResource struct {
 }
 
 type spannerTableIndexModel struct {
-	Name     types.String `tfsdk:"name"`
-	Project  types.String `tfsdk:"project"`
-	Instance types.String `tfsdk:"instance"`
-	Database types.String `tfsdk:"database"`
-	Table    types.String `tfsdk:"table"`
-	Columns  types.List   `tfsdk:"columns"`
-	Unique   types.Bool   `tfsdk:"unique"`
+	Name     types.String   `tfsdk:"name"`
+	Project  types.String   `tfsdk:"project"`
+	Instance types.String   `tfsdk:"instance"`
+	Database types.String   `tfsdk:"database"`
+	Table    types.String   `tfsdk:"table"`
+	Columns  types.List     `tfsdk:"columns"`
+	Unique   types.Bool     `tfsdk:"unique"`
+	Timeouts timeouts.Value `tfsdk:"timeouts"`
 }
 
 type spannerTableIndexColumn struct {
@@ -72,8 +74,15 @@ func (r *spannerTableIndexResource) Metadata(_ context.Context, req resource.Met
 }
 
 // Schema defines the schema for the resource.
-func (r *spannerTableIndexResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *spannerTableIndexResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Blocks: map[string]schema.Block{
+			"timeouts": timeouts.Block(ctx, timeouts.Opts{
+				Create: true,
+				Update: true,
+				Delete: true,
+			}),
+		},
 		Attributes: map[string]schema.Attribute{
 			"name": schema.StringAttribute{
 				Required: true,
@@ -189,6 +198,14 @@ func (r *spannerTableIndexResource) Create(ctx context.Context, req resource.Cre
 		)
 		return
 	}
+
+	createTimeout, diags := plan.Timeouts.Create(ctx, 0)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	ctx, cancel := withTimeout(ctx, createTimeout)
+	defer cancel()
 
 	// Generate index from plan
 	index := &services.SpannerTableIndex{
@@ -365,6 +382,14 @@ func (r *spannerTableIndexResource) Delete(ctx context.Context, req resource.Del
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	deleteTimeout, diags := state.Timeouts.Delete(ctx, 0)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	ctx, cancel := withTimeout(ctx, deleteTimeout)
+	defer cancel()
 
 	// Get project and instance name
 	project := state.Project.ValueString()

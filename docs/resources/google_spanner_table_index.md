@@ -29,6 +29,13 @@ resource "alis_google_spanner_table_index" "test" {
     }
   ]
   unique = false
+
+  # Index backfill on a large table can outlast the default RPC wait.
+  # Without a timeouts block, operations wait indefinitely.
+  timeouts {
+    create = "60m"
+    delete = "10m"
+  }
 }
 ```
 
@@ -52,6 +59,7 @@ The name must satisfy the expression `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`
 
 ### Optional
 
+- `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 - `unique` (Boolean) Indicates if the index is unique.
 **Changing this value will destroy and recreate the index**: Spanner indexes cannot be altered in place.
 
@@ -66,6 +74,16 @@ Optional:
 
 - `order` (String) The sorting order of the column in the index.
 Valid values are: `asc` or `desc`. If not specified the default is `asc`.
+
+
+<a id="nestedblock--timeouts"></a>
+### Nested Schema for `timeouts`
+
+Optional:
+
+- `create` (String) A string that can be [parsed as a duration](https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as "30s" or "2h45m". Valid time units are "s" (seconds), "m" (minutes), "h" (hours).
+- `delete` (String) A string that can be [parsed as a duration](https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as "30s" or "2h45m". Valid time units are "s" (seconds), "m" (minutes), "h" (hours). Setting a timeout for a Delete operation is only applicable if changes are saved into state before the destroy operation occurs.
+- `update` (String) A string that can be [parsed as a duration](https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as "30s" or "2h45m". Valid time units are "s" (seconds), "m" (minutes), "h" (hours).
 
 
 

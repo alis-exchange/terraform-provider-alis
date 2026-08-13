@@ -6,6 +6,7 @@ import (
 	"terraform-provider-alis/internal"
 	"terraform-provider-alis/internal/spanner/names"
 
+	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -33,10 +34,11 @@ type databaseRoleResource struct {
 }
 
 type databaseRoleModel struct {
-	Project  types.String `tfsdk:"project"`
-	Instance types.String `tfsdk:"instance"`
-	Database types.String `tfsdk:"database"`
-	Role     types.String `tfsdk:"role"`
+	Project  types.String   `tfsdk:"project"`
+	Instance types.String   `tfsdk:"instance"`
+	Database types.String   `tfsdk:"database"`
+	Role     types.String   `tfsdk:"role"`
+	Timeouts timeouts.Value `tfsdk:"timeouts"`
 }
 
 // Metadata returns the resource type name.
@@ -45,8 +47,15 @@ func (r *databaseRoleResource) Metadata(_ context.Context, req resource.Metadata
 }
 
 // Schema defines the schema for the resource.
-func (r *databaseRoleResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *databaseRoleResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Blocks: map[string]schema.Block{
+			"timeouts": timeouts.Block(ctx, timeouts.Opts{
+				Create: true,
+				Update: true,
+				Delete: true,
+			}),
+		},
 		Attributes: map[string]schema.Attribute{
 			"project": schema.StringAttribute{
 				Required: true,
@@ -90,6 +99,14 @@ func (r *databaseRoleResource) Create(ctx context.Context, req resource.CreateRe
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	createTimeout, diags := plan.Timeouts.Create(ctx, 0)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	ctx, cancel := withTimeout(ctx, createTimeout)
+	defer cancel()
 
 	// Retrieve project, instance and database from state
 	project := plan.Project.ValueString()
@@ -207,6 +224,14 @@ func (r *databaseRoleResource) Delete(ctx context.Context, req resource.DeleteRe
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	deleteTimeout, diags := state.Timeouts.Delete(ctx, 0)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	ctx, cancel := withTimeout(ctx, deleteTimeout)
+	defer cancel()
 
 	// Retrieve project, instance and database from state
 	project := state.Project.ValueString()

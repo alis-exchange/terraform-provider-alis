@@ -65,4 +65,9 @@ resource "alis_google_spanner_table" "test_table" {
       }
     ]
   }
+
+  timeouts {
+    create = "60m"
+    delete = "10m"
+  }
 }

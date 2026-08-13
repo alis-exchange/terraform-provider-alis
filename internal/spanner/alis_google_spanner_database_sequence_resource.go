@@ -12,6 +12,7 @@ import (
 
 	sequenceschema "terraform-provider-alis/internal/spanner/schema"
 
+	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -47,6 +48,7 @@ type databaseSequenceModel struct {
 	Database types.String            `tfsdk:"database"`
 	Sequence types.String            `tfsdk:"sequence"`
 	Options  *spannerSequenceOptions `tfsdk:"options"`
+	Timeouts timeouts.Value          `tfsdk:"timeouts"`
 }
 
 type spannerSequenceOptions struct {
@@ -83,8 +85,15 @@ func (r *databaseSequenceResource) Metadata(_ context.Context, req resource.Meta
 }
 
 // Schema defines the schema for the resource.
-func (r *databaseSequenceResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *databaseSequenceResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Blocks: map[string]schema.Block{
+			"timeouts": timeouts.Block(ctx, timeouts.Opts{
+				Create: true,
+				Update: true,
+				Delete: true,
+			}),
+		},
 		Attributes: map[string]schema.Attribute{
 			"project": schema.StringAttribute{
 				Required: true,
@@ -174,6 +183,14 @@ func (r *databaseSequenceResource) Create(ctx context.Context, req resource.Crea
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	createTimeout, diags := plan.Timeouts.Create(ctx, 0)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	ctx, cancel := withTimeout(ctx, createTimeout)
+	defer cancel()
 
 	// Retrieve project, instance and database from state
 	project := plan.Project.ValueString()
@@ -324,6 +341,14 @@ func (r *databaseSequenceResource) Update(ctx context.Context, req resource.Upda
 		return
 	}
 
+	updateTimeout, diags := plan.Timeouts.Update(ctx, 0)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	ctx, cancel := withTimeout(ctx, updateTimeout)
+	defer cancel()
+
 	// Get project and instance name
 	project := plan.Project.ValueString()
 	instanceName := plan.Instance.ValueString()
@@ -391,6 +416,14 @@ func (r *databaseSequenceResource) Delete(ctx context.Context, req resource.Dele
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	deleteTimeout, diags := state.Timeouts.Delete(ctx, 0)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	ctx, cancel := withTimeout(ctx, deleteTimeout)
+	defer cancel()
 
 	// Retrieve project, instance and database from state
 	project := state.Project.ValueString()

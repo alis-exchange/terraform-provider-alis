@@ -11,6 +11,7 @@ import (
 	"terraform-provider-alis/internal/utils"
 	"terraform-provider-alis/internal/validators"
 
+	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -42,12 +43,13 @@ type spannerTableTtlPolicyResource struct {
 }
 
 type spannerTableTtlModel struct {
-	Project  types.String `tfsdk:"project"`
-	Instance types.String `tfsdk:"instance"`
-	Database types.String `tfsdk:"database"`
-	Table    types.String `tfsdk:"table"`
-	Column   types.String `tfsdk:"column"`
-	Ttl      types.Int64  `tfsdk:"ttl"`
+	Project  types.String   `tfsdk:"project"`
+	Instance types.String   `tfsdk:"instance"`
+	Database types.String   `tfsdk:"database"`
+	Table    types.String   `tfsdk:"table"`
+	Column   types.String   `tfsdk:"column"`
+	Ttl      types.Int64    `tfsdk:"ttl"`
+	Timeouts timeouts.Value `tfsdk:"timeouts"`
 }
 
 // Metadata returns the resource type name.
@@ -56,8 +58,15 @@ func (r *spannerTableTtlPolicyResource) Metadata(_ context.Context, req resource
 }
 
 // Schema defines the schema for the resource.
-func (r *spannerTableTtlPolicyResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *spannerTableTtlPolicyResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Blocks: map[string]schema.Block{
+			"timeouts": timeouts.Block(ctx, timeouts.Opts{
+				Create: true,
+				Update: true,
+				Delete: true,
+			}),
+		},
 		Attributes: map[string]schema.Attribute{
 			"project": schema.StringAttribute{
 				Required:    true,
@@ -130,6 +139,14 @@ func (r *spannerTableTtlPolicyResource) Create(ctx context.Context, req resource
 		)
 		return
 	}
+
+	createTimeout, diags := plan.Timeouts.Create(ctx, 0)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	ctx, cancel := withTimeout(ctx, createTimeout)
+	defer cancel()
 
 	// Get project and instance name
 	project := plan.Project.ValueString()
@@ -228,6 +245,14 @@ func (r *spannerTableTtlPolicyResource) Update(ctx context.Context, req resource
 		return
 	}
 
+	updateTimeout, diags := plan.Timeouts.Update(ctx, 0)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	ctx, cancel := withTimeout(ctx, updateTimeout)
+	defer cancel()
+
 	// Get project and instance name
 	project := plan.Project.ValueString()
 	instanceName := plan.Instance.ValueString()
@@ -270,6 +295,14 @@ func (r *spannerTableTtlPolicyResource) Delete(ctx context.Context, req resource
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	deleteTimeout, diags := state.Timeouts.Delete(ctx, 0)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	ctx, cancel := withTimeout(ctx, deleteTimeout)
+	defer cancel()
 
 	// Get project and instance name
 	project := state.Project.ValueString()

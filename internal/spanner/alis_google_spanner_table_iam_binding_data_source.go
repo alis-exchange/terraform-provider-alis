@@ -28,8 +28,9 @@ type tableIamBindingDataSource struct {
 	config *internal.ProviderConfig
 }
 
-// tableIamBindingModel is shared by the table IAM binding resource and data
-// source: the resource requires Permissions while the data source computes it.
+// tableIamBindingModel backs the table IAM binding data source. The resource
+// uses its own tableIamBindingResourceModel, which adds the timeouts block —
+// a resource-only concept that must not appear in the data source schema.
 type tableIamBindingModel struct {
 	Project     types.String   `tfsdk:"project"`
 	Instance    types.String   `tfsdk:"instance"`

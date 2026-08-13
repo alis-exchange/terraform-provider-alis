@@ -11,6 +11,7 @@ import (
 	"terraform-provider-alis/internal/utils"
 	"terraform-provider-alis/internal/validators"
 
+	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -41,15 +42,16 @@ type spannerTableForeignKeyResource struct {
 }
 
 type spannerTableForeignKeyModel struct {
-	Project          types.String `tfsdk:"project"`
-	Instance         types.String `tfsdk:"instance"`
-	Database         types.String `tfsdk:"database"`
-	Table            types.String `tfsdk:"table"`
-	Name             types.String `tfsdk:"name"`
-	ReferencedTable  types.String `tfsdk:"referenced_table"`
-	Column           types.String `tfsdk:"column"`
-	ReferencedColumn types.String `tfsdk:"referenced_column"`
-	OnDelete         types.String `tfsdk:"on_delete"`
+	Project          types.String   `tfsdk:"project"`
+	Instance         types.String   `tfsdk:"instance"`
+	Database         types.String   `tfsdk:"database"`
+	Table            types.String   `tfsdk:"table"`
+	Name             types.String   `tfsdk:"name"`
+	ReferencedTable  types.String   `tfsdk:"referenced_table"`
+	Column           types.String   `tfsdk:"column"`
+	ReferencedColumn types.String   `tfsdk:"referenced_column"`
+	OnDelete         types.String   `tfsdk:"on_delete"`
+	Timeouts         timeouts.Value `tfsdk:"timeouts"`
 }
 
 // Metadata returns the resource type name.
@@ -58,8 +60,15 @@ func (r *spannerTableForeignKeyResource) Metadata(_ context.Context, req resourc
 }
 
 // Schema defines the schema for the resource.
-func (r *spannerTableForeignKeyResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *spannerTableForeignKeyResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Blocks: map[string]schema.Block{
+			"timeouts": timeouts.Block(ctx, timeouts.Opts{
+				Create: true,
+				Update: true,
+				Delete: true,
+			}),
+		},
 		Attributes: map[string]schema.Attribute{
 			"project": schema.StringAttribute{
 				Required:    true,
@@ -183,6 +192,14 @@ func (r *spannerTableForeignKeyResource) Create(ctx context.Context, req resourc
 		return
 	}
 
+	createTimeout, diags := plan.Timeouts.Create(ctx, 0)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	ctx, cancel := withTimeout(ctx, createTimeout)
+	defer cancel()
+
 	// Get project and instance name
 	project := plan.Project.ValueString()
 	instanceName := plan.Instance.ValueString()
@@ -285,11 +302,11 @@ func (r *spannerTableForeignKeyResource) Update(ctx context.Context, req resourc
 		return
 	}
 
-	resp.Diagnostics.AddError(
-		"Error Updating Foreign Key Constraint",
-		"Could not update Foreign Key Constraint: Cannot update a Spanner Table Foreign Key Constraint. Please delete and recreate the resource.",
-	)
-	return
+	// Every real attribute carries RequiresReplace, so reaching Update means
+	// only the timeouts block changed; persist the plan without touching
+	// Spanner. Erroring here would make a timeouts-only change un-applyable.
+	diags = resp.State.Set(ctx, plan)
+	resp.Diagnostics.Append(diags...)
 }
 
 // Delete deletes the resource and removes the Terraform state on success.
@@ -301,6 +318,14 @@ func (r *spannerTableForeignKeyResource) Delete(ctx context.Context, req resourc
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	deleteTimeout, diags := state.Timeouts.Delete(ctx, 0)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	ctx, cancel := withTimeout(ctx, deleteTimeout)
+	defer cancel()
 
 	// Get project and instance name
 	project := state.Project.ValueString()

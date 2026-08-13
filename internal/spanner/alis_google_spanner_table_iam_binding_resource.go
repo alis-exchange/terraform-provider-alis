@@ -9,6 +9,7 @@ import (
 	"terraform-provider-alis/internal/spanner/services"
 	"terraform-provider-alis/internal/utils"
 
+	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -38,14 +39,33 @@ type tableIamBindingResource struct {
 	config *internal.ProviderConfig
 }
 
+// tableIamBindingResourceModel mirrors tableIamBindingModel (shared with the
+// data source) plus the timeouts block, which only resources support.
+type tableIamBindingResourceModel struct {
+	Project     types.String   `tfsdk:"project"`
+	Instance    types.String   `tfsdk:"instance"`
+	Database    types.String   `tfsdk:"database"`
+	Table       types.String   `tfsdk:"table"`
+	Role        types.String   `tfsdk:"role"`
+	Permissions []types.String `tfsdk:"permissions"`
+	Timeouts    timeouts.Value `tfsdk:"timeouts"`
+}
+
 // Metadata returns the resource type name.
 func (r *tableIamBindingResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_google_spanner_table_iam_binding"
 }
 
 // Schema defines the schema for the resource.
-func (r *tableIamBindingResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *tableIamBindingResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Blocks: map[string]schema.Block{
+			"timeouts": timeouts.Block(ctx, timeouts.Opts{
+				Create: true,
+				Update: true,
+				Delete: true,
+			}),
+		},
 		Attributes: map[string]schema.Attribute{
 			"project": schema.StringAttribute{
 				Required: true,
@@ -96,12 +116,20 @@ func (r *tableIamBindingResource) Schema(_ context.Context, _ resource.SchemaReq
 // Create a new resource.
 func (r *tableIamBindingResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	// Retrieve values from plan
-	var plan tableIamBindingModel
+	var plan tableIamBindingResourceModel
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	createTimeout, diags := plan.Timeouts.Create(ctx, 0)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	ctx, cancel := withTimeout(ctx, createTimeout)
+	defer cancel()
 
 	// Retrieve project, instance and database from state
 	project := plan.Project.ValueString()
@@ -165,7 +193,7 @@ func (r *tableIamBindingResource) Create(ctx context.Context, req resource.Creat
 // Read resource information.
 func (r *tableIamBindingResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	// Get current state
-	var state tableIamBindingModel
+	var state tableIamBindingResourceModel
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -216,12 +244,20 @@ func (r *tableIamBindingResource) Read(ctx context.Context, req resource.ReadReq
 
 func (r *tableIamBindingResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	// Retrieve values from plan
-	var plan tableIamBindingModel
+	var plan tableIamBindingResourceModel
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	updateTimeout, diags := plan.Timeouts.Update(ctx, 0)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	ctx, cancel := withTimeout(ctx, updateTimeout)
+	defer cancel()
 
 	// Retrieve project, instance and database from state
 	project := plan.Project.ValueString()
@@ -285,12 +321,20 @@ func (r *tableIamBindingResource) Update(ctx context.Context, req resource.Updat
 // Delete deletes the resource and removes the Terraform state on success.
 func (r *tableIamBindingResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	// Retrieve values from state
-	var state tableIamBindingModel
+	var state tableIamBindingResourceModel
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	deleteTimeout, diags := state.Timeouts.Delete(ctx, 0)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	ctx, cancel := withTimeout(ctx, deleteTimeout)
+	defer cancel()
 
 	// Retrieve project, instance and database from state
 	project := state.Project.ValueString()

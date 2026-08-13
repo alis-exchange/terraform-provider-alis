@@ -11,5 +11,11 @@ resource "alis_google_spanner_table_index" "test" {
     }
   ]
   unique = false
-}
 
+  # Index backfill on a large table can outlast the default RPC wait.
+  # Without a timeouts block, operations wait indefinitely.
+  timeouts {
+    create = "60m"
+    delete = "10m"
+  }
+}
