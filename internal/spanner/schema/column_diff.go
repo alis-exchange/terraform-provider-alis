@@ -17,9 +17,8 @@ const (
 // ClassifyColumnChange reports how a planned column differs from its prior state.
 // prior == nil means the column is new; planned == nil means it is being removed.
 // For replace decisions the returned reason is the user-facing sentence shown as a
-// Terraform warning; it is empty otherwise. The rules and their order preserve the
-// table resource's historical replace-on-change behavior exactly (null ≡ false for
-// all boolean attributes).
+// Terraform warning; it is empty otherwise. Rules are evaluated in a fixed order;
+// null ≡ false for every boolean attribute.
 func ClassifyColumnChange(prior, planned *SpannerTableColumn) (ColumnChangeClass, string) {
 	if prior == nil && planned == nil {
 		return ColumnUnchanged, ""
@@ -52,8 +51,8 @@ func ClassifyColumnChange(prior, planned *SpannerTableColumn) (ColumnChangeClass
 	}
 
 	// A changed computation on a computed column, or disabling is_computed, cannot
-	// be altered in place. Enabling is_computed is deliberately not a replace —
-	// that matches the historical plan-modifier behavior.
+	// be altered in place. Enabling is_computed on an existing column is
+	// deliberately classified as alterable, not a replace.
 	priorComputed := prior.GetIsComputed().GetValue()
 	plannedComputed := planned.GetIsComputed().GetValue()
 	if (priorComputed && plannedComputed && prior.GetComputationDdl().GetValue() != planned.GetComputationDdl().GetValue()) ||

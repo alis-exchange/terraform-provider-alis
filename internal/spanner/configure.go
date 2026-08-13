@@ -8,8 +8,7 @@ import (
 )
 
 // configureProviderConfig extracts the provider configuration shared by every
-// resource and data source Configure method (previously nine byte-identical
-// copies whose error text named a type that no longer exists). nil provider
+// resource and data source Configure method. nil provider
 // data is a silent no-op — Terraform calls Configure before the provider is
 // configured. ok is false whenever config is unusable; a diagnostic is added
 // only for the wrong-type case.

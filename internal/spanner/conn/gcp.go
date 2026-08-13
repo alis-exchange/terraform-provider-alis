@@ -32,9 +32,8 @@ func New(opts Options) Connection {
 	return WithRetry(newGCPAdapter(opts), opts.Retry)
 }
 
-// defaultGormLogger reproduces the config previously duplicated at 13 of the
-// 17 gorm.Open sites (the other 4 silently ran without it — that drift ends
-// here: every session now gets this logger).
+// defaultGormLogger is the single logger configuration applied to every
+// session the adapter hands out.
 func defaultGormLogger() gormlogger.Interface {
 	return customloggers.New(
 		log.New(os.Stdout, "\r\n", log.LstdFlags),
@@ -77,9 +76,8 @@ func newGCPAdapter(opts Options) *gcpConn {
 	}
 }
 
-// splitDatabase validates and splits a full database resource name. Unlike the
-// historical strings.Split(...)[1|3|5] sites, short names return an error
-// instead of panicking.
+// splitDatabase validates and splits a full database resource name; short or
+// malformed names return an error rather than panicking.
 func splitDatabase(database string) (project, instance, db string, err error) {
 	parts := strings.Split(database, "/")
 	if len(parts) != 6 || parts[0] != "projects" || parts[2] != "instances" || parts[4] != "databases" {
@@ -99,9 +97,8 @@ func (g *gcpConn) adminClient(ctx context.Context) (*spannerAdmin.DatabaseAdminC
 
 // session returns the cached gorm handle for a database, building it on first
 // use from a go-sql-spanner connector that carries this Conn's credentials —
-// the only route by which credentials can reach the gorm path at all (the
-// historical DSN-string gorm.Open sites had no credential parameter, which is
-// how the ARCH-2 bug happened).
+// a DSN-string gorm.Open has no credential parameter, so the connector is the
+// only route by which credentials can reach the gorm path.
 func (g *gcpConn) session(ctx context.Context, database string) (*gorm.DB, error) {
 	g.mu.Lock()
 	if db, ok := g.sessions[database]; ok {

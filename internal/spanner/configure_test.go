@@ -25,7 +25,7 @@ func TestConfigureProviderConfig(t *testing.T) {
 		}
 		detail := diags.Errors()[0].Detail()
 		if !strings.Contains(detail, "internal.ProviderConfig") {
-			t.Errorf("diagnostic %q must name internal.ProviderConfig (the stale *utils.ProviderConfig message is the bug)", detail)
+			t.Errorf("diagnostic %q must name internal.ProviderConfig", detail)
 		}
 	})
 

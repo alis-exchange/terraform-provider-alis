@@ -18,8 +18,7 @@ const (
 )
 
 // SpannerService talks to Spanner exclusively through the Connection module —
-// no client construction, logging, credential, or retry concerns live here
-// (review ARCH-2).
+// no client construction, logging, credential, or retry concerns live here.
 type SpannerService struct {
 	conn conn.Connection
 }

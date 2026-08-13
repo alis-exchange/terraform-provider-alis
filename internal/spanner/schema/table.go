@@ -270,8 +270,8 @@ func (t *SpannerTable) Create(ctx context.Context, cn conn.Connection) (*Spanner
 }
 
 // tableInfoRow, informationSchemaColumnRow, and primaryKeyRow mirror the
-// INFORMATION_SCHEMA shapes previously read via a raw spanner.Client with
-// spanner.NullString scanning; sql.NullString preserves the NULL semantics.
+// INFORMATION_SCHEMA result shapes; sql.NullString distinguishes NULL from
+// empty strings.
 type tableInfoRow struct {
 	TableName       sql.NullString `gorm:"column:TABLE_NAME"`
 	ParentTableName sql.NullString `gorm:"column:PARENT_TABLE_NAME"`

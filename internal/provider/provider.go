@@ -151,7 +151,7 @@ func (p *googleProvider) Configure(ctx context.Context, req provider.ConfigureRe
 	providerConfig := &internal.ProviderConfig{
 		GoogleProjectId: config.Project.ValueString(),
 		// conn.New is the single place the resolved credentials reach every
-		// Spanner client (review ARCH-2 — they were previously dropped).
+		// Spanner client.
 		SpannerService: spannerservices.NewSpannerService(conn.New(conn.Options{Credentials: googleCreds})),
 	}
 	resp.DataSourceData = providerConfig

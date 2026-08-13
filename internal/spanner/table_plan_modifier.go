@@ -13,7 +13,7 @@ import (
 // tableColumnsRequireReplace is the RequiresReplaceIf handler for schema.columns.
 // It pairs prior and planned columns by name and forces a table replace whenever
 // schema.ClassifyColumnChange reports a change that cannot be applied in place,
-// emitting the same warning text the historical inline closure produced.
+// emitting one warning per affected column.
 func tableColumnsRequireReplace(ctx context.Context, req planmodifier.ListRequest, resp *listplanmodifier.RequiresReplaceIfFuncResponse) {
 	priorColumns, d := tableColumnsToSchema(ctx, req.StateValue)
 	resp.Diagnostics.Append(d...)

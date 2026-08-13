@@ -64,8 +64,7 @@ func (s *SpannerService) GetDatabaseRole(ctx context.Context, name string) (*dat
 	databaseId := nameParts[5]
 	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
 
-	// List all roles (unpaged) and find the requested one, preserving the
-	// historical iterate-until-match behavior.
+	// List all roles (unpaged) and find the requested one.
 	roleNames, _, err := s.conn.DatabaseRoles(ctx, database, 0, "")
 	if err != nil {
 		return nil, err

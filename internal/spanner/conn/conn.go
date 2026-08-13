@@ -4,8 +4,6 @@
 // interface. No other package in the repo may construct a Spanner admin client,
 // data client, or gorm handle directly — the one sanctioned exception is the
 // MetadataDB quarantine below.
-//
-// Design record: conductor/specs/connection-seam_20260813/spec.md (addendum).
 package conn
 
 import (
@@ -96,16 +94,16 @@ type Options struct {
 	// Credentials is threaded into every client the adapter creates (admin,
 	// data, and the go-sql-spanner connector under gorm). nil falls back to
 	// Application Default Credentials. Ignored when SPANNER_EMULATOR_HOST is
-	// set. This field is the fix for the review ARCH-2 bug where provider
-	// credentials were resolved and silently dropped.
+	// set.
 	Credentials *googleoauth.Credentials
 
 	// Retry is the uniform policy applied by WithRetry at construction.
 	Retry RetryPolicy
 }
 
-// RetryPolicy is the uniform schema-change retry policy (review ARCH-2: today
-// only 2 of 8 write paths retry despite a documented parallel-apply race).
+// RetryPolicy is the uniform schema-change retry policy applied by WithRetry.
+// Its main job is the parallel-apply race: concurrent terraform applies race
+// their schema changes and must back off and retry.
 type RetryPolicy struct {
 	// Attempts is the total attempt budget. Zero means the default (5).
 	Attempts int

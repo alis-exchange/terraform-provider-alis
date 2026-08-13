@@ -22,8 +22,7 @@ import (
 )
 
 func GetIndexes(ctx context.Context, cn conn.Connection, database string, tableName string) ([]*SpannerTableIndex, error) {
-	// Get the indexes for the table. The schema filter is the default schema
-	// "" (the historical gorm Migrator().CurrentDatabase() literally returned "").
+	// Get the indexes for the table. "" is Spanner's default schema.
 	var results []*Index
 	if err := cn.Query(ctx, database, &results,
 		"SELECT i.index_name,"+

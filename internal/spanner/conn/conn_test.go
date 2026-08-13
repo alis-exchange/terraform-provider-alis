@@ -9,8 +9,8 @@ import (
 )
 
 // clientOptions is the single place credentials reach every Spanner client;
-// these cases are the regression tests for the review ARCH-2 live bug where
-// provider-resolved credentials were stored and silently ignored (ADC always).
+// these cases guard against provider-resolved credentials being silently
+// ignored in favor of ADC.
 func TestClientOptions(t *testing.T) {
 	creds := &googleoauth.Credentials{ProjectID: "test-project"}
 

@@ -176,8 +176,7 @@ func (s *SpannerService) DeleteSpannerTableIndex(ctx context.Context, parent str
 	databaseId := parentNameParts[5]
 	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
 
-	// Drop the index. Historically this went through gorm's Migrator().DropIndex;
-	// the emitted statement is the same DROP INDEX, now on the DDL path.
+	// Drop the index.
 	if err := s.conn.ExecuteDDL(ctx, database, fmt.Sprintf("DROP INDEX %s", indexName)); err != nil {
 		return nil, status.Errorf(codes.Internal, "Error dropping index: %v", err)
 	}
