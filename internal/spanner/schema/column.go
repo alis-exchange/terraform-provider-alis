@@ -400,6 +400,10 @@ func (c *SpannerTableColumn) compare(other *SpannerTableColumn) bool {
 		return false
 	}
 
+	if c.GetIsStored().GetValue() != other.GetIsStored().GetValue() {
+		return false
+	}
+
 	if c.GetAutoCreateTime().GetValue() != other.GetAutoCreateTime().GetValue() {
 		return false
 	}
