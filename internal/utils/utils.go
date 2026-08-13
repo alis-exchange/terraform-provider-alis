@@ -3,41 +3,12 @@ package utils
 import (
 	"context"
 	"errors"
-	"strings"
 
 	"cloud.google.com/go/spanner"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	oath2 "golang.org/x/oauth2"
 	googleoauth "golang.org/x/oauth2/google"
 )
-
-// ItemInSlice checks if an item is in a slice
-// Item must be comparable
-func ItemInSlice[T comparable](list []T, item T) bool {
-	// TODO: Is there a better way to do this than brute force?
-	for _, i := range list {
-		if i == item {
-			return true
-		}
-	}
-	return false
-}
-
-// SnakeCaseToPascalCase converts a snake_case string to PascalCase
-func SnakeCaseToPascalCase(s string) string {
-	// Split the string at each underscore, which separates words in snake_case.
-	words := strings.Split(s, "_")
-
-	// Capitalize the first letter of each word and join them.
-	for i, word := range words {
-		// Use strings.Title to capitalize the first letter of each word.
-		// Note: strings.Title could capitalize other letters in some cases, so better approach is to use this:
-		words[i] = strings.ToUpper(string(word[0])) + word[1:]
-	}
-
-	// Join the capitalized words without any separators.
-	return strings.Join(words, "")
-}
 
 // GetGoogleCredentials retrieves google.Credentials from the provided credentials, access token, or application default credentials.
 // The source priority is as follows:

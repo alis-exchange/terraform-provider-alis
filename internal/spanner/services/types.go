@@ -1,11 +1,6 @@
 package services
 
 import (
-	"database/sql/driver"
-	"encoding/json"
-	"errors"
-	"time"
-
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
@@ -86,52 +81,6 @@ func (r TablePermissionsRow) GetPermission() TablePolicyBindingPermission {
 	}
 }
 
-type ColumnMetadataMeta struct {
-	Type                        string `json:"type"`
-	Size                        string `json:"size"`
-	Precision                   string `json:"precision"`
-	Scale                       string `json:"scale"`
-	Required                    string `json:"required"`
-	AutoIncrement               string `json:"auto_increment"`
-	Unique                      string `json:"unique"`
-	AutoCreateTime              string `json:"auto_create_time"`
-	AutoUpdateTime              string `json:"auto_update_time"`
-	DefaultValue                string `json:"default_value"`
-	IsPrimaryKey                string `json:"is_primary_key"`
-	IsComputed                  string `json:"is_computed"`
-	ComputationDdl              string `json:"computation_ddl"`
-	IsStored                    string `json:"is_stored"`
-	ProtoPackage                string `json:"proto_package"`
-	FileDescriptorSetPath       string `json:"file_descriptor_set_path"`
-	FileDescriptorSetPathSource string `json:"file_descriptor_set_path_source"`
-}
-
-// Scan scans value into Jsonb and implements sql.Scanner interface
-func (c *ColumnMetadataMeta) Scan(value interface{}) error {
-	b, ok := value.([]byte)
-	if !ok {
-		return errors.New("type assertion to []byte failed")
-	}
-	return json.Unmarshal(b, &c)
-}
-
-// Value returns value of CustomerInfo struct and implements driver.Valuer interface
-func (c ColumnMetadataMeta) Value() (driver.Value, error) {
-	return json.Marshal(c)
-}
-
-func (c ColumnMetadataMeta) GormDataType() string {
-	return "bytes"
-}
-
-type ColumnMetadata struct {
-	TableName  string              `gorm:"primaryKey"`
-	ColumnName string              `gorm:"primaryKey"`
-	Metadata   *ColumnMetadataMeta `gorm:"type:bytes"`
-	CreatedAt  time.Time           // Automatically managed by GORM for creation time
-	UpdatedAt  time.Time           // Automatically managed by GORM for update time
-}
-
 type Index struct {
 	IndexName       string
 	IndexType       string
@@ -158,14 +107,6 @@ const (
 	SpannerTableIndexColumnOrder_UNSPECIFIED SpannerTableIndexColumnOrder = iota
 	SpannerTableIndexColumnOrder_ASC
 	SpannerTableIndexColumnOrder_DESC
-)
-
-type ProtoFileDescriptorSetSource int64
-
-const (
-	ProtoFileDescriptorSetSourceUNSPECIFIED ProtoFileDescriptorSetSource = iota
-	ProtoFileDescriptorSetSourceGcs
-	ProtoFileDescriptorSetSourceUrl
 )
 
 func (s SpannerTableIndexColumnOrder) String() string {

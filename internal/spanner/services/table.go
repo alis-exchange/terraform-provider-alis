@@ -77,10 +77,6 @@ func (s *SpannerService) CreateSpannerTable(ctx context.Context, parent string, 
 			//if column.ProtoFileDescriptorSet.FileDescriptorSetPath == nil {
 			//	return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.schema.columns[%d].proto_file_descriptor_set.file_descriptor_set_path, field is required but not provided", i)
 			//}
-
-			//if column.ProtoFileDescriptorSet.FileDescriptorSetPathSource == ProtoFileDescriptorSetSourceUNSPECIFIED {
-			//	return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.schema.columns[%d].proto_file_descriptor_set.file_descriptor_set_path_source, field is required but not not provided", i)
-			//}
 		}
 	}
 
@@ -245,10 +241,6 @@ func (s *SpannerService) UpdateSpannerTable(ctx context.Context, table *schema.S
 
 						//if column.ProtoFileDescriptorSet.FileDescriptorSetPath == nil {
 						//	return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.schema.columns[%d].proto_file_descriptor_set.file_descriptor_set_path, field is required but not provided", i)
-						//}
-
-						//if column.ProtoFileDescriptorSet.FileDescriptorSetPathSource == ProtoFileDescriptorSetSourceUNSPECIFIED {
-						//	return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.schema.columns[%d].proto_file_descriptor_set.file_descriptor_set_path_source, field is required but not not provided", i)
 						//}
 					}
 				}
