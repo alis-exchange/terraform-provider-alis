@@ -95,8 +95,8 @@ func (r *spannerTableForeignKeyResource) Schema(ctx context.Context, _ resource.
 					"The name must satisfy the expression `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`",
 				Validators: []validator.String{
 					validators.RegexMatches([]*regexp.Regexp{
-						regexp.MustCompile(utils.SpannerGoogleSqlTableIdRegex),
-						regexp.MustCompile(utils.SpannerPostgresSqlTableIdRegex),
+						utils.Pattern(utils.SpannerGoogleSqlTableIdRegex),
+						utils.Pattern(utils.SpannerPostgresSqlTableIdRegex),
 					}, "Name must be a valid Spanner Table ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions"),
 				},
 				PlanModifiers: []planmodifier.String{
@@ -110,8 +110,8 @@ func (r *spannerTableForeignKeyResource) Schema(ctx context.Context, _ resource.
 					"The **FK_** prefix is recommended but not required.",
 				Validators: []validator.String{
 					validators.RegexMatches([]*regexp.Regexp{
-						regexp.MustCompile(utils.SpannerGoogleSqlConstraintIdRegex),
-						regexp.MustCompile(utils.SpannerPostgresSqlConstraintIdRegex),
+						utils.Pattern(utils.SpannerGoogleSqlConstraintIdRegex),
+						utils.Pattern(utils.SpannerPostgresSqlConstraintIdRegex),
 					}, "Name must be a valid Spanner Constraint ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions"),
 				},
 				PlanModifiers: []planmodifier.String{
@@ -124,8 +124,8 @@ func (r *spannerTableForeignKeyResource) Schema(ctx context.Context, _ resource.
 					"The name must satisfy the expression `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`",
 				Validators: []validator.String{
 					validators.RegexMatches([]*regexp.Regexp{
-						regexp.MustCompile(utils.SpannerGoogleSqlTableIdRegex),
-						regexp.MustCompile(utils.SpannerPostgresSqlTableIdRegex),
+						utils.Pattern(utils.SpannerGoogleSqlTableIdRegex),
+						utils.Pattern(utils.SpannerPostgresSqlTableIdRegex),
 					}, "Name must be a valid Spanner Table ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions"),
 				},
 				PlanModifiers: []planmodifier.String{
@@ -138,8 +138,8 @@ func (r *spannerTableForeignKeyResource) Schema(ctx context.Context, _ resource.
 					"See https://cloud.google.com/spanner/docs/foreign-keys/overview",
 				Validators: []validator.String{
 					validators.RegexMatches([]*regexp.Regexp{
-						regexp.MustCompile(utils.SpannerGoogleSqlColumnIdRegex),
-						regexp.MustCompile(utils.SpannerPostgresSqlColumnIdRegex),
+						utils.Pattern(utils.SpannerGoogleSqlColumnIdRegex),
+						utils.Pattern(utils.SpannerPostgresSqlColumnIdRegex),
 					}, "Column must be a valid Spanner Column ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions"),
 				},
 				PlanModifiers: []planmodifier.String{
@@ -152,8 +152,8 @@ func (r *spannerTableForeignKeyResource) Schema(ctx context.Context, _ resource.
 					"See https://cloud.google.com/spanner/docs/foreign-keys/overview",
 				Validators: []validator.String{
 					validators.RegexMatches([]*regexp.Regexp{
-						regexp.MustCompile(utils.SpannerGoogleSqlColumnIdRegex),
-						regexp.MustCompile(utils.SpannerPostgresSqlColumnIdRegex),
+						utils.Pattern(utils.SpannerGoogleSqlColumnIdRegex),
+						utils.Pattern(utils.SpannerPostgresSqlColumnIdRegex),
 					}, "Column must be a valid Spanner Column ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions"),
 				},
 				PlanModifiers: []planmodifier.String{
@@ -345,7 +345,11 @@ func (r *spannerTableForeignKeyResource) Configure(_ context.Context, req resour
 }
 
 // ImportState imports an existing foreign key constraint into state.
-func (r *spannerTableForeignKeyResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+func (r *spannerTableForeignKeyResource) ImportState(
+	ctx context.Context,
+	req resource.ImportStateRequest,
+	resp *resource.ImportStateResponse,
+) {
 	importName, err := names.ParseForeignKey(req.ID)
 	if err != nil {
 		resp.Diagnostics.AddError(

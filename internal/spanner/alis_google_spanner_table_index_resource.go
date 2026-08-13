@@ -88,8 +88,8 @@ func (r *spannerTableIndexResource) Schema(ctx context.Context, _ resource.Schem
 					"The name must contain only letters (a-z, A-Z), numbers (0-9), or hyphens (-), and must start with a letter and not end in a hyphen.",
 				Validators: []validator.String{
 					validators.RegexMatches([]*regexp.Regexp{
-						regexp.MustCompile(utils.SpannerGoogleSqlIndexIdRegex),
-						regexp.MustCompile(utils.SpannerPostgresSqlIndexIdRegex),
+						utils.Pattern(utils.SpannerGoogleSqlIndexIdRegex),
+						utils.Pattern(utils.SpannerPostgresSqlIndexIdRegex),
 					}, "Name must be a valid Spanner Index ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions"),
 				},
 				PlanModifiers: []planmodifier.String{
@@ -123,8 +123,8 @@ func (r *spannerTableIndexResource) Schema(ctx context.Context, _ resource.Schem
 					"The name must satisfy the expression `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`",
 				Validators: []validator.String{
 					validators.RegexMatches([]*regexp.Regexp{
-						regexp.MustCompile(utils.SpannerGoogleSqlTableIdRegex),
-						regexp.MustCompile(utils.SpannerPostgresSqlTableIdRegex),
+						utils.Pattern(utils.SpannerGoogleSqlTableIdRegex),
+						utils.Pattern(utils.SpannerPostgresSqlTableIdRegex),
 					}, "Name must be a valid Spanner Table ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions"),
 				},
 				PlanModifiers: []planmodifier.String{
@@ -145,8 +145,8 @@ func (r *spannerTableIndexResource) Schema(ctx context.Context, _ resource.Schem
 							Description: "The name of the column that makes up the index.",
 							Validators: []validator.String{
 								validators.RegexMatches([]*regexp.Regexp{
-									regexp.MustCompile(utils.SpannerGoogleSqlColumnIdRegex),
-									regexp.MustCompile(utils.SpannerPostgresSqlColumnIdRegex),
+									utils.Pattern(utils.SpannerGoogleSqlColumnIdRegex),
+									utils.Pattern(utils.SpannerPostgresSqlColumnIdRegex),
 								}, "Name must be a valid Spanner Column ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions"),
 							},
 							PlanModifiers: []planmodifier.String{
@@ -295,7 +295,14 @@ func (r *spannerTableIndexResource) Read(ctx context.Context, req resource.ReadR
 
 		resp.Diagnostics.AddError(
 			"Error Reading Index",
-			"Could not read Index ("+indexName+") on Table ("+names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String()+"): "+utils.ErrDetail(err),
+			"Could not read Index ("+indexName+") on Table ("+names.TableName{
+				Project:  project,
+				Instance: instanceName,
+				Database: databaseId,
+				Table:    tableId,
+			}.String()+"): "+utils.ErrDetail(
+				err,
+			),
 		)
 		return
 	}
@@ -408,7 +415,8 @@ func (r *spannerTableIndexResource) ImportState(ctx context.Context, req resourc
 		return
 	}
 
-	if !regexp.MustCompile(utils.SpannerGoogleSqlTableIndexNameRegex).MatchString(req.ID) && !regexp.MustCompile(utils.SpannerPostgresSqlTableIndexNameRegex).MatchString(req.ID) {
+	if !utils.Pattern(utils.SpannerGoogleSqlTableIndexNameRegex).MatchString(req.ID) &&
+		!utils.Pattern(utils.SpannerPostgresSqlTableIndexNameRegex).MatchString(req.ID) {
 		resp.Diagnostics.AddError(
 			"Invalid Import ID",
 			"Import ID ("+req.ID+") contains an invalid project, instance, database, table or index ID. Expected format: projects/{project}/instances/{instance}/databases/{database}/tables/{table}/indexes/{index}.",

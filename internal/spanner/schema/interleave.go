@@ -31,15 +31,15 @@ func (i *SpannerTableInterleave) GetOnDelete() SpannerTableConstraintAction {
 // ddl renders the interleave clause. An ON DELETE action of CASCADE selects
 // the INTERLEAVE IN PARENT form with its ON DELETE clause; unspecified or
 // NO ACTION renders the plain INTERLEAVE IN form.
-func (i *SpannerTableInterleave) ddl() (string, error) {
+func (i *SpannerTableInterleave) ddl() string {
 	if i == nil {
-		return "", nil
+		return ""
 	}
 
 	// Add interleave
 	if i.GetOnDelete() == SpannerTableConstraintActionUnspecified || i.GetOnDelete() == SpannerTableConstraintNoAction {
-		return fmt.Sprintf("INTERLEAVE IN %s", i.GetParentTable()), nil
+		return "INTERLEAVE IN " + i.GetParentTable()
 	}
 
-	return fmt.Sprintf("INTERLEAVE IN PARENT %s ON DELETE %s", i.GetParentTable(), i.GetOnDelete().String()), nil
+	return fmt.Sprintf("INTERLEAVE IN PARENT %s ON DELETE %s", i.GetParentTable(), i.GetOnDelete().String())
 }

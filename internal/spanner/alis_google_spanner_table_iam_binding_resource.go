@@ -8,6 +8,7 @@ import (
 	"terraform-provider-alis/internal/spanner/names"
 	"terraform-provider-alis/internal/spanner/services"
 	"terraform-provider-alis/internal/utils"
+	"terraform-provider-alis/internal/validators"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
@@ -93,10 +94,17 @@ func (r *tableIamBindingResource) Schema(ctx context.Context, _ resource.SchemaR
 			},
 			"role": schema.StringAttribute{
 				Required: true,
+				Validators: []validator.String{
+					validators.RegexMatches([]*regexp.Regexp{
+						utils.Pattern(utils.SpannerGoogleSqlRoleIdRegex),
+						utils.Pattern(utils.SpannerPostgresSqlRoleIdRegex),
+					}, "Role must be a valid Spanner database role ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions"),
+				},
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
-				Description: "The role that should be granted to the table.",
+				Description: "The role that should be granted to the table.\n" +
+					"The role must satisfy the expression `^[a-zA-Z0-9_]{1,64}$`.",
 			},
 			"permissions": schema.SetAttribute{
 				ElementType: types.StringType,
@@ -374,7 +382,8 @@ func (r *tableIamBindingResource) ImportState(ctx context.Context, req resource.
 		return
 	}
 
-	if !regexp.MustCompile(utils.SpannerGoogleSqlTableRoleNameRegex).MatchString(req.ID) && !regexp.MustCompile(utils.SpannerPostgresSqlTableRoleNameRegex).MatchString(req.ID) {
+	if !utils.Pattern(utils.SpannerGoogleSqlTableRoleNameRegex).MatchString(req.ID) &&
+		!utils.Pattern(utils.SpannerPostgresSqlTableRoleNameRegex).MatchString(req.ID) {
 		resp.Diagnostics.AddError(
 			"Invalid Import ID",
 			"Import ID ("+req.ID+") contains an invalid project, instance, database, table or role ID. Expected format: projects/{project}/instances/{instance}/databases/{database}/tables/{table}/tableRoles/{role}.",

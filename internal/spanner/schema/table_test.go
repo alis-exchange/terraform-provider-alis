@@ -221,7 +221,7 @@ func TestSpannerTable_alterDdl(t1 *testing.T) {
 						},
 					},
 				},
-				//Interleave: &SpannerTableInterleave{},
+				// Interleave: &SpannerTableInterleave{},
 			},
 			args: args{
 				existingTable: &SpannerTable{

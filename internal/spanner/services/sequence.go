@@ -19,13 +19,19 @@ import (
 // SEQUENCE DDL, applying the options carried on sequence. The database's
 // existence is verified first so a missing database surfaces as its own error
 // rather than a DDL failure.
-func (s *SpannerService) CreateSpannerSequence(ctx context.Context, parent string, sequence *schema.SpannerSequence) (*schema.SpannerSequence, error) {
+func (s *SpannerService) CreateSpannerSequence(
+	ctx context.Context,
+	parent string,
+	sequence *schema.SpannerSequence,
+) (*schema.SpannerSequence, error) {
 	// Validate arguments
-	// Validate parent
-	googleSqlParentValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlDatabaseNameRegex)
-	postgresSqlParentValid := utils.ValidateArgument(parent, utils.SpannerPostgresSqlDatabaseNameRegex)
-	if !googleSqlParentValid && !postgresSqlParentValid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", parent, utils.SpannerGoogleSqlTableNameRegex, utils.SpannerPostgresSqlTableNameRegex)
+	if err := utils.ValidateDialectArgument(
+		"parent",
+		parent,
+		utils.SpannerGoogleSqlDatabaseNameRegex,
+		utils.SpannerPostgresSqlDatabaseNameRegex,
+	); err != nil {
+		return nil, err
 	}
 
 	// Ensure sequence is provided
@@ -59,11 +65,13 @@ func (s *SpannerService) CreateSpannerSequence(ctx context.Context, parent strin
 // exist; Options is nil when the sequence has no options set.
 func (s *SpannerService) GetSpannerSequence(ctx context.Context, name string) (*schema.SpannerSequence, error) {
 	// Validate arguments
-	// Validate parent
-	googleSqlNameValid := utils.ValidateArgument(name, utils.SpannerGoogleSqlSequenceNameRegex)
-	postgresSqlNameValid := utils.ValidateArgument(name, utils.SpannerPostgresSqlSequenceNameRegex)
-	if !googleSqlNameValid && !postgresSqlNameValid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", name, utils.SpannerGoogleSqlSequenceNameRegex, utils.SpannerPostgresSqlSequenceNameRegex)
+	if err := utils.ValidateDialectArgument(
+		"name",
+		name,
+		utils.SpannerGoogleSqlSequenceNameRegex,
+		utils.SpannerPostgresSqlSequenceNameRegex,
+	); err != nil {
+		return nil, err
 	}
 
 	sequenceName, err := names.ParseSequence(name)
@@ -74,8 +82,13 @@ func (s *SpannerService) GetSpannerSequence(ctx context.Context, name string) (*
 	database := sequenceName.DatabaseName().String()
 
 	var rows []*SequenceRow
-	if err := s.conn.Query(ctx, database, &rows,
-		"SELECT s.CATALOG, s.SCHEMA, s.NAME AS SEQUENCE_NAME, s.DATA_TYPE, o.OPTION_NAME, o.OPTION_VALUE, o.OPTION_TYPE FROM INFORMATION_SCHEMA.SEQUENCES s LEFT JOIN INFORMATION_SCHEMA.SEQUENCE_OPTIONS o ON s.CATALOG = o.CATALOG AND s.SCHEMA = o.SCHEMA AND s.NAME = o.NAME WHERE s.NAME = ?", sequenceId); err != nil {
+	if err := s.conn.Query(
+		ctx,
+		database,
+		&rows,
+		"SELECT s.CATALOG, s.SCHEMA, s.NAME AS SEQUENCE_NAME, s.DATA_TYPE, o.OPTION_NAME, o.OPTION_VALUE, o.OPTION_TYPE FROM INFORMATION_SCHEMA.SEQUENCES s LEFT JOIN INFORMATION_SCHEMA.SEQUENCE_OPTIONS o ON s.CATALOG = o.CATALOG AND s.SCHEMA = o.SCHEMA AND s.NAME = o.NAME WHERE s.NAME = ?",
+		sequenceId,
+	); err != nil {
 		return nil, status.Errorf(codes.Internal, "Error getting sequence: %v", err)
 	}
 
@@ -124,11 +137,11 @@ func (s *SpannerService) GetSpannerSequence(ctx context.Context, name string) (*
 				sequenceOptions.SkipRange = &schema.SpannerSequenceSkipRange{}
 			}
 
-			min, err := strconv.ParseInt(optionValue, 10, 64)
+			minVal, err := strconv.ParseInt(optionValue, 10, 64)
 			if err != nil {
 				return nil, status.Errorf(codes.Internal, "Error parsing skip_range_min: %v", err)
 			}
-			sequenceOptions.SkipRange.Min = wrapperspb.Int64(min)
+			sequenceOptions.SkipRange.Min = wrapperspb.Int64(minVal)
 
 		case "skip_range_max":
 			if optionType != "INT64" {
@@ -140,11 +153,11 @@ func (s *SpannerService) GetSpannerSequence(ctx context.Context, name string) (*
 				sequenceOptions.SkipRange = &schema.SpannerSequenceSkipRange{}
 			}
 
-			max, err := strconv.ParseInt(optionValue, 10, 64)
+			maxVal, err := strconv.ParseInt(optionValue, 10, 64)
 			if err != nil {
 				return nil, status.Errorf(codes.Internal, "Error parsing skip_range_max: %v", err)
 			}
-			sequenceOptions.SkipRange.Max = wrapperspb.Int64(max)
+			sequenceOptions.SkipRange.Max = wrapperspb.Int64(maxVal)
 
 		case "start_with_counter":
 			if optionType != "INT64" {
@@ -174,11 +187,13 @@ func (s *SpannerService) UpdateSpannerSequence(ctx context.Context, sequence *sc
 	}
 
 	// Validate arguments
-	// Validate name
-	googleSqlNameValid := utils.ValidateArgument(sequence.GetName(), utils.SpannerGoogleSqlSequenceNameRegex)
-	postgresSqlNameValid := utils.ValidateArgument(sequence.GetName(), utils.SpannerPostgresSqlSequenceNameRegex)
-	if !googleSqlNameValid && !postgresSqlNameValid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", sequence.GetName(), utils.SpannerGoogleSqlSequenceNameRegex, utils.SpannerPostgresSqlSequenceNameRegex)
+	if err := utils.ValidateDialectArgument(
+		"name",
+		sequence.GetName(),
+		utils.SpannerGoogleSqlSequenceNameRegex,
+		utils.SpannerPostgresSqlSequenceNameRegex,
+	); err != nil {
+		return nil, err
 	}
 
 	sequenceName, err := names.ParseSequence(sequence.GetName())
@@ -206,11 +221,13 @@ func (s *SpannerService) UpdateSpannerSequence(ctx context.Context, sequence *sc
 // DeleteSpannerSequence drops the sequence via DROP SEQUENCE DDL.
 func (s *SpannerService) DeleteSpannerSequence(ctx context.Context, name string) error {
 	// Validate arguments
-	// Validate name
-	googleSqlNameValid := utils.ValidateArgument(name, utils.SpannerGoogleSqlSequenceNameRegex)
-	postgresSqlNameValid := utils.ValidateArgument(name, utils.SpannerPostgresSqlSequenceNameRegex)
-	if !googleSqlNameValid && !postgresSqlNameValid {
-		return status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", name, utils.SpannerGoogleSqlSequenceNameRegex, utils.SpannerPostgresSqlSequenceNameRegex)
+	if err := utils.ValidateDialectArgument(
+		"name",
+		name,
+		utils.SpannerGoogleSqlSequenceNameRegex,
+		utils.SpannerPostgresSqlSequenceNameRegex,
+	); err != nil {
+		return err
 	}
 
 	sequenceName, err := names.ParseSequence(name)

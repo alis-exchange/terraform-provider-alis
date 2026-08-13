@@ -7,13 +7,12 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 )
 
-// String not empty Validator
+// String not empty Validator.
 var _ validator.String = stringNotEmptyValidator{}
 
 // stringNotEmptyValidator validates that a configured string value is not the
 // empty string.
-type stringNotEmptyValidator struct {
-}
+type stringNotEmptyValidator struct{}
 
 // Description describes the validation in plain text formatting.
 func (v stringNotEmptyValidator) Description(_ context.Context) string {

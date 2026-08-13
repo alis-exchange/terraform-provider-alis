@@ -50,7 +50,9 @@ func TestSpannerTableForeignKeyConstraintDdl(t *testing.T) {
 				t.Errorf("case %d: expected error for incomplete constraint", i)
 			}
 		}
-		if _, err := (&SpannerTableForeignKeyConstraint{Name: "n", Column: "c", ReferencedTable: "t", ReferencedColumn: "r"}).CreateDdl(""); err == nil {
+		if _, err := (&SpannerTableForeignKeyConstraint{Name: "n", Column: "c", ReferencedTable: "t", ReferencedColumn: "r"}).CreateDdl(
+			"",
+		); err == nil {
 			t.Error("expected error for empty table")
 		}
 	})

@@ -19,22 +19,27 @@ import (
 //   - parent: string - Required. The name of the table that will serve the new index.
 //   - index: *SpannerTableIndex - Required. The index to create.
 //
-// Returns: *SpannerTableIndex
+// Returns: *SpannerTableIndex.
 func (s *SpannerService) CreateSpannerTableIndex(ctx context.Context, parent string, index *SpannerTableIndex) (*SpannerTableIndex, error) {
-	// Validate parent
-	googleSqlParentValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlTableNameRegex)
-	postgresSqlParentValid := utils.ValidateArgument(parent, utils.SpannerPostgresSqlTableNameRegex)
-	if !googleSqlParentValid && !postgresSqlParentValid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", parent, utils.SpannerGoogleSqlTableNameRegex, utils.SpannerPostgresSqlTableNameRegex)
+	if err := utils.ValidateDialectArgument(
+		"parent",
+		parent,
+		utils.SpannerGoogleSqlTableNameRegex,
+		utils.SpannerPostgresSqlTableNameRegex,
+	); err != nil {
+		return nil, err
 	}
 	// Ensure index is provided and has a name and columns
 	if index == nil {
 		return nil, status.Error(codes.InvalidArgument, "Invalid argument index, field is required but not provided")
 	}
-	googleSqlIndexIdValid := utils.ValidateArgument(index.Name, utils.SpannerGoogleSqlIndexIdRegex)
-	postgresSqlIndexIdValid := utils.ValidateArgument(index.Name, utils.SpannerPostgresSqlIndexIdRegex)
-	if !googleSqlIndexIdValid && !postgresSqlIndexIdValid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument index.name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", index.Name, utils.SpannerGoogleSqlIndexIdRegex, utils.SpannerPostgresSqlIndexIdRegex)
+	if err := utils.ValidateDialectArgument(
+		"index.name",
+		index.Name,
+		utils.SpannerGoogleSqlIndexIdRegex,
+		utils.SpannerPostgresSqlIndexIdRegex,
+	); err != nil {
+		return nil, err
 	}
 	if len(index.Columns) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "Invalid argument index.columns, field is required but not provided")
@@ -44,10 +49,13 @@ func (s *SpannerService) CreateSpannerTableIndex(ctx context.Context, parent str
 			return nil, status.Errorf(codes.InvalidArgument, "Invalid argument index.columns[%d], field is required but not provided", i)
 		}
 
-		googleSqlColumnIdValid := utils.ValidateArgument(column.Name, utils.SpannerGoogleSqlColumnIdRegex)
-		postgresSqlColumnIdValid := utils.ValidateArgument(column.Name, utils.SpannerPostgresSqlColumnIdRegex)
-		if !googleSqlColumnIdValid && !postgresSqlColumnIdValid {
-			return nil, status.Errorf(codes.InvalidArgument, "Invalid argument index.columns[%d].name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", i, column.Name, utils.SpannerGoogleSqlColumnIdRegex, utils.SpannerPostgresSqlColumnIdRegex)
+		if err := utils.ValidateDialectArgument(
+			"index.columns[%d].name",
+			column.Name,
+			utils.SpannerGoogleSqlColumnIdRegex,
+			utils.SpannerPostgresSqlColumnIdRegex,
+		); err != nil {
+			return nil, err
 		}
 	}
 
@@ -82,19 +90,23 @@ func (s *SpannerService) CreateSpannerTableIndex(ctx context.Context, parent str
 //   - parent: string - Required. The name of the table that serves the index.
 //   - name: string - Required. The name of the index to get.
 //
-// Returns: *SpannerTableIndex
-func (s *SpannerService) GetSpannerTableIndex(ctx context.Context, parent string, name string) (*SpannerTableIndex, error) {
-	// Validate parent
-	googleSqlParentValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlTableNameRegex)
-	postgresSqlParentValid := utils.ValidateArgument(parent, utils.SpannerPostgresSqlTableNameRegex)
-	if !googleSqlParentValid && !postgresSqlParentValid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", parent, utils.SpannerGoogleSqlTableNameRegex, utils.SpannerPostgresSqlTableNameRegex)
+// Returns: *SpannerTableIndex.
+func (s *SpannerService) GetSpannerTableIndex(ctx context.Context, parent, name string) (*SpannerTableIndex, error) {
+	if err := utils.ValidateDialectArgument(
+		"parent",
+		parent,
+		utils.SpannerGoogleSqlTableNameRegex,
+		utils.SpannerPostgresSqlTableNameRegex,
+	); err != nil {
+		return nil, err
 	}
-	// Validate name
-	googleSqlIndexIdValid := utils.ValidateArgument(name, utils.SpannerGoogleSqlIndexIdRegex)
-	postgresSqlIndexIdValid := utils.ValidateArgument(name, utils.SpannerPostgresSqlIndexIdRegex)
-	if !googleSqlIndexIdValid && !postgresSqlIndexIdValid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", name, utils.SpannerGoogleSqlIndexIdRegex, utils.SpannerPostgresSqlIndexIdRegex)
+	if err := utils.ValidateDialectArgument(
+		"name",
+		name,
+		utils.SpannerGoogleSqlIndexIdRegex,
+		utils.SpannerPostgresSqlIndexIdRegex,
+	); err != nil {
+		return nil, err
 	}
 
 	parentName, err := names.ParseTable(parent)
@@ -124,13 +136,15 @@ func (s *SpannerService) GetSpannerTableIndex(ctx context.Context, parent string
 //   - ctx: context.Context - The context to use for RPCs.
 //   - parent: string - Required. The name of the table whose indices should be listed.
 //
-// Returns: []*SpannerTableIndex
+// Returns: []*SpannerTableIndex.
 func (s *SpannerService) ListSpannerTableIndices(ctx context.Context, parent string) ([]*SpannerTableIndex, error) {
-	// Validate parent
-	googleSqlValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlTableNameRegex)
-	postgresSqlValid := utils.ValidateArgument(parent, utils.SpannerPostgresSqlTableNameRegex)
-	if !googleSqlValid && !postgresSqlValid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", parent, utils.SpannerGoogleSqlTableNameRegex, utils.SpannerPostgresSqlTableNameRegex)
+	if err := utils.ValidateDialectArgument(
+		"parent",
+		parent,
+		utils.SpannerGoogleSqlTableNameRegex,
+		utils.SpannerPostgresSqlTableNameRegex,
+	); err != nil {
+		return nil, err
 	}
 
 	parentName, err := names.ParseTable(parent)
@@ -155,20 +169,24 @@ func (s *SpannerService) ListSpannerTableIndices(ctx context.Context, parent str
 //   - parent: string - Required. The name of the table that serves the index.
 //   - indexName: string - Required. The name of the index to delete.
 //
-// Returns: *emptypb.Empty
-func (s *SpannerService) DeleteSpannerTableIndex(ctx context.Context, parent string, indexName string) (*emptypb.Empty, error) {
+// Returns: *emptypb.Empty.
+func (s *SpannerService) DeleteSpannerTableIndex(ctx context.Context, parent, indexName string) (*emptypb.Empty, error) {
 	// Validate arguments
-	// Validate parent
-	googleSqlParentValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlTableNameRegex)
-	postgresSqlParentValid := utils.ValidateArgument(parent, utils.SpannerPostgresSqlTableNameRegex)
-	if !googleSqlParentValid && !postgresSqlParentValid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", parent, utils.SpannerGoogleSqlTableNameRegex, utils.SpannerPostgresSqlTableNameRegex)
+	if err := utils.ValidateDialectArgument(
+		"parent",
+		parent,
+		utils.SpannerGoogleSqlTableNameRegex,
+		utils.SpannerPostgresSqlTableNameRegex,
+	); err != nil {
+		return nil, err
 	}
-	// Validate index name
-	googleSqlIndexIdValid := utils.ValidateArgument(indexName, utils.SpannerGoogleSqlIndexIdRegex)
-	postgresSqlIndexIdValid := utils.ValidateArgument(indexName, utils.SpannerPostgresSqlIndexIdRegex)
-	if !googleSqlIndexIdValid && !postgresSqlIndexIdValid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument index_name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", indexName, utils.SpannerGoogleSqlIndexIdRegex, utils.SpannerPostgresSqlIndexIdRegex)
+	if err := utils.ValidateDialectArgument(
+		"index_name",
+		indexName,
+		utils.SpannerGoogleSqlIndexIdRegex,
+		utils.SpannerPostgresSqlIndexIdRegex,
+	); err != nil {
+		return nil, err
 	}
 
 	parentName, err := names.ParseTable(parent)

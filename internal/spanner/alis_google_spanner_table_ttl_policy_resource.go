@@ -93,8 +93,8 @@ func (r *spannerTableTtlPolicyResource) Schema(ctx context.Context, _ resource.S
 					"The name must satisfy the expression `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`",
 				Validators: []validator.String{
 					validators.RegexMatches([]*regexp.Regexp{
-						regexp.MustCompile(utils.SpannerGoogleSqlTableIdRegex),
-						regexp.MustCompile(utils.SpannerPostgresSqlTableIdRegex),
+						utils.Pattern(utils.SpannerGoogleSqlTableIdRegex),
+						utils.Pattern(utils.SpannerPostgresSqlTableIdRegex),
 					}, "Name must be a valid Spanner Table ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions"),
 				},
 				PlanModifiers: []planmodifier.String{
@@ -107,8 +107,8 @@ func (r *spannerTableTtlPolicyResource) Schema(ctx context.Context, _ resource.S
 					"The column must be of type `TIMESTAMP`. See https://cloud.google.com/spanner/docs/ttl/working-with-ttl",
 				Validators: []validator.String{
 					validators.RegexMatches([]*regexp.Regexp{
-						regexp.MustCompile(utils.SpannerGoogleSqlColumnIdRegex),
-						regexp.MustCompile(utils.SpannerPostgresSqlColumnIdRegex),
+						utils.Pattern(utils.SpannerGoogleSqlColumnIdRegex),
+						utils.Pattern(utils.SpannerPostgresSqlColumnIdRegex),
 					}, "Column must be a valid Spanner Column ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions"),
 				},
 			},
@@ -309,7 +309,11 @@ func (r *spannerTableTtlPolicyResource) Delete(ctx context.Context, req resource
 	}
 }
 
-func (r *spannerTableTtlPolicyResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+func (r *spannerTableTtlPolicyResource) ImportState(
+	ctx context.Context,
+	req resource.ImportStateRequest,
+	resp *resource.ImportStateResponse,
+) {
 	importName, err := names.ParseTable(req.ID)
 	if err != nil {
 		resp.Diagnostics.AddError(
@@ -319,7 +323,8 @@ func (r *spannerTableTtlPolicyResource) ImportState(ctx context.Context, req res
 		return
 	}
 
-	if !regexp.MustCompile(utils.SpannerGoogleSqlTableNameRegex).MatchString(req.ID) && !regexp.MustCompile(utils.SpannerPostgresSqlTableNameRegex).MatchString(req.ID) {
+	if !utils.Pattern(utils.SpannerGoogleSqlTableNameRegex).MatchString(req.ID) &&
+		!utils.Pattern(utils.SpannerPostgresSqlTableNameRegex).MatchString(req.ID) {
 		resp.Diagnostics.AddError(
 			"Invalid Import ID",
 			"Import ID ("+req.ID+") contains an invalid project, instance, database or table ID. Expected format: projects/{project}/instances/{instance}/databases/{database}/tables/{table}.",

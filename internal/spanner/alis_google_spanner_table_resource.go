@@ -127,8 +127,8 @@ func (r *spannerTableResource) Schema(ctx context.Context, _ resource.SchemaRequ
 					"The name must satisfy the expression `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`",
 				Validators: []validator.String{
 					validators.RegexMatches([]*regexp.Regexp{
-						regexp.MustCompile(utils.SpannerGoogleSqlTableIdRegex),
-						regexp.MustCompile(utils.SpannerPostgresSqlTableIdRegex),
+						utils.Pattern(utils.SpannerGoogleSqlTableIdRegex),
+						utils.Pattern(utils.SpannerPostgresSqlTableIdRegex),
 					}, "Name must be a valid Spanner Table ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions"),
 				},
 				PlanModifiers: []planmodifier.String{
@@ -175,8 +175,8 @@ func (r *spannerTableResource) Schema(ctx context.Context, _ resource.SchemaRequ
 										"The maximum length is 128 characters.",
 									Validators: []validator.String{
 										validators.RegexMatches([]*regexp.Regexp{
-											regexp.MustCompile(utils.SpannerGoogleSqlColumnIdRegex),
-											regexp.MustCompile(utils.SpannerPostgresSqlColumnIdRegex),
+											utils.Pattern(utils.SpannerGoogleSqlColumnIdRegex),
+											utils.Pattern(utils.SpannerPostgresSqlColumnIdRegex),
 										}, "Name must be a valid Spanner Column ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions"),
 									},
 								},
@@ -251,8 +251,11 @@ func (r *spannerTableResource) Schema(ctx context.Context, _ resource.SchemaRequ
 						},
 						Description: "The columns of the table.",
 						PlanModifiers: []planmodifier.List{
-							listplanmodifier.RequiresReplaceIf(tableColumnsRequireReplace,
-								"If certain values of any of the columns change, Terraform will destroy and recreate the table.", "If certain values of any of the columns change, Terraform will destroy and recreate the table."),
+							listplanmodifier.RequiresReplaceIf(
+								tableColumnsRequireReplace,
+								"If certain values of any of the columns change, Terraform will destroy and recreate the table.",
+								"If certain values of any of the columns change, Terraform will destroy and recreate the table.",
+							),
 						},
 					},
 				},
@@ -586,7 +589,8 @@ func (r *spannerTableResource) ImportState(ctx context.Context, req resource.Imp
 		return
 	}
 
-	if !regexp.MustCompile(utils.SpannerGoogleSqlTableNameRegex).MatchString(req.ID) && !regexp.MustCompile(utils.SpannerPostgresSqlTableNameRegex).MatchString(req.ID) {
+	if !utils.Pattern(utils.SpannerGoogleSqlTableNameRegex).MatchString(req.ID) &&
+		!utils.Pattern(utils.SpannerPostgresSqlTableNameRegex).MatchString(req.ID) {
 		resp.Diagnostics.AddError(
 			"Invalid Import ID",
 			"Import ID ("+req.ID+") contains an invalid project, instance, database or table ID. See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions for table naming conventions.",
@@ -619,7 +623,11 @@ func (r *spannerTableResource) Configure(_ context.Context, req resource.Configu
 // configuration: a missing schema or columns block, PROTO columns without
 // proto_package, and computed columns without computation_ddl. Warnings keep
 // configs with unknown values plannable while still flagging likely mistakes.
-func (r *spannerTableResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+func (r *spannerTableResource) ValidateConfig(
+	ctx context.Context,
+	req resource.ValidateConfigRequest,
+	resp *resource.ValidateConfigResponse,
+) {
 	var data spannerTableModel
 
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)

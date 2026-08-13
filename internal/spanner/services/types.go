@@ -33,15 +33,35 @@ const (
 )
 
 func (t TablePolicyBindingPermission) String() string {
-	return [...]string{"UNSPECIFIED", "SELECT", "INSERT", "UPDATE", "DELETE"}[t]
+	names := [...]string{"UNSPECIFIED", "SELECT", "INSERT", "UPDATE", "DELETE"}
+	if t < 0 || int(t) >= len(names) {
+		return "UNSPECIFIED"
+	}
+
+	return names[t]
+}
+
+// TablePolicyBindingPermissions lists every grantable permission. GRANT and
+// REVOKE statements iterate it rather than a caller's slice, so their operand
+// order is fixed regardless of how the practitioner ordered the config.
+var TablePolicyBindingPermissions = []TablePolicyBindingPermission{
+	TablePolicyBindingPermission_SELECT,
+	TablePolicyBindingPermission_INSERT,
+	TablePolicyBindingPermission_UPDATE,
+	TablePolicyBindingPermission_DELETE,
 }
 
 // SpannerTablePolicyBindingPermissions is a list of all Spanner table role binding permissions.
-var SpannerTablePolicyBindingPermissions = []string{
-	TablePolicyBindingPermission_SELECT.String(),
-	TablePolicyBindingPermission_INSERT.String(),
-	TablePolicyBindingPermission_UPDATE.String(),
-	TablePolicyBindingPermission_DELETE.String(),
+var SpannerTablePolicyBindingPermissions = permissionNames(TablePolicyBindingPermissions)
+
+// permissionNames renders permissions as the identifiers DDL uses.
+func permissionNames(permissions []TablePolicyBindingPermission) []string {
+	names := make([]string, 0, len(permissions))
+	for _, permission := range permissions {
+		names = append(names, permission.String())
+	}
+
+	return names
 }
 
 // TablePolicyBinding represents a Spanner table role binding.

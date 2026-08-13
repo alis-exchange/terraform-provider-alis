@@ -6,7 +6,6 @@ import (
 
 	"terraform-provider-alis/internal/spanner/conn"
 
-	_ "github.com/googleapis/go-sql-spanner"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
@@ -14,10 +13,11 @@ import (
 // INFORMATION_SCHEMA indexes/index_columns join. The per-column rows are
 // merged into one SpannerTableIndex each, with columns sorted by ordinal
 // position; the PRIMARY_KEY pseudo-index is excluded.
-func GetIndexes(ctx context.Context, cn conn.Connection, database string, tableName string) ([]*SpannerTableIndex, error) {
+func GetIndexes(ctx context.Context, cn conn.Connection, database, tableName string) ([]*SpannerTableIndex, error) {
 	// Get the indexes for the table. "" is Spanner's default schema.
 	var results []*Index
-	if err := cn.Query(ctx, database, &results,
+	if err := cn.Query(
+		ctx, database, &results,
 		"SELECT i.index_name,"+
 			"i.is_unique,"+
 			"i.index_type,"+
@@ -70,7 +70,7 @@ func GetIndexes(ctx context.Context, cn conn.Connection, database string, tableN
 		indexMap[r.IndexName] = idx
 	}
 
-	indexes := make([]*SpannerTableIndex, 0)
+	indexes := make([]*SpannerTableIndex, 0, len(indexMap))
 	for _, idx := range indexMap {
 		// Sort the columns by ordinal position
 		sort.Slice(idx.Columns, func(i, j int) bool {
@@ -80,6 +80,10 @@ func GetIndexes(ctx context.Context, cn conn.Connection, database string, tableN
 		// Append the index to the list
 		indexes = append(indexes, idx)
 	}
+
+	// Map iteration order is random, so sort by name: callers compare these
+	// against state, and an unstable order reads as a diff.
+	sort.Slice(indexes, func(i, j int) bool { return indexes[i].Name < indexes[j].Name })
 
 	return indexes, nil
 }

@@ -58,7 +58,8 @@ func TestTableColumnsRequireReplace(t *testing.T) {
 
 	t.Run("type change replaces", func(t *testing.T) {
 		resp := runRequireReplace(t, []spannerTableColumn{minimalColumnModel()}, []spannerTableColumn{typeChanged})
-		if !resp.RequiresReplace || resp.Diagnostics.Warnings()[0].Detail() != `Column "email" has a changed type and requires a table replace` {
+		if !resp.RequiresReplace ||
+			resp.Diagnostics.Warnings()[0].Detail() != `Column "email" has a changed type and requires a table replace` {
 			t.Errorf("RequiresReplace=%v warnings=%v", resp.RequiresReplace, resp.Diagnostics.Warnings())
 		}
 	})

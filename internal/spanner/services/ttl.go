@@ -14,16 +14,27 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
+// rowDeletionPolicyExpression captures the column and day count out of the
+// OLDER_THAN expression INFORMATION_SCHEMA returns for a TTL policy. Every
+// plan and refresh parses one, so it is compiled once here.
+var rowDeletionPolicyExpression = regexp.MustCompile(`OLDER_THAN\((\w+),\s*INTERVAL\s+(\d+)\s+DAY\)`)
+
 // CreateSpannerTableRowDeletionPolicy adds a row deletion (TTL) policy to the
 // table named by parent. ttl.Duration is the number of days past ttl.Column
 // after which rows become eligible for deletion. The parent table must exist;
 // Spanner allows at most one policy per table.
-func (s *SpannerService) CreateSpannerTableRowDeletionPolicy(ctx context.Context, parent string, ttl *SpannerTableRowDeletionPolicy) (*SpannerTableRowDeletionPolicy, error) {
-	// Validate parent
-	googleSqlParentValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlTableNameRegex)
-	postgresSqlParentValid := utils.ValidateArgument(parent, utils.SpannerPostgresSqlTableNameRegex)
-	if !googleSqlParentValid && !postgresSqlParentValid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", parent, utils.SpannerGoogleSqlTableNameRegex, utils.SpannerPostgresSqlTableNameRegex)
+func (s *SpannerService) CreateSpannerTableRowDeletionPolicy(
+	ctx context.Context,
+	parent string,
+	ttl *SpannerTableRowDeletionPolicy,
+) (*SpannerTableRowDeletionPolicy, error) {
+	if err := utils.ValidateDialectArgument(
+		"parent",
+		parent,
+		utils.SpannerGoogleSqlTableNameRegex,
+		utils.SpannerPostgresSqlTableNameRegex,
+	); err != nil {
+		return nil, err
 	}
 	// Ensure ttl is provided and has a name, column and duration
 	if ttl == nil {
@@ -32,10 +43,13 @@ func (s *SpannerService) CreateSpannerTableRowDeletionPolicy(ctx context.Context
 	if ttl.Column == "" {
 		return nil, status.Error(codes.InvalidArgument, "Invalid argument ttl.column, field is required but not provided")
 	}
-	googleSqlColumnIdValid := utils.ValidateArgument(ttl.Column, utils.SpannerGoogleSqlColumnIdRegex)
-	postgresSqlColumnIdValid := utils.ValidateArgument(ttl.Column, utils.SpannerPostgresSqlColumnIdRegex)
-	if !googleSqlColumnIdValid && !postgresSqlColumnIdValid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument ttl.column (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", ttl.Column, utils.SpannerGoogleSqlColumnIdRegex, utils.SpannerPostgresSqlColumnIdRegex)
+	if err := utils.ValidateDialectArgument(
+		"ttl.column",
+		ttl.Column,
+		utils.SpannerGoogleSqlColumnIdRegex,
+		utils.SpannerPostgresSqlColumnIdRegex,
+	); err != nil {
+		return nil, err
 	}
 	if ttl.Duration == nil {
 		return nil, status.Error(codes.InvalidArgument, "Invalid argument ttl.duration, field is required but not provided")
@@ -73,11 +87,13 @@ func (s *SpannerService) CreateSpannerTableRowDeletionPolicy(ctx context.Context
 // INFORMATION_SCHEMA.TABLES. codes.NotFound is returned when the table has no
 // policy.
 func (s *SpannerService) GetSpannerTableRowDeletionPolicy(ctx context.Context, parent string) (*SpannerTableRowDeletionPolicy, error) {
-	// Validate parent
-	googleSqlParentValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlTableNameRegex)
-	postgresSqlParentValid := utils.ValidateArgument(parent, utils.SpannerPostgresSqlTableNameRegex)
-	if !googleSqlParentValid && !postgresSqlParentValid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", parent, utils.SpannerGoogleSqlTableNameRegex, utils.SpannerPostgresSqlTableNameRegex)
+	if err := utils.ValidateDialectArgument(
+		"parent",
+		parent,
+		utils.SpannerGoogleSqlTableNameRegex,
+		utils.SpannerPostgresSqlTableNameRegex,
+	); err != nil {
+		return nil, err
 	}
 
 	parentName, err := names.ParseTable(parent)
@@ -97,8 +113,13 @@ func (s *SpannerService) GetSpannerTableRowDeletionPolicy(ctx context.Context, p
 		ROW_DELETION_POLICY_EXPRESSION string
 	}
 	var policy RowDeletionPolicy
-	if err := s.conn.Query(ctx, database, &policy,
-		"SELECT TABLE_NAME, ROW_DELETION_POLICY_EXPRESSION FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = ? AND ROW_DELETION_POLICY_EXPRESSION IS NOT NULL", tableId); err != nil {
+	if err := s.conn.Query(
+		ctx,
+		database,
+		&policy,
+		"SELECT TABLE_NAME, ROW_DELETION_POLICY_EXPRESSION FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = ? AND ROW_DELETION_POLICY_EXPRESSION IS NOT NULL",
+		tableId,
+	); err != nil {
 		if status.Code(err) == codes.NotFound {
 			return nil, status.Errorf(codes.NotFound, "Row deletion policy not found")
 		}
@@ -108,14 +129,15 @@ func (s *SpannerService) GetSpannerTableRowDeletionPolicy(ctx context.Context, p
 		return nil, status.Errorf(codes.NotFound, "Row deletion policy not found")
 	}
 
-	// Regular expression with capture groups
-	re := regexp.MustCompile(`OLDER_THAN\((\w+),\s*INTERVAL\s+(\d+)\s+DAY\)`)
-
 	// Find all matches and capture groups
-	matches := re.FindStringSubmatch(policy.ROW_DELETION_POLICY_EXPRESSION)
+	matches := rowDeletionPolicyExpression.FindStringSubmatch(policy.ROW_DELETION_POLICY_EXPRESSION)
 
 	if len(matches) != 3 {
-		return nil, status.Errorf(codes.Internal, "Error parsing row deletion policy: unexpected expression %q", policy.ROW_DELETION_POLICY_EXPRESSION)
+		return nil, status.Errorf(
+			codes.Internal,
+			"Error parsing row deletion policy: unexpected expression %q",
+			policy.ROW_DELETION_POLICY_EXPRESSION,
+		)
 	}
 
 	column := matches[1]
@@ -133,12 +155,18 @@ func (s *SpannerService) GetSpannerTableRowDeletionPolicy(ctx context.Context, p
 
 // UpdateSpannerTableRowDeletionPolicy replaces the table's existing row
 // deletion policy via ALTER TABLE ... REPLACE ROW DELETION POLICY.
-func (s *SpannerService) UpdateSpannerTableRowDeletionPolicy(ctx context.Context, parent string, ttl *SpannerTableRowDeletionPolicy) (*SpannerTableRowDeletionPolicy, error) {
-	// Validate parent
-	googleSqlParentValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlTableNameRegex)
-	postgresSqlParentValid := utils.ValidateArgument(parent, utils.SpannerPostgresSqlTableNameRegex)
-	if !googleSqlParentValid && !postgresSqlParentValid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", parent, utils.SpannerGoogleSqlTableNameRegex, utils.SpannerPostgresSqlTableNameRegex)
+func (s *SpannerService) UpdateSpannerTableRowDeletionPolicy(
+	ctx context.Context,
+	parent string,
+	ttl *SpannerTableRowDeletionPolicy,
+) (*SpannerTableRowDeletionPolicy, error) {
+	if err := utils.ValidateDialectArgument(
+		"parent",
+		parent,
+		utils.SpannerGoogleSqlTableNameRegex,
+		utils.SpannerPostgresSqlTableNameRegex,
+	); err != nil {
+		return nil, err
 	}
 	// Ensure ttl is provided and has a name, column and duration
 	if ttl == nil {
@@ -147,10 +175,13 @@ func (s *SpannerService) UpdateSpannerTableRowDeletionPolicy(ctx context.Context
 	if ttl.Column == "" {
 		return nil, status.Error(codes.InvalidArgument, "Invalid argument ttl.column, field is required but not provided")
 	}
-	googleSqlColumnIdValid := utils.ValidateArgument(ttl.Column, utils.SpannerGoogleSqlColumnIdRegex)
-	postgresSqlColumnIdValid := utils.ValidateArgument(ttl.Column, utils.SpannerPostgresSqlColumnIdRegex)
-	if !googleSqlColumnIdValid && !postgresSqlColumnIdValid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument ttl.column (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", ttl.Column, utils.SpannerGoogleSqlColumnIdRegex, utils.SpannerPostgresSqlColumnIdRegex)
+	if err := utils.ValidateDialectArgument(
+		"ttl.column",
+		ttl.Column,
+		utils.SpannerGoogleSqlColumnIdRegex,
+		utils.SpannerPostgresSqlColumnIdRegex,
+	); err != nil {
+		return nil, err
 	}
 	if ttl.Duration == nil {
 		return nil, status.Error(codes.InvalidArgument, "Invalid argument ttl.duration, field is required but not provided")
@@ -185,11 +216,13 @@ func (s *SpannerService) UpdateSpannerTableRowDeletionPolicy(ctx context.Context
 
 // DeleteSpannerTableRowDeletionPolicy drops the table's row deletion policy.
 func (s *SpannerService) DeleteSpannerTableRowDeletionPolicy(ctx context.Context, parent string) error {
-	// Validate parent
-	googleSqlParentValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlTableNameRegex)
-	postgresSqlParentValid := utils.ValidateArgument(parent, utils.SpannerPostgresSqlTableNameRegex)
-	if !googleSqlParentValid && !postgresSqlParentValid {
-		return status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", parent, utils.SpannerGoogleSqlTableNameRegex, utils.SpannerPostgresSqlTableNameRegex)
+	if err := utils.ValidateDialectArgument(
+		"parent",
+		parent,
+		utils.SpannerGoogleSqlTableNameRegex,
+		utils.SpannerPostgresSqlTableNameRegex,
+	); err != nil {
+		return err
 	}
 
 	parentName, err := names.ParseTable(parent)

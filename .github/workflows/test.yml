@@ -1,0 +1,113 @@
+# Terraform Provider test workflow: lint, unit tests, and emulator-backed
+# acceptance tests on every pull request and push to main.
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+    # The release tag's changelog commit lands here touching nothing else;
+    # it cannot change a test result. A push carrying code alongside it still
+    # runs the full suite.
+    paths-ignore:
+      - CHANGELOG.md
+
+permissions:
+  contents: read
+
+# A new push supersedes whatever it interrupted; only the newest ref matters.
+# main is exempt so every merged commit keeps a completed run.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.12.2
+
+  # Reports only vulnerabilities this code actually reaches, so a finding here
+  # is one worth acting on rather than transitive noise.
+  vulncheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Run govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+  # Registry documentation is generated from the provider schema, so a schema
+  # change with no regenerated page ships wrong docs.
+  docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          # tfplugindocs shells out to terraform fmt for the examples.
+          terraform_wrapper: false
+      - name: Check generated docs are current
+        run: make docs-check
+
+  # Unit and integration tests. The ubuntu runner has Docker, so
+  # testcontainers boots the Spanner emulator for the conn/services suites;
+  # everything else is hermetic.
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Run unit and integration tests
+        run: go test ./... -timeout 15m
+
+  # Terraform-driven acceptance tests against the Spanner emulator.
+  # Live-gated tests (database roles, table IAM bindings) skip here by
+  # design: the emulator does not implement the APIs their reads need.
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        # Oldest supported, one in between, newest. The floor is the version
+        # README.md advertises as the minimum — move both or neither.
+        terraform:
+          - '1.5.*'
+          - '1.10.*'
+          - '1.15.*'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ matrix.terraform }}
+          # The wrapper breaks terraform-exec's direct binary invocation.
+          terraform_wrapper: false
+      - name: Run acceptance tests
+        run: TF_ACC=1 go test ./internal/provider/ -v -timeout 30m

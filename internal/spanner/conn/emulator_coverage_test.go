@@ -92,9 +92,13 @@ func TestEmulator_ColumnHydrationCoverage(t *testing.T) {
 		GenerationExpr sql.NullString `gorm:"column:GENERATION_EXPRESSION"`
 	}
 	var rows []*columnRow
-	if err := cn.Query(ctx, db, &rows,
+	if err := cn.Query(
+		ctx,
+		db,
+		&rows,
 		`SELECT COLUMN_NAME,SPANNER_TYPE,IS_NULLABLE,COLUMN_DEFAULT,IS_GENERATED,IS_STORED,GENERATION_EXPRESSION FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = ? ORDER BY ORDINAL_POSITION`,
-		"probe"); err != nil {
+		"probe",
+	); err != nil {
 		t.Fatalf("INFORMATION_SCHEMA.COLUMNS: %v", err)
 	}
 	byName := map[string]*columnRow{}
@@ -197,9 +201,13 @@ func TestEmulator_ColumnHydrationCoverage(t *testing.T) {
 			ColumnName sql.NullString `gorm:"column:COLUMN_NAME"`
 		}
 		var pks []*pkRow
-		if err := cn.Query(ctx, db, &pks,
+		if err := cn.Query(
+			ctx,
+			db,
+			&pks,
 			`SELECT COLUMN_NAME, ORDINAL_POSITION FROM INFORMATION_SCHEMA.INDEX_COLUMNS WHERE TABLE_NAME = ? AND INDEX_NAME = 'PRIMARY_KEY' ORDER BY ORDINAL_POSITION`,
-			"probe"); err != nil {
+			"probe",
+		); err != nil {
 			t.Fatalf("INDEX_COLUMNS: %v", err)
 		}
 		var got []string
@@ -218,8 +226,13 @@ func TestEmulator_ColumnHydrationCoverage(t *testing.T) {
 			OptionValue string `gorm:"column:OPTION_VALUE"`
 		}
 		var opts []optRow
-		if err := cn.Query(ctx, db, &opts,
-			"SELECT COLUMN_NAME, OPTION_NAME, OPTION_VALUE FROM INFORMATION_SCHEMA.COLUMN_OPTIONS WHERE TABLE_NAME = ?", "probe"); err != nil {
+		if err := cn.Query(
+			ctx,
+			db,
+			&opts,
+			"SELECT COLUMN_NAME, OPTION_NAME, OPTION_VALUE FROM INFORMATION_SCHEMA.COLUMN_OPTIONS WHERE TABLE_NAME = ?",
+			"probe",
+		); err != nil {
 			t.Fatalf("COLUMN_OPTIONS: %v", err)
 		}
 		found := false

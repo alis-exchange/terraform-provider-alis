@@ -83,7 +83,7 @@ func (l *tfLogger) LogMode(level logger.LogLevel) logger.Interface {
 // Info logs an info-level message to the writer and mirrors it to tflog.
 func (l *tfLogger) Info(ctx context.Context, msg string, data ...interface{}) {
 	if l.LogLevel >= logger.Info {
-		tflog.Info(ctx, l.infoStr+msg)
+		tflog.Info(ctx, render(msg, data...), callerField())
 		l.Printf(l.infoStr+msg, append([]interface{}{utils.FileWithLineNum()}, data...)...)
 	}
 }
@@ -91,7 +91,7 @@ func (l *tfLogger) Info(ctx context.Context, msg string, data ...interface{}) {
 // Warn logs a warn-level message to the writer and mirrors it to tflog.
 func (l *tfLogger) Warn(ctx context.Context, msg string, data ...interface{}) {
 	if l.LogLevel >= logger.Warn {
-		tflog.Warn(ctx, l.warnStr+msg)
+		tflog.Warn(ctx, render(msg, data...), callerField())
 		l.Printf(l.warnStr+msg, append([]interface{}{utils.FileWithLineNum()}, data...)...)
 	}
 }
@@ -99,16 +99,33 @@ func (l *tfLogger) Warn(ctx context.Context, msg string, data ...interface{}) {
 // Error logs an error-level message to the writer and mirrors it to tflog.
 func (l *tfLogger) Error(ctx context.Context, msg string, data ...interface{}) {
 	if l.LogLevel >= logger.Error {
-		tflog.Error(ctx, l.errStr+msg)
+		tflog.Error(ctx, render(msg, data...), callerField())
 		l.Printf(l.errStr+msg, append([]interface{}{utils.FileWithLineNum()}, data...)...)
 	}
+}
+
+// render fills gorm's format string with its arguments. Terraform renders log
+// messages verbatim, so the format string itself must never be the message —
+// it would reach operators with its verbs and color codes unsubstituted.
+func render(msg string, data ...interface{}) string {
+	if len(data) == 0 {
+		return msg
+	}
+
+	return fmt.Sprintf(msg, data...)
+}
+
+// callerField carries the gorm call site that the writer's format prefix
+// carries for the terminal.
+func callerField() map[string]interface{} {
+	return map[string]interface{}{"caller": utils.FileWithLineNum()}
 }
 
 // Trace logs a completed SQL statement with its duration and row count,
 // picking the error, slow-query, or info format, and mirrors the entry to
 // tflog with structured fields.
 //
-//nolint:cyclop
+//nolint:cyclop // log-format selection is one flat switch over level and latency; splitting it would obscure the flow
 func (l *tfLogger) Trace(ctx context.Context, begin time.Time, fc func() (string, int64), err error) {
 	if l.LogLevel <= logger.Silent {
 		return
@@ -123,10 +140,11 @@ func (l *tfLogger) Trace(ctx context.Context, begin time.Time, fc func() (string
 		} else {
 			l.Printf(l.traceErrStr, utils.FileWithLineNum(), err, float64(elapsed.Nanoseconds())/1e6, rows, sql)
 		}
-		tflog.Trace(ctx, l.traceErrStr+sql, map[string]interface{}{
+		tflog.Trace(ctx, sql, map[string]interface{}{
+			"caller":       utils.FileWithLineNum(),
 			"rowsAffected": rows,
 			"error":        err,
-			"duration":     time.Since(begin),
+			"duration":     elapsed,
 		})
 	case elapsed > l.SlowThreshold && l.SlowThreshold != 0 && l.LogLevel >= logger.Warn:
 		sql, rows := fc()
@@ -136,10 +154,11 @@ func (l *tfLogger) Trace(ctx context.Context, begin time.Time, fc func() (string
 		} else {
 			l.Printf(l.traceWarnStr, utils.FileWithLineNum(), slowLog, float64(elapsed.Nanoseconds())/1e6, rows, sql)
 		}
-		tflog.Trace(ctx, l.traceWarnStr+sql, map[string]interface{}{
+		tflog.Trace(ctx, sql, map[string]interface{}{
+			"caller":       utils.FileWithLineNum(),
 			"rowsAffected": rows,
 			"warning":      slowLog,
-			"duration":     time.Since(begin),
+			"duration":     elapsed,
 		})
 	case l.LogLevel == logger.Info:
 		sql, rows := fc()
@@ -148,9 +167,10 @@ func (l *tfLogger) Trace(ctx context.Context, begin time.Time, fc func() (string
 		} else {
 			l.Printf(l.traceStr, utils.FileWithLineNum(), float64(elapsed.Nanoseconds())/1e6, rows, sql)
 		}
-		tflog.Trace(ctx, l.traceWarnStr+sql, map[string]interface{}{
+		tflog.Trace(ctx, sql, map[string]interface{}{
+			"caller":       utils.FileWithLineNum(),
 			"rowsAffected": rows,
-			"duration":     time.Since(begin),
+			"duration":     elapsed,
 		})
 	}
 }
@@ -159,7 +179,7 @@ func (l *tfLogger) Trace(ctx context.Context, begin time.Time, fc func() (string
 // ParameterizedQueries set it strips the bound params so parameter values
 // never reach log output.
 func (l *tfLogger) ParamsFilter(ctx context.Context, sql string, params ...interface{}) (string, []interface{}) {
-	if l.Config.ParameterizedQueries {
+	if l.ParameterizedQueries {
 		return sql, nil
 	}
 	return sql, params

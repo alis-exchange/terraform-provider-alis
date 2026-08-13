@@ -21,13 +21,13 @@ type durationStringMaxSeconds struct {
 }
 
 // Description describes the validation in plain text formatting.
-func (validator durationStringMaxSeconds) Description(_ context.Context) string {
-	return fmt.Sprintf("duration must be at most %ds", validator.maxDuration)
+func (v durationStringMaxSeconds) Description(_ context.Context) string {
+	return fmt.Sprintf("duration must be at most %ds", v.maxDuration)
 }
 
 // MarkdownDescription describes the validation in Markdown formatting.
-func (validator durationStringMaxSeconds) MarkdownDescription(ctx context.Context) string {
-	return validator.Description(ctx)
+func (v durationStringMaxSeconds) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
 }
 
 // ValidateString performs the validation.

@@ -27,7 +27,10 @@ func ClassifyColumnChange(prior, planned *SpannerTableColumn) (ColumnChangeClass
 	// New column: only a new primary-key column forces a replace.
 	if prior == nil {
 		if planned.GetIsPrimaryKey().GetValue() {
-			return ColumnRequiresReplace, fmt.Sprintf("Column %q is a new primary key column and requires a table replace", planned.GetName())
+			return ColumnRequiresReplace, fmt.Sprintf(
+				"Column %q is a new primary key column and requires a table replace",
+				planned.GetName(),
+			)
 		}
 		return ColumnAlterable, ""
 	}
@@ -35,7 +38,10 @@ func ClassifyColumnChange(prior, planned *SpannerTableColumn) (ColumnChangeClass
 	// Removed column: only a removed primary-key column forces a replace.
 	if planned == nil {
 		if prior.GetIsPrimaryKey().GetValue() {
-			return ColumnRequiresReplace, fmt.Sprintf("Column %q is a removed primary key column and requires a table replace", prior.GetName())
+			return ColumnRequiresReplace, fmt.Sprintf(
+				"Column %q is a removed primary key column and requires a table replace",
+				prior.GetName(),
+			)
 		}
 		return ColumnAlterable, ""
 	}
@@ -57,7 +63,10 @@ func ClassifyColumnChange(prior, planned *SpannerTableColumn) (ColumnChangeClass
 	plannedComputed := planned.GetIsComputed().GetValue()
 	if (priorComputed && plannedComputed && prior.GetComputationDdl().GetValue() != planned.GetComputationDdl().GetValue()) ||
 		(priorComputed && !plannedComputed) {
-		return ColumnRequiresReplace, fmt.Sprintf("Column %q has a changed computation_ddl or is_computed has been disabled and requires a table replace", name)
+		return ColumnRequiresReplace, fmt.Sprintf(
+			"Column %q has a changed computation_ddl or is_computed has been disabled and requires a table replace",
+			name,
+		)
 	}
 
 	if prior.GetIsStored().GetValue() != planned.GetIsStored().GetValue() {

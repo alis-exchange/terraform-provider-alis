@@ -35,6 +35,7 @@ resource "alis_google_spanner_database_role" "admin_role" {
 - `instance` (String)
 - `project` (String)
 - `role` (String) The role that should be applied.
+The role must satisfy the expression `^[a-zA-Z0-9_]{1,64}$`.
 
 ### Optional
 

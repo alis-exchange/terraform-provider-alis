@@ -8,52 +8,46 @@ on:
     tags:
       - 'v*'
 
-# Releases need permissions to read and write the repository contents.
+# Read by default; the job that publishes the release raises its own scope.
 # GitHub considers creating releases and uploading assets as writing contents.
 permissions:
-  contents: write
+  contents: read
 
+# This workflow holds the GPG signing key, so every action is pinned to a
+# commit rather than a tag: a tag can be repointed at new code, and anything
+# that runs here can read the key. Dependabot bumps these pins.
+#
+# Release notes come from GoReleaser's own changelog, built from the commits
+# since the previous tag (see `changelog` in .goreleaser.yml). CHANGELOG.md is
+# a separate artifact, written back to the default branch by changelog.yml.
 jobs:
-  release-notes:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
-        with:
-          fetch-depth: 0
-      - name: Generate Release Notes
-        run: |
-          export PREV_TAG=$(git tag --list 'v*' --sort=-version:refname | head -n 2 | tail -n 1)
-          export PREV_VERSION=${PREV_TAG//v}
-          sed -n -e "1{/# /d;}" -e "2{/^$/d;}" -e "/# $PREV_VERSION/q;p" CHANGELOG.md > release-notes.txt
-      - uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v4.3.1
-        with:
-          name: release-notes
-          path: release-notes.txt
-          retention-days: 1
   goreleaser:
-    needs: [ release-notes ]
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # GoReleaser publishes the release and uploads its assets.
+    permissions:
+      contents: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Allow goreleaser to access older tag information.
           fetch-depth: 0
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: 'go.mod'
           cache: true
       - name: Set up Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
       - name: Import GPG key
-        uses: crazy-max/ghaction-import-gpg@v6
+        uses: crazy-max/ghaction-import-gpg@2dc316deee8e90f13e1a351ab510b4d5bc0c82cd # v7.0.0
         id: import_gpg
         with:
           gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
           passphrase: ${{ secrets.PASSPHRASE }}
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           # either 'goreleaser' (default) or 'goreleaser-pro'
           distribution: goreleaser

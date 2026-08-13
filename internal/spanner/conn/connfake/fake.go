@@ -5,6 +5,7 @@
 package connfake
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"strings"
@@ -15,8 +16,6 @@ import (
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-
-	"context"
 )
 
 // OpKind identifies which Connection method a recorded Op captures.
@@ -212,7 +211,7 @@ func (f *Fake) ExecuteDDLWithDescriptors(_ context.Context, database string, pro
 	return f.record(Op{Kind: OpExecuteDDL, Database: database, Statements: statements, ProtoDescriptors: protoDescriptors})
 }
 
-func (f *Fake) Exec(_ context.Context, database string, sql string, params ...any) error {
+func (f *Fake) Exec(_ context.Context, database, sql string, params ...any) error {
 	return f.record(Op{Kind: OpExec, Database: database, SQL: sql, Params: params})
 }
 
@@ -253,7 +252,7 @@ func (f *Fake) Close() error { return nil }
 
 // fillDest implements the port's scan contract: dest *[]T gets all rows
 // (empty slice for none), dest *T gets the first row or codes.NotFound.
-func fillDest(dest any, rows any) error {
+func fillDest(dest, rows any) error {
 	dv := reflect.ValueOf(dest)
 	if dv.Kind() != reflect.Pointer || dv.IsNil() {
 		return fmt.Errorf("connfake: dest must be a non-nil pointer, got %T", dest)

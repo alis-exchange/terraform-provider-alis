@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	customloggers "terraform-provider-alis/internal/spanner/logger"
+
 	"cloud.google.com/go/spanner"
 	spannerAdmin "cloud.google.com/go/spanner/admin/database/apiv1"
 	"cloud.google.com/go/spanner/admin/database/apiv1/databasepb"
@@ -21,15 +23,28 @@ import (
 	"google.golang.org/grpc/status"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
-
-	customloggers "terraform-provider-alis/internal/spanner/logger"
 )
+
+// emulatorHostEnv names the emulator address adapters read at construction.
+const emulatorHostEnv = "SPANNER_EMULATOR_HOST"
 
 // New builds the production Connection: the GCP adapter wrapped in the
 // uniform retry policy. It performs no I/O; clients are created lazily on
-// first use and cached per database thereafter.
+// first use and cached per database thereafter. Callers may therefore build
+// one while holding a lock.
+//
+// The result depends on more than opts — see EmulatorHost.
 func New(opts Options) Connection {
 	return WithRetry(newGCPAdapter(opts), opts.Retry)
+}
+
+// EmulatorHost reports the emulator address the next New will capture, empty
+// when talking to real Spanner. It is the one input to New that does not
+// arrive through Options, so anything caching Connections must include it
+// alongside the Options in its cache key: two adapters built from identical
+// Options but different hosts talk to different backends.
+func EmulatorHost() string {
+	return os.Getenv(emulatorHostEnv)
 }
 
 // defaultGormLogger is the single logger configuration applied to every
@@ -72,7 +87,7 @@ var _ Connection = (*gcpConn)(nil)
 func newGCPAdapter(opts Options) *gcpConn {
 	return &gcpConn{
 		opts:         opts,
-		emulatorHost: os.Getenv("SPANNER_EMULATOR_HOST"),
+		emulatorHost: EmulatorHost(),
 		logger:       defaultGormLogger(),
 		sessions:     map[string]*gorm.DB{},
 		dialects:     map[string]Dialect{},
@@ -204,7 +219,7 @@ func (g *gcpConn) ExecuteDDLWithDescriptors(ctx context.Context, database string
 	return op.Wait(ctx)
 }
 
-func (g *gcpConn) Exec(ctx context.Context, database string, sql string, params ...any) error {
+func (g *gcpConn) Exec(ctx context.Context, database, sql string, params ...any) error {
 	db, err := g.session(ctx, database)
 	if err != nil {
 		return err

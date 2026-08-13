@@ -34,7 +34,7 @@ func (t *SpannerTable) GetProject() string {
 	if err != nil {
 		return ""
 	}
-	return fmt.Sprintf("projects/%s", n.Project)
+	return "projects/" + n.Project
 }
 
 // GetProjectId returns the project id segment, or "" when the table name is
@@ -124,7 +124,6 @@ func (t *SpannerTable) GetInterleave() *SpannerTableInterleave {
 // CreateDdl renders the CREATE TABLE statement, including primary key and
 // interleave clauses.
 func (t *SpannerTable) CreateDdl() (string, error) {
-
 	ddl := fmt.Sprintf("CREATE TABLE `%s` (", t.GetTableId())
 
 	// Add columns
@@ -151,15 +150,8 @@ func (t *SpannerTable) CreateDdl() (string, error) {
 	}
 
 	// Add interleave
-	{
-		interleaveDdl, err := t.GetInterleave().ddl()
-		if err != nil {
-			return "", err
-		}
-
-		if interleaveDdl != "" {
-			ddl += fmt.Sprintf(", %s", interleaveDdl)
-		}
+	if interleaveDdl := t.GetInterleave().ddl(); interleaveDdl != "" {
+		ddl += ", " + interleaveDdl
 	}
 
 	return ddl, nil
@@ -350,9 +342,13 @@ func (t *SpannerTable) Get(ctx context.Context, cn conn.Connection, name string)
 	var columns []*SpannerTableColumn
 	{
 		var rows []*informationSchemaColumnRow
-		if err := cn.Query(ctx, t.GetDatabase(), &rows,
+		if err := cn.Query(
+			ctx,
+			t.GetDatabase(),
+			&rows,
 			`SELECT COLUMN_NAME,SPANNER_TYPE,IS_NULLABLE,COLUMN_DEFAULT,IS_GENERATED,IS_STORED,GENERATION_EXPRESSION FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = ? ORDER BY ORDINAL_POSITION`,
-			t.GetTableId()); err != nil {
+			t.GetTableId(),
+		); err != nil {
 			return nil, err
 		}
 
@@ -420,9 +416,13 @@ func (t *SpannerTable) Get(ctx context.Context, cn conn.Connection, name string)
 	// Get primary keys from INFORMATION_SCHEMA
 	{
 		var rows []*primaryKeyRow
-		if err := cn.Query(ctx, t.GetDatabase(), &rows,
+		if err := cn.Query(
+			ctx,
+			t.GetDatabase(),
+			&rows,
 			`SELECT COLUMN_NAME, ORDINAL_POSITION FROM INFORMATION_SCHEMA.INDEX_COLUMNS WHERE TABLE_NAME = ? AND INDEX_NAME = 'PRIMARY_KEY' ORDER BY ORDINAL_POSITION`,
-			t.GetTableId()); err != nil {
+			t.GetTableId(),
+		); err != nil {
 			return nil, err
 		}
 
@@ -485,14 +485,8 @@ func (t *SpannerTable) Update(ctx context.Context, cn conn.Connection, existingT
 		return t, nil
 	}
 
-	// Compare tables
-	identical, err := t.compare(existingTable)
-	if err != nil {
-		return nil, err
-	}
-
 	// If tables are identical, return gracefully
-	if identical {
+	if t.compare(existingTable) {
 		return t, nil
 	}
 
@@ -539,59 +533,59 @@ func (t *SpannerTable) Delete(ctx context.Context, cn conn.Connection) error {
 // compare reports whether two tables are identical in name, columns, and
 // interleave. Columns are compared positionally, so a reorder counts as a
 // difference.
-func (t *SpannerTable) compare(other *SpannerTable) (bool, error) {
+func (t *SpannerTable) compare(other *SpannerTable) bool {
 	// If tables are nil, return gracefully.
 	if t == nil && other == nil {
-		return true, nil
+		return true
 	}
 
 	// If one table is nil, return false.
 	if t == nil || other == nil {
-		return false, nil
+		return false
 	}
 
 	// Compare table names
 	if t.GetName() != other.GetName() {
-		return false, nil
+		return false
 	}
 
 	// Compare schemas
 	if t.GetSchema() != nil && other.GetSchema() == nil {
-		return false, nil
+		return false
 	}
 	if t.GetSchema() == nil && other.GetSchema() != nil {
-		return false, nil
+		return false
 	}
 	if t.GetSchema() != nil && other.GetSchema() != nil {
 		if len(t.GetSchema().GetColumns()) != len(other.GetSchema().GetColumns()) {
-			return false, nil
+			return false
 		}
 
 		for i, column := range t.GetSchema().GetColumns() {
 			if !column.compare(other.GetSchema().GetColumns()[i]) {
-				return false, nil
+				return false
 			}
 		}
 	}
 
 	// Compare interleave
 	if t.GetInterleave() != nil && other.GetInterleave() == nil {
-		return false, nil
+		return false
 	}
 	if t.GetInterleave() == nil && other.GetInterleave() != nil {
-		return false, nil
+		return false
 	}
 	if t.GetInterleave() != nil && other.GetInterleave() != nil {
 		if t.GetInterleave().GetParentTable() != other.GetInterleave().GetParentTable() {
-			return false, nil
+			return false
 		}
 
 		if t.GetInterleave().GetOnDelete() != other.GetInterleave().GetOnDelete() {
-			return false, nil
+			return false
 		}
 	}
 
-	return true, nil
+	return true
 }
 
 // parseSpannerType normalizes a SPANNER_TYPE value from INFORMATION_SCHEMA

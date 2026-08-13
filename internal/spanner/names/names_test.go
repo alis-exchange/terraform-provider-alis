@@ -12,20 +12,34 @@ func TestParseAndFormatRoundTrip(t *testing.T) {
 		parse func(string) (interface{ String() string }, error)
 		input string
 	}{
-		{"database", func(s string) (interface{ String() string }, error) { n, err := ParseDatabase(s); return n, err },
-			"projects/my-project/instances/my-instance/databases/my-db"},
-		{"table", func(s string) (interface{ String() string }, error) { n, err := ParseTable(s); return n, err },
-			"projects/my-project/instances/my-instance/databases/my-db/tables/my_table"},
-		{"sequence", func(s string) (interface{ String() string }, error) { n, err := ParseSequence(s); return n, err },
-			"projects/my-project/instances/my-instance/databases/my-db/sequences/my_sequence"},
-		{"database role", func(s string) (interface{ String() string }, error) { n, err := ParseDatabaseRole(s); return n, err },
-			"projects/my-project/instances/my-instance/databases/my-db/databaseRoles/my_role"},
-		{"index", func(s string) (interface{ String() string }, error) { n, err := ParseIndex(s); return n, err },
-			"projects/my-project/instances/my-instance/databases/my-db/tables/my_table/indexes/my_idx"},
-		{"table role", func(s string) (interface{ String() string }, error) { n, err := ParseTableRole(s); return n, err },
-			"projects/my-project/instances/my-instance/databases/my-db/tables/my_table/tableRoles/my_role"},
-		{"foreign key", func(s string) (interface{ String() string }, error) { n, err := ParseForeignKey(s); return n, err },
-			"projects/my-project/instances/my-instance/databases/my-db/tables/my_table/constraints/FK_my"},
+		{
+			"database", func(s string) (interface{ String() string }, error) { n, err := ParseDatabase(s); return n, err },
+			"projects/my-project/instances/my-instance/databases/my-db",
+		},
+		{
+			"table", func(s string) (interface{ String() string }, error) { n, err := ParseTable(s); return n, err },
+			"projects/my-project/instances/my-instance/databases/my-db/tables/my_table",
+		},
+		{
+			"sequence", func(s string) (interface{ String() string }, error) { n, err := ParseSequence(s); return n, err },
+			"projects/my-project/instances/my-instance/databases/my-db/sequences/my_sequence",
+		},
+		{
+			"database role", func(s string) (interface{ String() string }, error) { n, err := ParseDatabaseRole(s); return n, err },
+			"projects/my-project/instances/my-instance/databases/my-db/databaseRoles/my_role",
+		},
+		{
+			"index", func(s string) (interface{ String() string }, error) { n, err := ParseIndex(s); return n, err },
+			"projects/my-project/instances/my-instance/databases/my-db/tables/my_table/indexes/my_idx",
+		},
+		{
+			"table role", func(s string) (interface{ String() string }, error) { n, err := ParseTableRole(s); return n, err },
+			"projects/my-project/instances/my-instance/databases/my-db/tables/my_table/tableRoles/my_role",
+		},
+		{
+			"foreign key", func(s string) (interface{ String() string }, error) { n, err := ParseForeignKey(s); return n, err },
+			"projects/my-project/instances/my-instance/databases/my-db/tables/my_table/constraints/FK_my",
+		},
 	}
 
 	for _, tc := range cases {
@@ -57,7 +71,10 @@ func TestParseRejectsMalformedNames(t *testing.T) {
 	}
 
 	for _, input := range bad {
-		if _, err := ParseDatabase(input); input == "projects/p/instances/i/databases/d/extra" || input == "projects/p/instances/i/databases/d/tables/t/extra" {
+		if _, err := ParseDatabase(
+			input,
+		); input == "projects/p/instances/i/databases/d/extra" ||
+			input == "projects/p/instances/i/databases/d/tables/t/extra" {
 			if err == nil {
 				t.Errorf("ParseDatabase(%q) accepted a longer name", input)
 			}

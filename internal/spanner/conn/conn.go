@@ -34,7 +34,9 @@ const (
 //     meaningful code. Codes are preserved, never re-wrapped — callers branch
 //     on codes, never on error strings or concrete Google types.
 //   - Retry is NOT part of adapter implementations; wrap with WithRetry once at
-//     construction. Callers never wrap calls in utils.Retry themselves.
+//     construction. Callers never add retry loops of their own — stacked
+//     policies multiply latency and replay DDL that may have partly applied.
+//     A gap in what counts as retryable belongs in DefaultRetryable.
 type Connection interface {
 	// Dialect reports the database's SQL dialect, cached per database (a
 	// database's dialect is immutable). Doubles as an existence check:
@@ -57,7 +59,7 @@ type Connection interface {
 	// Exec runs exactly one non-schema statement (DML) with positional params.
 	// Schema changes MUST use ExecuteDDL so retry and LRO semantics stay
 	// uniform; passing DDL here is a contract violation.
-	Exec(ctx context.Context, database string, sql string, params ...any) error
+	Exec(ctx context.Context, database, sql string, params ...any) error
 
 	// Query runs sql with positional params and scans rows into dest.
 	// Column-to-field mapping happens inside the adapter, so fakes can serve

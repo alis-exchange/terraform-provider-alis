@@ -14,49 +14,66 @@ import (
 // CreateSpannerTableForeignKeyConstraint adds a foreign key constraint to the
 // table named by parent via ALTER TABLE ... ADD CONSTRAINT. Every constraint
 // field is validated up front; DDL failures surface as codes.Internal.
-func (s *SpannerService) CreateSpannerTableForeignKeyConstraint(ctx context.Context, parent string, constraint *schema.SpannerTableForeignKeyConstraint) (*schema.SpannerTableForeignKeyConstraint, error) {
-	// Validate parent
-	googleSqlParentValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlTableNameRegex)
-	postgresSqlParentValid := utils.ValidateArgument(parent, utils.SpannerPostgresSqlTableNameRegex)
-	if !googleSqlParentValid && !postgresSqlParentValid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", parent, utils.SpannerGoogleSqlTableNameRegex, utils.SpannerPostgresSqlTableNameRegex)
+func (s *SpannerService) CreateSpannerTableForeignKeyConstraint(
+	ctx context.Context,
+	parent string,
+	constraint *schema.SpannerTableForeignKeyConstraint,
+) (*schema.SpannerTableForeignKeyConstraint, error) {
+	if err := utils.ValidateDialectArgument(
+		"parent",
+		parent,
+		utils.SpannerGoogleSqlTableNameRegex,
+		utils.SpannerPostgresSqlTableNameRegex,
+	); err != nil {
+		return nil, err
 	}
 	// Ensure constraint is provided and has a name and foreign keys
 	if constraint == nil {
 		return nil, status.Error(codes.InvalidArgument, "Invalid argument constraint, field is required but not provided")
 	}
-	googleSqlConstraintIdValid := utils.ValidateArgument(constraint.Name, utils.SpannerGoogleSqlConstraintIdRegex)
-	postgresSqlConstraintIdValid := utils.ValidateArgument(constraint.Name, utils.SpannerPostgresSqlConstraintIdRegex)
-	if !googleSqlConstraintIdValid && !postgresSqlConstraintIdValid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument constraint.name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", constraint.Name, utils.SpannerGoogleSqlConstraintIdRegex, utils.SpannerPostgresSqlConstraintIdRegex)
+	if err := utils.ValidateDialectArgument(
+		"constraint.name",
+		constraint.Name,
+		utils.SpannerGoogleSqlConstraintIdRegex,
+		utils.SpannerPostgresSqlConstraintIdRegex,
+	); err != nil {
+		return nil, err
 	}
-	// Validate foreign key fields
 
 	if constraint.ReferencedTable == "" {
 		return nil, status.Error(codes.InvalidArgument, "Invalid argument constraint.referenced_table, field is required but not provided")
 	}
-	googleSqlForeignKeyTableValid := utils.ValidateArgument(constraint.ReferencedTable, utils.SpannerGoogleSqlTableIdRegex)
-	postgresSqlForeignKeyTableValid := utils.ValidateArgument(constraint.ReferencedTable, utils.SpannerPostgresSqlTableIdRegex)
-	if !googleSqlForeignKeyTableValid && !postgresSqlForeignKeyTableValid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument constraint.referenced_table (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", constraint.ReferencedTable, utils.SpannerGoogleSqlTableNameRegex, utils.SpannerPostgresSqlTableNameRegex)
+	if err := utils.ValidateDialectArgument(
+		"constraint.referenced_table",
+		constraint.ReferencedTable,
+		utils.SpannerGoogleSqlTableIdRegex,
+		utils.SpannerPostgresSqlTableIdRegex,
+	); err != nil {
+		return nil, err
 	}
 
 	if constraint.ReferencedColumn == "" {
 		return nil, status.Error(codes.InvalidArgument, "Invalid argument constraint.referenced_column, field is required but not provided")
 	}
-	googleSqlForeignKeyColumnValid := utils.ValidateArgument(constraint.ReferencedColumn, utils.SpannerGoogleSqlColumnIdRegex)
-	postgresSqlForeignKeyColumnValid := utils.ValidateArgument(constraint.ReferencedColumn, utils.SpannerPostgresSqlColumnIdRegex)
-	if !googleSqlForeignKeyColumnValid && !postgresSqlForeignKeyColumnValid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument constraint.referenced_column (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", constraint.ReferencedColumn, utils.SpannerGoogleSqlColumnIdRegex, utils.SpannerPostgresSqlColumnIdRegex)
+	if err := utils.ValidateDialectArgument(
+		"constraint.referenced_column",
+		constraint.ReferencedColumn,
+		utils.SpannerGoogleSqlColumnIdRegex,
+		utils.SpannerPostgresSqlColumnIdRegex,
+	); err != nil {
+		return nil, err
 	}
 
 	if constraint.Column == "" {
 		return nil, status.Error(codes.InvalidArgument, "Invalid argument constraint.column, field is required but not provided")
 	}
-	googleSqlColumnValid := utils.ValidateArgument(constraint.Column, utils.SpannerGoogleSqlColumnIdRegex)
-	postgresSqlColumnValid := utils.ValidateArgument(constraint.Column, utils.SpannerPostgresSqlColumnIdRegex)
-	if !googleSqlColumnValid && !postgresSqlColumnValid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument constraint.column (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", constraint.Column, utils.SpannerGoogleSqlColumnIdRegex, utils.SpannerPostgresSqlColumnIdRegex)
+	if err := utils.ValidateDialectArgument(
+		"constraint.column",
+		constraint.Column,
+		utils.SpannerGoogleSqlColumnIdRegex,
+		utils.SpannerPostgresSqlColumnIdRegex,
+	); err != nil {
+		return nil, err
 	}
 
 	parentName, err := names.ParseTable(parent)
@@ -81,19 +98,26 @@ func (s *SpannerService) CreateSpannerTableForeignKeyConstraint(ctx context.Cont
 // from the INFORMATION_SCHEMA constraint tables. parent is the constrained
 // table's resource name and name the bare constraint ID; codes.NotFound is
 // returned when the table has no FOREIGN KEY constraint by that name.
-func (s *SpannerService) GetSpannerTableForeignKeyConstraint(ctx context.Context, parent string, name string) (*schema.SpannerTableForeignKeyConstraint, error) {
-	// Validate parent
-	googleSqlParentValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlTableNameRegex)
-	postgresSqlParentValid := utils.ValidateArgument(parent, utils.SpannerPostgresSqlTableNameRegex)
-	if !googleSqlParentValid && !postgresSqlParentValid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", parent, utils.SpannerGoogleSqlTableNameRegex, utils.SpannerPostgresSqlTableNameRegex)
+func (s *SpannerService) GetSpannerTableForeignKeyConstraint(
+	ctx context.Context,
+	parent, name string,
+) (*schema.SpannerTableForeignKeyConstraint, error) {
+	if err := utils.ValidateDialectArgument(
+		"parent",
+		parent,
+		utils.SpannerGoogleSqlTableNameRegex,
+		utils.SpannerPostgresSqlTableNameRegex,
+	); err != nil {
+		return nil, err
 	}
 
-	// Validate name
-	googleSqlConstraintIdValid := utils.ValidateArgument(name, utils.SpannerGoogleSqlConstraintIdRegex)
-	postgresSqlConstraintIdValid := utils.ValidateArgument(name, utils.SpannerPostgresSqlConstraintIdRegex)
-	if !googleSqlConstraintIdValid && !postgresSqlConstraintIdValid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", name, utils.SpannerGoogleSqlConstraintIdRegex, utils.SpannerPostgresSqlConstraintIdRegex)
+	if err := utils.ValidateDialectArgument(
+		"name",
+		name,
+		utils.SpannerGoogleSqlConstraintIdRegex,
+		utils.SpannerPostgresSqlConstraintIdRegex,
+	); err != nil {
+		return nil, err
 	}
 
 	parentName, err := names.ParseTable(parent)
@@ -154,19 +178,23 @@ func (s *SpannerService) GetSpannerTableForeignKeyConstraint(ctx context.Context
 
 // DeleteSpannerTableForeignKeyConstraint drops the named foreign key
 // constraint from the table via ALTER TABLE ... DROP CONSTRAINT.
-func (s *SpannerService) DeleteSpannerTableForeignKeyConstraint(ctx context.Context, parent string, name string) error {
-	// Validate parent
-	googleSqlParentValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlTableNameRegex)
-	postgresSqlParentValid := utils.ValidateArgument(parent, utils.SpannerPostgresSqlTableNameRegex)
-	if !googleSqlParentValid && !postgresSqlParentValid {
-		return status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", parent, utils.SpannerGoogleSqlTableNameRegex, utils.SpannerPostgresSqlTableNameRegex)
+func (s *SpannerService) DeleteSpannerTableForeignKeyConstraint(ctx context.Context, parent, name string) error {
+	if err := utils.ValidateDialectArgument(
+		"parent",
+		parent,
+		utils.SpannerGoogleSqlTableNameRegex,
+		utils.SpannerPostgresSqlTableNameRegex,
+	); err != nil {
+		return err
 	}
 
-	// Validate name
-	googleSqlConstraintIdValid := utils.ValidateArgument(name, utils.SpannerGoogleSqlConstraintIdRegex)
-	postgresSqlConstraintIdValid := utils.ValidateArgument(name, utils.SpannerPostgresSqlConstraintIdRegex)
-	if !googleSqlConstraintIdValid && !postgresSqlConstraintIdValid {
-		return status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", name, utils.SpannerGoogleSqlConstraintIdRegex, utils.SpannerPostgresSqlConstraintIdRegex)
+	if err := utils.ValidateDialectArgument(
+		"name",
+		name,
+		utils.SpannerGoogleSqlConstraintIdRegex,
+		utils.SpannerPostgresSqlConstraintIdRegex,
+	); err != nil {
+		return err
 	}
 
 	parentName, err := names.ParseTable(parent)

@@ -5,55 +5,84 @@ on:
     tags:
       - 'v*.*.*'  # Run on version tag push
 
+# The job commits CHANGELOG.md back to the default branch.
+permissions:
+  contents: write
+
+# Two tags pushed together would otherwise race to commit the same file.
+concurrency:
+  group: changelog
+  cancel-in-progress: false
+
 jobs:
   changelog:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
 
     steps:
-      # Step 1: Checkout the repository with full history
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      # Check out the default branch, not the tag. The commit made below is
+      # pushed there, and one built on the tag is only pushable while the tag
+      # is still the branch tip — any merge landing first makes it a
+      # non-fast-forward and fails the release. The tag's tree is not needed:
+      # conventional-changelog reads tags and history, both of which
+      # fetch-depth 0 provides from any starting point.
+      - name: Checkout default branch
+        uses: actions/checkout@v7
         with:
+          ref: ${{ github.event.repository.default_branch }}
           fetch-depth: 0  # Ensure full commit history is fetched, including tags
 
-      # Step 2: Find the branch associated with the commit
-      - name: Determine the branch
-        id: extract_branch
+      # A tag cut from somewhere else would produce a changelog silently
+      # missing its commits. Say so instead of publishing that.
+      - name: Verify the tag is on the default branch
         run: |
-          # Try to find the branch based on commit history
-          BRANCH=$(git for-each-ref --format='%(refname:short)' $(git rev-parse --verify HEAD) | grep 'heads/' | head -n 1 | sed 's|heads/||')
-          echo "Branch: $BRANCH"
-          if [ -z "$BRANCH" ]; then
-            echo "No branch found, defaulting to 'main'"
-            BRANCH="main"  # Fallback to 'main' if no branch is found
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" HEAD; then
+            echo "::error::Tag ${GITHUB_REF#refs/tags/} ($GITHUB_SHA) is not an ancestor of $DEFAULT_BRANCH; its commits would be missing from the changelog."
+            exit 1
           fi
-          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
 
-      # Step 3: Set up Node.js environment to install conventional-changelog
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          node-version: '24'
 
-      # Step 4: Install conventional-changelog-cli
+      # Pinned so a release's changelog does not change shape because an
+      # upstream major shipped.
       - name: Install conventional-changelog-cli
-        run: |
-          npm install -g conventional-changelog-cli
+        run: npm install -g conventional-changelog-cli@5.0.0
 
-      # Step 5: Generate changelog
+      # -r 0 rebuilds every release from the tag history, so the result does
+      # not depend on which commit is checked out.
       - name: Generate changelog
-        run: |
-          conventional-changelog -p angular -i CHANGELOG.md -s -r 0
+        run: conventional-changelog -p angular -i CHANGELOG.md -s -r 0
 
-      # Step 6: Commit and push the changelog to the determined branch
+      # A tag that adds no new entries leaves the file untouched, which is a
+      # no-op rather than a failure.
       - name: Commit and push changelog
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- CHANGELOG.md; then
+            echo "CHANGELOG.md unchanged for ${GITHUB_REF#refs/tags/}; nothing to commit."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add CHANGELOG.md
           git commit -m "chore(CHANGELOG): update changelog for ${GITHUB_REF#refs/tags/}"
 
-          # Push to the determined branch
-          git push origin HEAD:${{ steps.extract_branch.outputs.branch }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Someone can still land on the default branch during this run.
+          # Rebasing the one changelog commit resolves that without a human,
+          # and CHANGELOG.md is generated output, so there is nothing to
+          # conflict over that regenerating would not settle.
+          for attempt in 1 2 3; do
+            if git push origin "HEAD:$DEFAULT_BRANCH"; then
+              exit 0
+            fi
+            echo "Push rejected (attempt $attempt); rebasing onto the latest $DEFAULT_BRANCH."
+            git pull --rebase origin "$DEFAULT_BRANCH"
+          done
+
+          echo "::error::Could not push CHANGELOG.md to $DEFAULT_BRANCH after 3 attempts."
+          exit 1

@@ -1,27 +1,138 @@
 # Visit https://golangci-lint.run/ for usage documentation
-# and information on other useful linters
-issues:
-  max-per-linter: 0
-  max-same-issues: 0
+# and information on other useful linters.
+version: "2"
+
+run:
+  timeout: 5m
 
 linters:
-  disable-all: true
+  default: none
   enable:
-    - durationcheck
-    - errcheck
-    - exportloopref
-    - forcetypeassert
-    - godot
-    - gofmt
-    - gosimple
-    - ineffassign
-    - makezero
-    - misspell
-    - nilerr
-    - predeclared
-    - staticcheck
-    - tenv
-    - unconvert
-    - unparam
-    - unused
-    - vet
+    # --- Correctness / bug catching ---
+    - bodyclose # http.Response.Body must be closed
+    - contextcheck # context.Context is propagated correctly
+    - copyloopvar # replaces exportloopref for Go 1.22+ loop variable checks
+    - durationcheck # two time.Duration values multiplied together
+    - errcheck # unchecked errors
+    - errorlint # correct use of errors.Is / errors.As / %w
+    - forcetypeassert # forbids unchecked type assertions
+    - govet # go vet, with extra analyzers below
+    - ineffassign # ineffectual assignments
+    - makezero # slice declared with a non-zero length then appended to
+    - nilerr # returns nil where a non-nil err was checked
+    - noctx # http requests should be created with a context
+    - rowserrcheck # sql.Rows.Err() is called
+    - sqlclosecheck # sql.Rows / sql.Stmt are closed
+    - staticcheck # SA/ST/QF/S checks (includes former gosimple + stylecheck)
+    - unused # unused code
+
+    # --- Style / readability ---
+    - dupword # duplicate words in comments/strings
+    - godot # top-level comments end with a period
+    - misspell # english misspellings
+    - predeclared # shadowing of Go predeclared identifiers
+    - revive # configurable golint replacement
+    - unconvert # unnecessary type conversions
+    - unparam # unused function parameters/results
+    - usetesting # replaces tenv; catches os.Setenv/t.TempDir misuse in tests
+
+    # --- Modern Go idioms ---
+    - intrange # `for i := range n` over C-style for (Go 1.22+)
+    - perfsprint # cheaper alternatives to fmt.Sprintf/Errorf
+
+    # --- Meta ---
+    - nolintlint # requires //nolint directives to be well-formed
+
+  settings:
+    errcheck:
+      check-type-assertions: true
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment # too noisy for a Terraform provider
+        - shadow # noisy; opt in later if the team wants
+    revive:
+      severity: warning
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-naming
+        - name: error-return
+        - name: error-strings
+        - name: increment-decrement
+        - name: indent-error-flow
+        - name: range
+        - name: receiver-naming
+        - name: redefines-builtin-id
+        - name: superfluous-else
+        - name: time-naming
+        - name: unreachable-code
+        # var-declaration disabled: main.go intentionally uses
+        #   `var version string = "dev"` so goreleaser can overwrite it via
+        #   -ldflags. Explicit type prevents the ldflag from becoming an
+        #   untyped constant assignment.
+    staticcheck:
+      checks:
+        - all
+        - -ST1000 # package doc comments — opt in when we're ready
+        - -ST1003 # naming conventions — revive handles this
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+      allow-unused: false
+
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      # Tests are held to a lighter standard. contextcheck is excluded because
+      # it walks call chains into t.Cleanup closures, which correctly build
+      # fresh contexts (the test context is already cancelled during cleanup).
+      - path: _test\.go
+        linters:
+          - errcheck
+          - forcetypeassert
+          - unparam
+          - dupword
+          - perfsprint
+          - contextcheck
+      # Provider docs templates are not Go.
+      - path: "templates/"
+        linters:
+          - godot
+
+formatters:
+  enable:
+    - gofumpt # stricter gofmt (superset of gofmt)
+    - gci # deterministic import grouping/ordering
+    - golines # wrap long lines — helps split long struct/call literals
+  settings:
+    gofumpt:
+      extra-rules: true
+      # Without this, gofumpt inside `golangci-lint run` can't tell local
+      # imports from third-party and fights gci's section order.
+      module-path: terraform-provider-alis
+    gci:
+      # Order matches the project convention: stdlib, then local packages,
+      # then third-party. See any file under internal/spanner/ for reference.
+      sections:
+        - standard
+        - prefix(terraform-provider-alis)
+        - default
+        - blank
+        - dot
+      custom-order: true
+    golines:
+      max-len: 140
+      tab-len: 4
+      reformat-tags: true
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

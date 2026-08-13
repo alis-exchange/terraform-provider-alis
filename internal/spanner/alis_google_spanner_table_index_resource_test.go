@@ -46,7 +46,7 @@ func planModifierDescriptions(t *testing.T, attr any) []string {
 	}
 
 	var out []string
-	for i := 0; i < field.Len(); i++ {
+	for i := range field.Len() {
 		m, ok := field.Index(i).Interface().(interface {
 			Description(context.Context) string
 		})

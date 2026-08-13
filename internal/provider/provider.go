@@ -2,6 +2,9 @@ package provider
 
 import (
 	"context"
+	"crypto/sha256"
+	"strings"
+	"sync"
 
 	"terraform-provider-alis/internal"
 	"terraform-provider-alis/internal/spanner"
@@ -19,12 +22,77 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	googleoauth "golang.org/x/oauth2/google"
 )
 
 // Ensure the implementation satisfies the expected interfaces.
 var (
 	_ provider.Provider = &googleProvider{}
 )
+
+// Every Configure call builds a provider instance, and each Connection owns a
+// database admin client plus a session pool per database. The framework offers
+// no teardown hook to close them, and Terraform reconfigures the provider
+// freely — acceptance tests do it once per step — so connections are shared
+// per distinct credential configuration and live for the process.
+//
+// This bounds the admin clients and gRPC channels to one per configuration; it
+// does not bound what accumulates inside one. A Connection caches a session
+// pool per database it is asked about and only releases them on Close, so a
+// process touching many databases still grows — just far more slowly than one
+// adapter per Configure did.
+var (
+	connectionsMu sync.Mutex
+	connections   = map[[sha256.Size]byte]conn.Connection{}
+)
+
+// sharedConnection returns the Connection for this configuration, building it
+// on first use.
+//
+// build runs under the lock, which is safe only because conn.New performs no
+// I/O — it allocates the adapter and lets the clients come up lazily. Should
+// that change, this serializes every provider configuration in the process.
+func sharedConnection(key [sha256.Size]byte, build func() conn.Connection) conn.Connection {
+	connectionsMu.Lock()
+	defer connectionsMu.Unlock()
+
+	if existing, ok := connections[key]; ok {
+		return existing
+	}
+
+	cn := build()
+	connections[key] = cn
+
+	return cn
+}
+
+// connectionKey fingerprints everything the resulting Connection depends on:
+// the configured credentials, the identity those resolved to — Application
+// Default Credentials can name a different principal without the configuration
+// changing at all — and the emulator host conn captures at construction. A key
+// that misses any of them hands back a Connection built for another backend or
+// another principal.
+//
+// The inputs are hashed rather than stored: this key lives in a map that
+// survives for the process, which is no place for resolved credentials.
+func connectionKey(project, credentials, accessToken string, resolved *googleoauth.Credentials) [sha256.Size]byte {
+	// Configure rejects nil credentials before reaching here; treat them as
+	// absent rather than panicking if that ever stops being true.
+	var resolvedProject string
+	var resolvedJSON []byte
+	if resolved != nil {
+		resolvedProject, resolvedJSON = resolved.ProjectID, resolved.JSON
+	}
+
+	return sha256.Sum256([]byte(strings.Join([]string{
+		project,
+		credentials,
+		accessToken,
+		conn.EmulatorHost(),
+		resolvedProject,
+		string(resolvedJSON),
+	}, "\x00")))
+}
 
 // NewProvider is a helper function to simplify provider server and testing implementation.
 func NewProvider(version string) func() provider.Provider {
@@ -153,13 +221,19 @@ func (p *googleProvider) Configure(ctx context.Context, req provider.ConfigureRe
 	// Get Google Cloud credentials
 	googleCreds, err := utils.GetGoogleCredentials(ctx, config.Project.ValueString(), credentials, accessToken)
 	if err != nil {
-		resp.Diagnostics.AddError("Unable to Resolve Google Cloud Credentials",
-			"Ensure that either credentials or access_token is specified, or that the provider is running in an environment with Application Default Credentials: "+utils.ErrDetail(err))
+		resp.Diagnostics.AddError(
+			"Unable to Resolve Google Cloud Credentials",
+			"Ensure that either credentials or access_token is specified, or that the provider is running in an environment with Application Default Credentials: "+utils.ErrDetail(
+				err,
+			),
+		)
 		return
 	}
 	if googleCreds == nil {
-		resp.Diagnostics.AddError("Missing Google Cloud Credentials",
-			"No credentials were resolved. Specify either credentials or access_token, or run the provider in an environment with Application Default Credentials.")
+		resp.Diagnostics.AddError(
+			"Missing Google Cloud Credentials",
+			"No credentials were resolved. Specify either credentials or access_token, or run the provider in an environment with Application Default Credentials.",
+		)
 		return
 	}
 
@@ -169,7 +243,14 @@ func (p *googleProvider) Configure(ctx context.Context, req provider.ConfigureRe
 		GoogleProjectId: config.Project.ValueString(),
 		// conn.New is the single place the resolved credentials reach every
 		// Spanner client.
-		SpannerService: spannerservices.NewSpannerService(conn.New(conn.Options{Credentials: googleCreds})),
+		SpannerService: spannerservices.NewSpannerService(
+			sharedConnection(
+				connectionKey(config.Project.ValueString(), credentials, accessToken, googleCreds),
+				func() conn.Connection {
+					return conn.New(conn.Options{Credentials: googleCreds})
+				},
+			),
+		),
 	}
 	resp.DataSourceData = providerConfig
 	resp.ResourceData = providerConfig

@@ -26,8 +26,12 @@ import (
 //   - accessToken: {string} - The access token
 //   - scopes: {[]string} - The scopes to use for the credentials
 //
-// Returns: {google.Credentials}
-func GetGoogleCredentials(ctx context.Context, projectId string, credentialsStr string, accessToken string, scopes ...string) (*googleoauth.Credentials, error) {
+// Returns: {google.Credentials}.
+func GetGoogleCredentials(
+	ctx context.Context,
+	projectId, credentialsStr, accessToken string,
+	scopes ...string,
+) (*googleoauth.Credentials, error) {
 	// Set default scopes if none are provided
 	if len(scopes) == 0 {
 		scopes = []string{
@@ -45,6 +49,7 @@ func GetGoogleCredentials(ctx context.Context, projectId string, credentialsStr 
 
 	// If credentialsStr are provided, use them
 	if credentialsStr != "" {
+		//nolint:contextcheck,staticcheck // tokenCtx deliberately outlives the request; deprecated parse API kept until migration to cloud.google.com/go/auth
 		creds, err := googleoauth.CredentialsFromJSON(tokenCtx, []byte(credentialsStr), scopes...)
 		if err != nil {
 			return nil, err
@@ -73,6 +78,7 @@ func GetGoogleCredentials(ctx context.Context, projectId string, credentialsStr 
 	}
 
 	// If no credentialsStr or access token is provided, use Application Default Credentials
+	//nolint:contextcheck // tokenCtx deliberately outlives the request; see comment above
 	creds, err := googleoauth.FindDefaultCredentials(tokenCtx, scopes...)
 	if err != nil {
 		return nil, err

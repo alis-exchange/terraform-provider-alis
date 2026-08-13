@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -59,7 +60,7 @@ func (i *SpannerTableIndex) CreateDdl(table string) (string, error) {
 		return "", fmt.Errorf("table is required for index %s", i.Name)
 	}
 	if i.Name == "" {
-		return "", fmt.Errorf("index name is required")
+		return "", errors.New("index name is required")
 	}
 	if len(i.Columns) == 0 {
 		return "", fmt.Errorf("at least one column is required for index %s", i.Name)
@@ -89,5 +90,5 @@ func (i *SpannerTableIndex) CreateDdl(table string) (string, error) {
 
 // DropIndexDdl renders the DROP INDEX statement.
 func DropIndexDdl(name string) string {
-	return fmt.Sprintf("DROP INDEX %s", name)
+	return "DROP INDEX " + name
 }

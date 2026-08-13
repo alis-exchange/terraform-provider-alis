@@ -6,14 +6,11 @@ import (
 
 	"terraform-provider-alis/internal"
 	"terraform-provider-alis/internal/spanner/names"
+	sequenceschema "terraform-provider-alis/internal/spanner/schema"
+	"terraform-provider-alis/internal/utils"
 	"terraform-provider-alis/internal/validators"
 
-	"terraform-provider-alis/internal/utils"
-
-	sequenceschema "terraform-provider-alis/internal/spanner/schema"
-
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -57,26 +54,9 @@ type spannerSequenceOptions struct {
 	StartWithCounter types.Int64               `tfsdk:"start_with_counter"`
 }
 
-func (o spannerSequenceOptions) attrTypes() map[string]attr.Type {
-	return map[string]attr.Type{
-		"sequence_kind": types.StringType,
-		"skip_range": types.ObjectType{
-			AttrTypes: spannerSequenceSkipRange{}.attrTypes(),
-		},
-		"start_with_counter": types.Int64Type,
-	}
-}
-
 type spannerSequenceSkipRange struct {
 	Min types.Int64 `tfsdk:"min"`
 	Max types.Int64 `tfsdk:"max"`
-}
-
-func (o spannerSequenceSkipRange) attrTypes() map[string]attr.Type {
-	return map[string]attr.Type{
-		"min": types.Int64Type,
-		"max": types.Int64Type,
-	}
 }
 
 // Metadata returns the resource type name.
@@ -126,8 +106,8 @@ func (r *databaseSequenceResource) Schema(ctx context.Context, _ resource.Schema
 					"Changing this forces a new resource.",
 				Validators: []validator.String{
 					validators.RegexMatches([]*regexp.Regexp{
-						regexp.MustCompile(utils.SpannerGoogleSqlSequenceIdRegex),
-						regexp.MustCompile(utils.SpannerPostgresSqlSequenceIdRegex),
+						utils.Pattern(utils.SpannerGoogleSqlSequenceIdRegex),
+						utils.Pattern(utils.SpannerPostgresSqlSequenceIdRegex),
 					}, "Name must be a valid Spanner Sequence ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions"),
 				},
 				PlanModifiers: []planmodifier.String{

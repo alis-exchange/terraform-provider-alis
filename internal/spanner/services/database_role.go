@@ -16,13 +16,15 @@ import (
 // CreateDatabaseRole creates a database role by issuing CREATE ROLE DDL in
 // the parent database. The database's existence is verified first so a
 // missing database surfaces as its own error rather than a DDL failure.
-func (s *SpannerService) CreateDatabaseRole(ctx context.Context, parent string, roleId string) (*databasepb.DatabaseRole, error) {
+func (s *SpannerService) CreateDatabaseRole(ctx context.Context, parent, roleId string) (*databasepb.DatabaseRole, error) {
 	// Validate arguments
-	// Validate parent
-	googleSqlParentValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlDatabaseNameRegex)
-	postgresSqlParentValid := utils.ValidateArgument(parent, utils.SpannerPostgresSqlDatabaseNameRegex)
-	if !googleSqlParentValid && !postgresSqlParentValid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", parent, utils.SpannerGoogleSqlDatabaseNameRegex, utils.SpannerPostgresSqlDatabaseNameRegex)
+	if err := utils.ValidateDialectArgument(
+		"parent",
+		parent,
+		utils.SpannerGoogleSqlDatabaseNameRegex,
+		utils.SpannerPostgresSqlDatabaseNameRegex,
+	); err != nil {
+		return nil, err
 	}
 
 	// Ensure role is provided
@@ -48,11 +50,13 @@ func (s *SpannerService) CreateDatabaseRole(ctx context.Context, parent string, 
 // Admin API has no per-role lookup, so every role in the database is listed
 // and matched by name; codes.NotFound is returned if the role is absent.
 func (s *SpannerService) GetDatabaseRole(ctx context.Context, name string) (*databasepb.DatabaseRole, error) {
-	// Validate name
-	googleSqlValid := utils.ValidateArgument(name, utils.SpannerGoogleSqlDatabaseRoleNameRegex)
-	postgresSqlValid := utils.ValidateArgument(name, utils.SpannerPostgresSqlDatabaseRoleNameRegex)
-	if !googleSqlValid && !postgresSqlValid {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", name, utils.SpannerGoogleSqlDatabaseNameRegex, utils.SpannerPostgresSqlDatabaseNameRegex)
+	if err := utils.ValidateDialectArgument(
+		"name",
+		name,
+		utils.SpannerGoogleSqlDatabaseRoleNameRegex,
+		utils.SpannerPostgresSqlDatabaseRoleNameRegex,
+	); err != nil {
+		return nil, err
 	}
 
 	roleName, err := names.ParseDatabaseRole(name)
@@ -78,12 +82,19 @@ func (s *SpannerService) GetDatabaseRole(ctx context.Context, name string) (*dat
 
 // ListDatabaseRoles lists the roles of the parent database one page at a
 // time; the returned page token is empty on the final page.
-func (s *SpannerService) ListDatabaseRoles(ctx context.Context, parent string, pageSize int32, pageToken string) ([]*databasepb.DatabaseRole, string, error) {
-	// Validate parent
-	googleSqlValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlDatabaseNameRegex)
-	postgresSqlValid := utils.ValidateArgument(parent, utils.SpannerPostgresSqlDatabaseNameRegex)
-	if !googleSqlValid && !postgresSqlValid {
-		return nil, "", status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", parent, utils.SpannerGoogleSqlDatabaseNameRegex, utils.SpannerPostgresSqlDatabaseNameRegex)
+func (s *SpannerService) ListDatabaseRoles(
+	ctx context.Context,
+	parent string,
+	pageSize int32,
+	pageToken string,
+) ([]*databasepb.DatabaseRole, string, error) {
+	if err := utils.ValidateDialectArgument(
+		"parent",
+		parent,
+		utils.SpannerGoogleSqlDatabaseNameRegex,
+		utils.SpannerPostgresSqlDatabaseNameRegex,
+	); err != nil {
+		return nil, "", err
 	}
 
 	roleNames, nextPageToken, err := s.conn.DatabaseRoles(ctx, parent, pageSize, pageToken)
@@ -102,11 +113,13 @@ func (s *SpannerService) ListDatabaseRoles(ctx context.Context, parent string, p
 // DeleteDatabaseRole removes a database role by issuing DROP ROLE DDL in its
 // database.
 func (s *SpannerService) DeleteDatabaseRole(ctx context.Context, name string) error {
-	// Validate name
-	googleSqlValid := utils.ValidateArgument(name, utils.SpannerGoogleSqlDatabaseRoleNameRegex)
-	postgresSqlValid := utils.ValidateArgument(name, utils.SpannerPostgresSqlDatabaseRoleNameRegex)
-	if !googleSqlValid && !postgresSqlValid {
-		return status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", name, utils.SpannerGoogleSqlDatabaseNameRegex, utils.SpannerPostgresSqlDatabaseNameRegex)
+	if err := utils.ValidateDialectArgument(
+		"name",
+		name,
+		utils.SpannerGoogleSqlDatabaseRoleNameRegex,
+		utils.SpannerPostgresSqlDatabaseRoleNameRegex,
+	); err != nil {
+		return err
 	}
 
 	roleName, err := names.ParseDatabaseRole(name)

@@ -118,5 +118,4 @@ func TestWithRetry(t *testing.T) {
 			t.Errorf("attempts = %d, want 1 (NotFound is not retryable)", got)
 		}
 	})
-
 }

@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"terraform-provider-alis/internal/spanner/conn"
@@ -197,8 +198,7 @@ func (s *IntegrationSuite) TestTableLifecycle() {
 
 	// Update: widen display_name and add a column through the schema.columns
 	// field mask.
-	updated := make([]*schema.SpannerTableColumn, len(columns))
-	copy(updated, columns)
+	updated := slices.Clone(columns)
 	for i, c := range updated {
 		if c.Name == "display_name" {
 			updated[i] = &schema.SpannerTableColumn{Name: "display_name", Type: "STRING", Size: wrapperspb.Int64(500)}

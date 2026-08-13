@@ -1,0 +1,31 @@
+# Without this, action versions drift silently until a runtime deprecation
+# breaks the workflows. Dependabot also rewrites the commit-pinned actions in
+# release.yml, which are otherwise invisible to every other update mechanism.
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      # One PR a week for the whole set: these move together on GitHub's
+      # runtime deprecations, and reviewing them separately is busywork.
+      actions:
+        patterns:
+          - '*'
+
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      # Terraform plugin libraries release in step and are tested together.
+      terraform-plugin:
+        patterns:
+          - github.com/hashicorp/terraform-plugin-*
+      google-cloud:
+        patterns:
+          - cloud.google.com/go*
+          - github.com/googleapis/*
+          - google.golang.org/*

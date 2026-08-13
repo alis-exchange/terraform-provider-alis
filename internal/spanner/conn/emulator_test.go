@@ -24,7 +24,7 @@ func TestEmulator_PortEndToEnd(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("Dialect reports GoogleSQL and caches", func(t *testing.T) {
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			d, err := cn.Dialect(ctx, db)
 			if err != nil || d != conn.DialectGoogleSQL {
 				t.Fatalf("Dialect() = %v, %v; want GoogleSQL, nil", d, err)
@@ -126,8 +126,13 @@ func TestEmulator_SupportMatrix(t *testing.T) {
 			Expr string `gorm:"column:ROW_DELETION_POLICY_EXPRESSION"`
 		}
 		var row policyRow
-		if err := cn.Query(ctx, db, &row,
-			"SELECT ROW_DELETION_POLICY_EXPRESSION FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = ? AND ROW_DELETION_POLICY_EXPRESSION IS NOT NULL", "events"); err != nil {
+		if err := cn.Query(
+			ctx,
+			db,
+			&row,
+			"SELECT ROW_DELETION_POLICY_EXPRESSION FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = ? AND ROW_DELETION_POLICY_EXPRESSION IS NOT NULL",
+			"events",
+		); err != nil {
 			t.Fatalf("policy accepted but not surfaced in INFORMATION_SCHEMA: %v", err)
 		}
 		t.Logf("row deletion policy supported; expression: %s", row.Expr)
@@ -177,8 +182,14 @@ func TestEmulator_SupportMatrix(t *testing.T) {
 			Grantee string `gorm:"column:GRANTEE"`
 		}
 		var rows []privRow
-		if err := cn.Query(ctx, db, &rows,
-			"SELECT GRANTEE FROM INFORMATION_SCHEMA.TABLE_PRIVILEGES WHERE table_name = ? AND grantee = ?", "inventory", "inventory_admin"); err != nil {
+		if err := cn.Query(
+			ctx,
+			db,
+			&rows,
+			"SELECT GRANTEE FROM INFORMATION_SCHEMA.TABLE_PRIVILEGES WHERE table_name = ? AND grantee = ?",
+			"inventory",
+			"inventory_admin",
+		); err != nil {
 			// Known emulator gap: role/grant DDL is accepted but
 			// TABLE_PRIVILEGES is not surfaced, so the iam_binding read path
 			// stays cloud-gated.
@@ -216,8 +227,13 @@ func TestEmulator_SupportMatrix(t *testing.T) {
 			OptionValue string `gorm:"column:OPTION_VALUE"`
 		}
 		var rows []optRow
-		if err := cn.Query(ctx, db, &rows,
-			"SELECT COLUMN_NAME, OPTION_NAME, OPTION_VALUE FROM INFORMATION_SCHEMA.COLUMN_OPTIONS WHERE TABLE_NAME = ?", "opts"); err != nil {
+		if err := cn.Query(
+			ctx,
+			db,
+			&rows,
+			"SELECT COLUMN_NAME, OPTION_NAME, OPTION_VALUE FROM INFORMATION_SCHEMA.COLUMN_OPTIONS WHERE TABLE_NAME = ?",
+			"opts",
+		); err != nil {
 			t.Skipf("COLUMN_OPTIONS not queryable: %v", err)
 		}
 		if len(rows) == 0 {

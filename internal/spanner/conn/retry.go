@@ -98,7 +98,7 @@ func (r *retryConn) ExecuteDDLWithDescriptors(ctx context.Context, database stri
 	})
 }
 
-func (r *retryConn) Exec(ctx context.Context, database string, sql string, params ...any) error {
+func (r *retryConn) Exec(ctx context.Context, database, sql string, params ...any) error {
 	return r.do(ctx, func() error { return r.inner.Exec(ctx, database, sql, params...) })
 }
 

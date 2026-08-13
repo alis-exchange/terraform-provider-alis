@@ -26,7 +26,7 @@ Note on PROTO columns: a table column is declared as a protocol buffer type via 
 
 Requirements:
 
-- [Terraform](https://developer.hashicorp.com/terraform/downloads) >= 1.8
+- [Terraform](https://developer.hashicorp.com/terraform/downloads) >= 1.5 — the oldest version the acceptance suite runs against (see the matrix in [`test.yml`](.github/workflows/test.yml)); raise this line and that matrix together
 - [Go](https://go.dev/doc/install) >= 1.26 (only to build the provider from source)
 - Docker (only for emulator-backed tests)
 - `protoc` (only to regenerate the proto test fixture)
@@ -91,11 +91,12 @@ With dev overrides active, skip `terraform init` and run `terraform plan` / `ter
 
 ## Run tests
 
-Tests come in three tiers, from hermetic to cloud-backed:
+Tests come in four tiers, from hermetic to cloud-backed:
 
 1. **Unit tests** — `go test ./...`. No cloud access needed; pure suites run against fakes in `internal/spanner/conn/connfake`.
 2. **Emulator-backed tests** — the `emulator*_test.go` files in `internal/spanner/conn` and `internal/spanner/schema` exercise the real GCP adapter against the Cloud Spanner emulator. With Docker running they auto-start `gcr.io/cloud-spanner-emulator/emulator:latest` via testcontainers-go; without Docker or `SPANNER_EMULATOR_HOST` they skip automatically.
-3. **Integration lifecycles** — the testify suite `TestIntegrationSuite` in `internal/spanner/services` runs full create → read → mutate → delete lifecycles for every resource. They resolve their backend emulator-first via `conntest.Target`: an explicit `SPANNER_EMULATOR_HOST`, else a Docker-started emulator, else — only when no emulator is available — live Spanner if `ALIS_OS_PROJECT`/`ALIS_OS_INSTANCE` are set; otherwise they skip. Every lifecycle creates and removes its own objects, so a live database is left as found. A few assertions the emulator cannot host (IAM-binding reads, database-role listings) run only against live Spanner.
+3. **Integration lifecycles** — the testify suite `TestIntegrationSuite` in `internal/spanner/services` runs full create → read → mutate → delete lifecycles for every resource. They resolve their backend emulator-first via `conntest.Target`: an explicit `SPANNER_EMULATOR_HOST`, else a Docker-started emulator, else live Spanner if `ALIS_OS_PROJECT`/`ALIS_OS_INSTANCE` are set; otherwise they skip. Set `ALIS_OS_LIVE=1` to choose live Spanner even when an emulator is reachable — without it, a running Docker daemon always wins and the live-only tests never execute. Every lifecycle creates and removes its own objects, so a live database is left as found. A few assertions the emulator cannot host (IAM-binding reads, database-role listings) run only against live Spanner.
+4. **Acceptance tests** — the `TestAcc*` functions in `internal/provider` drive the real provider through a real `terraform` binary (plan, apply, import, destroy) via [terraform-plugin-testing](https://developer.hashicorp.com/terraform/plugin/testing). They are gated behind `TF_ACC=1` (`make testacc`), resolve their backend exactly like the integration lifecycles (each test gets a fresh throwaway database), and need a `terraform` binary on `PATH` — or set `TF_ACC_TERRAFORM_PATH` to a specific binary, or `TF_ACC_TERRAFORM_VERSION` to auto-install one. The database-role and IAM-binding tests skip on the emulator (their reads need `ListDatabaseRoles` and `INFORMATION_SCHEMA.TABLE_PRIVILEGES`, which it does not implement) and run against live Spanner.
 
 With Docker running and no environment set, `go test ./...` therefore covers everything except the live-only assertions — which is the default posture for CI and automated agents.
 
@@ -105,11 +106,14 @@ Environment variables:
 |---|---|---|
 | `SPANNER_EMULATOR_HOST` | Emulator | Reuse an already-running emulator instead of starting a Docker container |
 | `SPANNER_EMULATOR_IMAGE` | Emulator | Override the default emulator image |
-| `ALIS_OS_PROJECT` | Integration | Google Cloud project for live runs (used only when no emulator is available) |
-| `ALIS_OS_INSTANCE` | Integration | Spanner instance for live runs (used only when no emulator is available) |
+| `ALIS_OS_LIVE` | Integration | Set to `1` to run against live Spanner even when an emulator is reachable |
+| `ALIS_OS_PROJECT` | Integration | Google Cloud project for live runs |
+| `ALIS_OS_INSTANCE` | Integration | Spanner instance for live runs |
 | `ALIS_OS_DATABASE` | Integration | Existing live database the lifecycles run inside (default `tf-test`) |
 
-`make testacc` (the `GNUmakefile` default) runs the whole suite with `TF_ACC=1` and a 120-minute timeout.
+Without `ALIS_OS_LIVE`, the `ALIS_OS_*` variables only take effect when no emulator can be reached.
+
+Make targets: `make test` (the default — everything except acceptance), `make testacc` (acceptance tests only), `make testacc-all` (everything including acceptance), `make lint`, `make fmt`, `make docs`, and `make docs-check`. CI runs lint, `make docs-check`, `make test`, and the acceptance suite across several Terraform versions on every pull request (`.github/workflows/test.yml`).
 
 The PROTO-column test fixture `internal/spanner/conn/testdata/tftest.pb` is compiled from `tftest.proto`; regenerate it with the `protoc` command in that file's header comment:
 

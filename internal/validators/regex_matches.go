@@ -18,16 +18,16 @@ type regexMatchesValidator struct {
 }
 
 // Description describes the validation in plain text formatting.
-func (validator regexMatchesValidator) Description(_ context.Context) string {
-	if validator.message != "" {
-		return validator.message
+func (v regexMatchesValidator) Description(_ context.Context) string {
+	if v.message != "" {
+		return v.message
 	}
-	return fmt.Sprintf("value must match one of the regular expressions '%s'", validator.regexps)
+	return fmt.Sprintf("value must match one of the regular expressions '%s'", v.regexps)
 }
 
 // MarkdownDescription describes the validation in Markdown formatting.
-func (validator regexMatchesValidator) MarkdownDescription(ctx context.Context) string {
-	return validator.Description(ctx)
+func (v regexMatchesValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
 }
 
 // Validate performs the validation.

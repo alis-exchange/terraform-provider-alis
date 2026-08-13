@@ -1,6 +1,9 @@
 package schema
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 // SpannerTableForeignKeyConstraint represents a single-column foreign key:
 // Column references ReferencedColumn on ReferencedTable.
@@ -62,7 +65,7 @@ func (c *SpannerTableForeignKeyConstraint) CreateDdl(table string) (string, erro
 		return "", fmt.Errorf("table is required for foreign key constraint %s", c.Name)
 	}
 	if c.Name == "" {
-		return "", fmt.Errorf("constraint name is required")
+		return "", errors.New("constraint name is required")
 	}
 	if c.Column == "" {
 		return "", fmt.Errorf("column is required for foreign key constraint %s", c.Name)
@@ -77,12 +80,12 @@ func (c *SpannerTableForeignKeyConstraint) CreateDdl(table string) (string, erro
 	ddl := fmt.Sprintf("ALTER TABLE `%s` ADD CONSTRAINT `%s` FOREIGN KEY (`%s`) REFERENCES %s(`%s`)",
 		table, c.Name, c.Column, c.ReferencedTable, c.ReferencedColumn)
 	if c.OnDelete != SpannerTableConstraintActionUnspecified {
-		ddl += fmt.Sprintf(" ON DELETE %s", c.OnDelete.String())
+		ddl += " ON DELETE " + c.OnDelete.String()
 	}
 	return ddl, nil
 }
 
 // DropForeignKeyConstraintDdl renders the DROP CONSTRAINT statement.
-func DropForeignKeyConstraintDdl(table string, name string) string {
+func DropForeignKeyConstraintDdl(table, name string) string {
 	return fmt.Sprintf("ALTER TABLE `%s` DROP CONSTRAINT `%s`", table, name)
 }

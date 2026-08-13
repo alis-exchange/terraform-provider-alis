@@ -2,8 +2,6 @@ package services
 
 import (
 	"terraform-provider-alis/internal/spanner/conn"
-
-	_ "github.com/googleapis/go-sql-spanner"
 )
 
 // Database dialect, state, and encryption values as reported by the Spanner

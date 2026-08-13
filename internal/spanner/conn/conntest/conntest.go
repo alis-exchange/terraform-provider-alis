@@ -10,12 +10,16 @@
 // one instance serve the whole test process; every
 // test gets a fresh randomized database dropped on cleanup, so tests stay
 // order-independent and parallelizable.
+//
+// Target extends that order with live Spanner — see its own documentation for
+// the fixed database it uses and how to select it.
 package conntest
 
 import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -84,7 +88,7 @@ func ensureInstance(ctx context.Context) error {
 	defer ia.Close()
 
 	op, err := ia.CreateInstance(ctx, &instancepb.CreateInstanceRequest{
-		Parent:     fmt.Sprintf("projects/%s", projectID),
+		Parent:     "projects/" + projectID,
 		InstanceId: instanceID,
 		Instance: &instancepb.Instance{
 			Config:      fmt.Sprintf("projects/%s/instanceConfigs/emulator-config", projectID),
@@ -143,17 +147,21 @@ func Setup(t *testing.T, dialect databasepb.DatabaseDialect) (conn.Connection, s
 //
 // Resolution order:
 //
-//  1. SPANNER_EMULATOR_HOST set — that emulator, with a fresh throwaway
+//  1. ALIS_OS_LIVE set to a true value — live Spanner, chosen explicitly.
+//     Without this, a reachable emulator always wins, so a developer with
+//     Docker running could never reach the live-only tests.
+//  2. SPANNER_EMULATOR_HOST set — that emulator, with a fresh throwaway
 //     database.
-//  2. Docker available — a testcontainers-managed emulator, same fresh
-//     database semantics. Together with (1) this keeps CI and automated
+//  3. Docker available — a testcontainers-managed emulator, same fresh
+//     database semantics. Together with (2) this keeps CI and automated
 //     agents on the emulator by default.
-//  3. ALIS_OS_PROJECT and ALIS_OS_INSTANCE set — the live database named by
-//     ALIS_OS_DATABASE (default "tf-test") on that instance: the fallback
-//     for developers who want a real-Spanner run when no emulator is
-//     available. The database must already exist; tests create and remove
-//     their own objects inside it.
-//  4. Otherwise the test skips.
+//  4. ALIS_OS_PROJECT and ALIS_OS_INSTANCE set — the fallback for developers
+//     who want a real-Spanner run when no emulator is available.
+//  5. Otherwise the test skips.
+//
+// The live database is the one named by ALIS_OS_DATABASE (default "tf-test")
+// on the ALIS_OS_INSTANCE instance. It must already exist and is never
+// dropped; tests create and remove their own objects inside it.
 //
 // live reports whether the returned database is real Spanner, for fixtures
 // only one backend can host (e.g. proto bundles the test provisions itself
@@ -161,24 +169,48 @@ func Setup(t *testing.T, dialect databasepb.DatabaseDialect) (conn.Connection, s
 func Target(t *testing.T) (cn conn.Connection, database string, live bool) {
 	t.Helper()
 
+	preferLive, _ := strconv.ParseBool(os.Getenv("ALIS_OS_LIVE"))
+	if preferLive {
+		if cn, database, ok := liveTarget(t); ok {
+			return cn, database, true
+		}
+		t.Fatal("ALIS_OS_LIVE is set but ALIS_OS_PROJECT/ALIS_OS_INSTANCE are not")
+	}
+
 	if err := ensureEmulator(); err == nil {
 		cn, database = Setup(t, databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL)
 		return cn, database, false
 	}
 
-	project, instance := os.Getenv("ALIS_OS_PROJECT"), os.Getenv("ALIS_OS_INSTANCE")
-	if project != "" && instance != "" {
-		dbID := os.Getenv("ALIS_OS_DATABASE")
-		if dbID == "" {
-			dbID = "tf-test"
-		}
-		cn := conn.New(conn.Options{})
-		t.Cleanup(func() { _ = cn.Close() })
-		return cn, fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, dbID), true
+	if cn, database, ok := liveTarget(t); ok {
+		return cn, database, true
 	}
 
-	t.Skip("no Spanner backend: set SPANNER_EMULATOR_HOST, start Docker, or set ALIS_OS_PROJECT/ALIS_OS_INSTANCE")
+	t.Skip(
+		"no Spanner backend: set SPANNER_EMULATOR_HOST, start Docker, or set ALIS_OS_PROJECT/ALIS_OS_INSTANCE (add ALIS_OS_LIVE=1 to prefer live over a running emulator)",
+	)
 	return nil, "", false
+}
+
+// liveTarget builds a Connection to the developer's own Spanner instance,
+// reporting false when it is not configured.
+func liveTarget(t *testing.T) (conn.Connection, string, bool) {
+	t.Helper()
+
+	project, instance := os.Getenv("ALIS_OS_PROJECT"), os.Getenv("ALIS_OS_INSTANCE")
+	if project == "" || instance == "" {
+		return nil, "", false
+	}
+
+	dbID := os.Getenv("ALIS_OS_DATABASE")
+	if dbID == "" {
+		dbID = "tf-test"
+	}
+
+	cn := conn.New(conn.Options{})
+	t.Cleanup(func() { _ = cn.Close() })
+
+	return cn, fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, dbID), true
 }
 
 // createDatabase creates a database in the given dialect and registers a

@@ -2,10 +2,12 @@ package spanner
 
 import (
 	"context"
+	"regexp"
 
 	"terraform-provider-alis/internal"
 	"terraform-provider-alis/internal/spanner/names"
 	"terraform-provider-alis/internal/utils"
+	"terraform-provider-alis/internal/validators"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -13,6 +15,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -78,10 +81,17 @@ func (r *databaseRoleResource) Schema(ctx context.Context, _ resource.SchemaRequ
 			},
 			"role": schema.StringAttribute{
 				Required: true,
+				Validators: []validator.String{
+					validators.RegexMatches([]*regexp.Regexp{
+						utils.Pattern(utils.SpannerGoogleSqlRoleIdRegex),
+						utils.Pattern(utils.SpannerPostgresSqlRoleIdRegex),
+					}, "Role must be a valid Spanner database role ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions"),
+				},
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
-				Description: "The role that should be applied.",
+				Description: "The role that should be applied.\n" +
+					"The role must satisfy the expression `^[a-zA-Z0-9_]{1,64}$`.",
 			},
 		},
 		Description: "Creates a custom role in the database if it does not exist. If the role already exists, it will be imported into the state.\n" +

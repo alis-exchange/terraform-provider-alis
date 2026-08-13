@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"errors"
 	"fmt"
 
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -15,18 +16,18 @@ type SpannerTableRowDeletionPolicy struct {
 	Duration *wrapperspb.Int64Value
 }
 
-func (p *SpannerTableRowDeletionPolicy) ddl(table string, verb string) (string, error) {
+func (p *SpannerTableRowDeletionPolicy) ddl(table, verb string) (string, error) {
 	if p == nil {
 		return "", nil
 	}
 	if table == "" {
-		return "", fmt.Errorf("table is required for row deletion policy")
+		return "", errors.New("table is required for row deletion policy")
 	}
 	if p.Column == "" {
-		return "", fmt.Errorf("column is required for row deletion policy")
+		return "", errors.New("column is required for row deletion policy")
 	}
 	if p.Duration == nil {
-		return "", fmt.Errorf("duration is required for row deletion policy")
+		return "", errors.New("duration is required for row deletion policy")
 	}
 
 	return fmt.Sprintf("ALTER TABLE %s %s ROW DELETION POLICY (OLDER_THAN(%s, INTERVAL %d DAY))",

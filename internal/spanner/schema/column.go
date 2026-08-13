@@ -2,6 +2,7 @@ package schema
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -178,7 +179,6 @@ func (c *SpannerTableColumn) PrimaryKey() bool {
 // and error without a ProtoPackage; computed columns error without a
 // ComputationDdl.
 func (c *SpannerTableColumn) ddl() (string, error) {
-
 	// Create DDL
 	ddl := fmt.Sprintf("`%s`", c.GetName())
 	var options []string
@@ -193,7 +193,7 @@ func (c *SpannerTableColumn) ddl() (string, error) {
 
 			ddl += fmt.Sprintf(" `%s`", c.GetProtoPackage().GetValue())
 		} else {
-			ddl += fmt.Sprintf(" %s", c.GetType())
+			ddl += " " + c.GetType()
 		}
 	}
 
@@ -201,7 +201,7 @@ func (c *SpannerTableColumn) ddl() (string, error) {
 	{
 		size := "MAX"
 		if c.GetSize() != nil {
-			size = fmt.Sprintf("%d", c.GetSize().GetValue())
+			size = strconv.FormatInt(c.GetSize().GetValue(), 10)
 		}
 		if c.GetType() == SpannerTableDataTypeString.String() || c.GetType() == SpannerTableDataTypeBytes.String() {
 			ddl += fmt.Sprintf("(%s)", size)
@@ -221,7 +221,6 @@ func (c *SpannerTableColumn) ddl() (string, error) {
 
 	// Set Computation DDL
 	{
-
 		if c.GetIsComputed() != nil && c.GetIsComputed().GetValue() {
 			if c.GetComputationDdl() == nil || c.GetComputationDdl().GetValue() == "" {
 				return "", fmt.Errorf("computation_ddl is required for computed column %s", c.GetName())
@@ -232,7 +231,6 @@ func (c *SpannerTableColumn) ddl() (string, error) {
 				ddl += " STORED"
 			}
 		}
-
 	}
 
 	// Set Default Value
@@ -283,15 +281,17 @@ func (c *SpannerTableColumn) alterDdl(existingColumn *SpannerTableColumn) ([]str
 
 				ddl += fmt.Sprintf(" `%s`", c.GetProtoPackage().GetValue())
 			} else {
-				ddl += fmt.Sprintf(" %s", c.GetType())
+				ddl += " " + c.GetType()
 			}
 		}
 
 		// Handle Size
 		{
-			if c.GetType() == SpannerTableDataTypeString.String() || c.GetType() == SpannerTableDataTypeBytes.String() || c.GetType() == SpannerTableDataTypeStringArray.String() {
+			if c.GetType() == SpannerTableDataTypeString.String() || c.GetType() == SpannerTableDataTypeBytes.String() ||
+				c.GetType() == SpannerTableDataTypeStringArray.String() {
 				// If the existing column has a size and the new column does not
-				if existingColumn.GetSize() != nil && existingColumn.GetSize().GetValue() > 0 && (c.GetSize() == nil || c.GetSize().GetValue() == 0) {
+				if existingColumn.GetSize() != nil && existingColumn.GetSize().GetValue() > 0 &&
+					(c.GetSize() == nil || c.GetSize().GetValue() == 0) {
 					size := "MAX"
 
 					switch c.GetType() {
@@ -306,8 +306,9 @@ func (c *SpannerTableColumn) alterDdl(existingColumn *SpannerTableColumn) ([]str
 				}
 
 				// If the existing column does not have a size and the new column does
-				if (existingColumn.GetSize() == nil || existingColumn.GetSize().GetValue() == 0) && c.GetSize() != nil && c.GetSize().GetValue() > 0 {
-					size := fmt.Sprintf("%d", c.GetSize().GetValue())
+				if (existingColumn.GetSize() == nil || existingColumn.GetSize().GetValue() == 0) && c.GetSize() != nil &&
+					c.GetSize().GetValue() > 0 {
+					size := strconv.FormatInt(c.GetSize().GetValue(), 10)
 
 					switch c.GetType() {
 					case SpannerTableDataTypeString.String(), SpannerTableDataTypeBytes.String():
@@ -324,7 +325,7 @@ func (c *SpannerTableColumn) alterDdl(existingColumn *SpannerTableColumn) ([]str
 				if existingColumn.GetSize() != nil && existingColumn.GetSize().GetValue() > 0 &&
 					c.GetSize() != nil && c.GetSize().GetValue() > 0 &&
 					existingColumn.GetSize().GetValue() != c.GetSize().GetValue() {
-					size := fmt.Sprintf("%d", c.GetSize().GetValue())
+					size := strconv.FormatInt(c.GetSize().GetValue(), 10)
 
 					switch c.GetType() {
 					case SpannerTableDataTypeString.String(), SpannerTableDataTypeBytes.String():
@@ -342,12 +343,14 @@ func (c *SpannerTableColumn) alterDdl(existingColumn *SpannerTableColumn) ([]str
 		// Handle Nullable
 		{
 			// If the existing column is nullable and the new column is not
-			if (existingColumn.GetRequired() == nil || !existingColumn.GetRequired().GetValue()) && c.GetRequired() != nil && c.GetRequired().GetValue() {
+			if (existingColumn.GetRequired() == nil || !existingColumn.GetRequired().GetValue()) && c.GetRequired() != nil &&
+				c.GetRequired().GetValue() {
 				ddlUpdated = true
 			}
 
 			// If the existing column is not nullable and the new column is
-			if existingColumn.GetRequired() != nil && existingColumn.GetRequired().GetValue() && (c.GetRequired() == nil || !c.GetRequired().GetValue()) {
+			if existingColumn.GetRequired() != nil && existingColumn.GetRequired().GetValue() &&
+				(c.GetRequired() == nil || !c.GetRequired().GetValue()) {
 				ddl += " NOT NULL"
 				ddlUpdated = true
 			}
@@ -366,13 +369,16 @@ func (c *SpannerTableColumn) alterDdl(existingColumn *SpannerTableColumn) ([]str
 		{
 
 			// If the existing column has a default value and the new column does not
-			if existingColumn.GetDefaultValue() != nil && existingColumn.GetDefaultValue().GetValue() != "" && (c.GetDefaultValue() == nil || c.GetDefaultValue().GetValue() == "") {
+			if existingColumn.GetDefaultValue() != nil && existingColumn.GetDefaultValue().GetValue() != "" &&
+				(c.GetDefaultValue() == nil || c.GetDefaultValue().GetValue() == "") {
 				ddl += " DROP DEFAULT"
 				ddlUpdated = true
 			}
 
 			// If the existing column does not have a default value and the new column does
-			if (existingColumn.GetDefaultValue() == nil || existingColumn.GetDefaultValue().GetValue() == "") && c.GetDefaultValue() != nil && c.GetDefaultValue().GetValue() != "" {
+			if (existingColumn.GetDefaultValue() == nil || existingColumn.GetDefaultValue().GetValue() == "") &&
+				c.GetDefaultValue() != nil &&
+				c.GetDefaultValue().GetValue() != "" {
 				ddl += fmt.Sprintf(" SET DEFAULT (%s)", c.GetDefaultValue().GetValue())
 				ddlUpdated = true
 			}
@@ -451,5 +457,4 @@ func (c *SpannerTableColumn) compare(other *SpannerTableColumn) bool {
 	}
 
 	return true
-
 }

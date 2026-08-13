@@ -44,6 +44,7 @@ resource "alis_google_spanner_table_iam_binding" "editor" {
 Valid permissions are: `SELECT`, `INSERT`, `UPDATE`, `DELETE`.
 - `project` (String)
 - `role` (String) The role that should be granted to the table.
+The role must satisfy the expression `^[a-zA-Z0-9_]{1,64}$`.
 - `table` (String)
 
 ### Optional

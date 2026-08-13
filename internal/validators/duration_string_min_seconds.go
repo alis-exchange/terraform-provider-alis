@@ -21,13 +21,13 @@ type durationStringMinSeconds struct {
 }
 
 // Description describes the validation in plain text formatting.
-func (validator durationStringMinSeconds) Description(_ context.Context) string {
-	return fmt.Sprintf("duration must be at least %ds", validator.minDuration)
+func (v durationStringMinSeconds) Description(_ context.Context) string {
+	return fmt.Sprintf("duration must be at least %ds", v.minDuration)
 }
 
 // MarkdownDescription describes the validation in Markdown formatting.
-func (validator durationStringMinSeconds) MarkdownDescription(ctx context.Context) string {
-	return validator.Description(ctx)
+func (v durationStringMinSeconds) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
 }
 
 // ValidateString performs the validation.
