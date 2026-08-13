@@ -4,8 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/hashicorp/terraform-plugin-framework/types"
 	tableschema "terraform-provider-alis/internal/spanner/schema"
+
+	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
 // fullColumnModel exercises every attribute of the TF column model.

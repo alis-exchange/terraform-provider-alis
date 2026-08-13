@@ -2,16 +2,16 @@ package services
 
 import (
 	"context"
-	"fmt"
 	"regexp"
 	"strconv"
-	"strings"
+
+	"terraform-provider-alis/internal/spanner/names"
+	"terraform-provider-alis/internal/spanner/schema"
+	"terraform-provider-alis/internal/utils"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/wrapperspb"
-	"terraform-provider-alis/internal/spanner/schema"
-	"terraform-provider-alis/internal/utils"
 )
 
 func (s *SpannerService) CreateSpannerTableRowDeletionPolicy(ctx context.Context, parent string, ttl *SpannerTableRowDeletionPolicy) (*SpannerTableRowDeletionPolicy, error) {
@@ -40,13 +40,12 @@ func (s *SpannerService) CreateSpannerTableRowDeletionPolicy(ctx context.Context
 		return nil, status.Error(codes.InvalidArgument, "Invalid argument ttl.duration, field must be greater than or equal to 0")
 	}
 
-	// Deconstruct parent name to get project, instance and database id
-	parentNameParts := strings.Split(parent, "/")
-	project := parentNameParts[1]
-	instance := parentNameParts[3]
-	databaseId := parentNameParts[5]
-	tableId := parentNameParts[7]
-	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
+	parentName, err := names.ParseTable(parent)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s): %v", parent, err)
+	}
+	database := parentName.DatabaseName().String()
+	tableId := parentName.Table
 
 	// Get parent table
 	if _, err := s.GetSpannerTable(ctx, parent); err != nil {
@@ -73,13 +72,12 @@ func (s *SpannerService) GetSpannerTableRowDeletionPolicy(ctx context.Context, p
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", parent, utils.SpannerGoogleSqlTableNameRegex, utils.SpannerPostgresSqlTableNameRegex)
 	}
 
-	// Deconstruct parent name to get project, instance and database id
-	parentNameParts := strings.Split(parent, "/")
-	project := parentNameParts[1]
-	instance := parentNameParts[3]
-	databaseId := parentNameParts[5]
-	tableId := parentNameParts[7]
-	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
+	parentName, err := names.ParseTable(parent)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s): %v", parent, err)
+	}
+	database := parentName.DatabaseName().String()
+	tableId := parentName.Table
 
 	// Get parent table
 	if _, err := s.GetSpannerTable(ctx, parent); err != nil {
@@ -151,13 +149,12 @@ func (s *SpannerService) UpdateSpannerTableRowDeletionPolicy(ctx context.Context
 		return nil, status.Error(codes.InvalidArgument, "Invalid argument ttl.duration, field must be greater than or equal to 0")
 	}
 
-	// Deconstruct parent name to get project, instance and database id
-	parentNameParts := strings.Split(parent, "/")
-	project := parentNameParts[1]
-	instance := parentNameParts[3]
-	databaseId := parentNameParts[5]
-	tableId := parentNameParts[7]
-	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
+	parentName, err := names.ParseTable(parent)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s): %v", parent, err)
+	}
+	database := parentName.DatabaseName().String()
+	tableId := parentName.Table
 
 	// Get parent table
 	if _, err := s.GetSpannerTable(ctx, parent); err != nil {
@@ -184,13 +181,12 @@ func (s *SpannerService) DeleteSpannerTableRowDeletionPolicy(ctx context.Context
 		return status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", parent, utils.SpannerGoogleSqlTableNameRegex, utils.SpannerPostgresSqlTableNameRegex)
 	}
 
-	// Deconstruct parent name to get project, instance and database id
-	parentNameParts := strings.Split(parent, "/")
-	project := parentNameParts[1]
-	instance := parentNameParts[3]
-	databaseId := parentNameParts[5]
-	tableId := parentNameParts[7]
-	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
+	parentName, err := names.ParseTable(parent)
+	if err != nil {
+		return status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s): %v", parent, err)
+	}
+	database := parentName.DatabaseName().String()
+	tableId := parentName.Table
 
 	// Get parent table
 	if _, err := s.GetSpannerTable(ctx, parent); err != nil {

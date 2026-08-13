@@ -5,7 +5,14 @@ import (
 	"fmt"
 	"regexp"
 
+	"terraform-provider-alis/internal"
+	"terraform-provider-alis/internal/spanner/names"
+	tableschema "terraform-provider-alis/internal/spanner/schema"
+	"terraform-provider-alis/internal/utils"
+	"terraform-provider-alis/internal/validators"
+
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -15,16 +22,13 @@ import (
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"terraform-provider-alis/internal"
-	tableschema "terraform-provider-alis/internal/spanner/schema"
-	"terraform-provider-alis/internal/utils"
-	"terraform-provider-alis/internal/validators"
 )
 
 // Ensure the implementation satisfies the expected interfaces.
 var (
-	_ resource.Resource              = &spannerTableForeignKeyResource{}
-	_ resource.ResourceWithConfigure = &spannerTableForeignKeyResource{}
+	_ resource.Resource                = &spannerTableForeignKeyResource{}
+	_ resource.ResourceWithConfigure   = &spannerTableForeignKeyResource{}
+	_ resource.ResourceWithImportState = &spannerTableForeignKeyResource{}
 )
 
 // NewTableForeignKeyResource is a helper function to simplify the provider implementation.
@@ -196,7 +200,7 @@ func (r *spannerTableForeignKeyResource) Create(ctx context.Context, req resourc
 
 	// Create row deletion policy
 	_, err := r.config.SpannerService.CreateSpannerTableForeignKeyConstraint(ctx,
-		fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", project, instanceName, databaseId, tableId),
+		names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String(),
 		constraint,
 	)
 	if err != nil {
@@ -239,7 +243,7 @@ func (r *spannerTableForeignKeyResource) Read(ctx context.Context, req resource.
 	name := state.Name.ValueString()
 
 	// Get policy from API
-	constraint, err := r.config.SpannerService.GetSpannerTableForeignKeyConstraint(ctx, fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", project, instanceName, databaseId, tableId), name)
+	constraint, err := r.config.SpannerService.GetSpannerTableForeignKeyConstraint(ctx, names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String(), name)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			resp.State.RemoveResource(ctx)
@@ -306,7 +310,7 @@ func (r *spannerTableForeignKeyResource) Delete(ctx context.Context, req resourc
 	name := state.Name.ValueString()
 
 	// Delete existing database
-	err := r.config.SpannerService.DeleteSpannerTableForeignKeyConstraint(ctx, fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", project, instanceName, databaseId, tableId), name)
+	err := r.config.SpannerService.DeleteSpannerTableForeignKeyConstraint(ctx, names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String(), name)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Deleting Foreign Key Constraint",
@@ -324,4 +328,22 @@ func (r *spannerTableForeignKeyResource) Configure(_ context.Context, req resour
 	}
 
 	r.config = config
+}
+
+// ImportState imports an existing foreign key constraint into state.
+func (r *spannerTableForeignKeyResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	importName, err := names.ParseForeignKey(req.ID)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Invalid Import ID",
+			"Import ID must be in the format projects/{project}/instances/{instance}/databases/{database}/tables/{table}/constraints/{constraint}: "+err.Error(),
+		)
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("project"), importName.Project)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("instance"), importName.Instance)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("database"), importName.Database)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("table"), importName.Table)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("name"), importName.Constraint)...)
 }

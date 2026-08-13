@@ -4,6 +4,9 @@ import (
 	"context"
 	"testing"
 
+	"terraform-provider-alis/internal/spanner/conn"
+	"terraform-provider-alis/internal/spanner/conn/conntest"
+
 	"cloud.google.com/go/spanner/admin/database/apiv1/databasepb"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -11,8 +14,6 @@ import (
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
-	"terraform-provider-alis/internal/spanner/conn"
-	"terraform-provider-alis/internal/spanner/conn/conntest"
 )
 
 // TestEmulator_PortEndToEnd drives every port verb through the real GCP

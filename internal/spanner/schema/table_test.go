@@ -7,8 +7,9 @@ import (
 	"reflect"
 	"testing"
 
-	"google.golang.org/protobuf/types/known/wrapperspb"
 	"terraform-provider-alis/internal/spanner/conn"
+
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 var (

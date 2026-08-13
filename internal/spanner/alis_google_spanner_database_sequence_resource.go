@@ -2,11 +2,10 @@ package spanner
 
 import (
 	"context"
-	"fmt"
 	"regexp"
-	"strings"
 
 	"terraform-provider-alis/internal"
+	"terraform-provider-alis/internal/spanner/names"
 	"terraform-provider-alis/internal/validators"
 
 	"terraform-provider-alis/internal/utils"
@@ -181,7 +180,7 @@ func (r *databaseSequenceResource) Create(ctx context.Context, req resource.Crea
 	sequenceId := plan.Sequence.ValueString()
 
 	existingSequence, err := r.config.SpannerService.GetSpannerSequence(ctx,
-		fmt.Sprintf("projects/%s/instances/%s/databases/%s/sequences/%s", project, instance, databaseId, sequenceId),
+		names.SequenceName{Project: project, Instance: instance, Database: databaseId, Sequence: sequenceId}.String(),
 	)
 	if err != nil && status.Code(err) != codes.NotFound {
 		resp.Diagnostics.AddError(
@@ -199,7 +198,7 @@ func (r *databaseSequenceResource) Create(ctx context.Context, req resource.Crea
 
 	// Create sequence from plan
 	sequence := &sequenceschema.SpannerSequence{
-		Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/sequences/%s", project, instance, databaseId, sequenceId),
+		Name: names.SequenceName{Project: project, Instance: instance, Database: databaseId, Sequence: sequenceId}.String(),
 	}
 
 	// Populate options if any
@@ -230,7 +229,7 @@ func (r *databaseSequenceResource) Create(ctx context.Context, req resource.Crea
 	}
 
 	_, err = r.config.SpannerService.CreateSpannerSequence(ctx,
-		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId),
+		names.DatabaseName{Project: project, Instance: instance, Database: databaseId}.String(),
 		sequence,
 	)
 	if err != nil {
@@ -266,7 +265,7 @@ func (r *databaseSequenceResource) Read(ctx context.Context, req resource.ReadRe
 	sequenceId := state.Sequence.ValueString()
 
 	sequence, err := r.config.SpannerService.GetSpannerSequence(ctx,
-		fmt.Sprintf("projects/%s/instances/%s/databases/%s/sequences/%s", project, instance, databaseId, sequenceId),
+		names.SequenceName{Project: project, Instance: instance, Database: databaseId, Sequence: sequenceId}.String(),
 	)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -331,7 +330,7 @@ func (r *databaseSequenceResource) Update(ctx context.Context, req resource.Upda
 
 	// Generate sequence from plan
 	sequence := &sequenceschema.SpannerSequence{
-		Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/sequences/%s", project, instanceName, databaseId, sequenceId),
+		Name: names.SequenceName{Project: project, Instance: instanceName, Database: databaseId, Sequence: sequenceId}.String(),
 	}
 
 	// Populate options if any
@@ -397,7 +396,7 @@ func (r *databaseSequenceResource) Delete(ctx context.Context, req resource.Dele
 	database := state.Database.ValueString()
 	sequenceId := state.Sequence.ValueString()
 
-	err := r.config.SpannerService.DeleteSpannerSequence(ctx, fmt.Sprintf("projects/%s/instances/%s/databases/%s/sequences/%s", project, instance, database, sequenceId))
+	err := r.config.SpannerService.DeleteSpannerSequence(ctx, names.SequenceName{Project: project, Instance: instance, Database: database, Sequence: sequenceId}.String())
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Deleting Database Sequence",
@@ -410,17 +409,18 @@ func (r *databaseSequenceResource) Delete(ctx context.Context, req resource.Dele
 func (r *databaseSequenceResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	// Split import ID to get project, instance, and database id
 	// projects/{project}/instances/{instance}/databases/{database}/sequences/{sequence}
-	importIDParts := strings.Split(req.ID, "/")
-	if len(importIDParts) != 8 {
+	importName, err := names.ParseSequence(req.ID)
+	if err != nil {
 		resp.Diagnostics.AddError(
 			"Invalid Import ID",
-			"Import ID must be in the format projects/{project}/instances/{instance}/databases/{database}/sequences/{sequence}",
+			"Import ID must be in the format projects/{project}/instances/{instance}/databases/{database}/sequences/{sequence}: "+err.Error(),
 		)
+		return
 	}
-	project := importIDParts[1]
-	instanceName := importIDParts[3]
-	databaseName := importIDParts[5]
-	sequenceId := importIDParts[7]
+	project := importName.Project
+	instanceName := importName.Instance
+	databaseName := importName.Database
+	sequenceId := importName.Sequence
 
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("project"), project)...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("instance"), instanceName)...)

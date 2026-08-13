@@ -2,9 +2,12 @@ package spanner
 
 import (
 	"context"
-	"fmt"
 	"regexp"
-	"strings"
+
+	"terraform-provider-alis/internal"
+	"terraform-provider-alis/internal/spanner/names"
+	"terraform-provider-alis/internal/spanner/services"
+	"terraform-provider-alis/internal/utils"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -17,9 +20,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"terraform-provider-alis/internal"
-	"terraform-provider-alis/internal/spanner/services"
-	"terraform-provider-alis/internal/utils"
 )
 
 // Ensure the implementation satisfies the expected interfaces.
@@ -131,7 +131,7 @@ func (r *tableIamBindingResource) Create(ctx context.Context, req resource.Creat
 	}
 
 	binding, err := r.config.SpannerService.SetTableIamBinding(ctx,
-		fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", project, instance, database, table),
+		names.TableName{Project: project, Instance: instance, Database: database, Table: table}.String(),
 		&services.TablePolicyBinding{
 			Role:        role,
 			Permissions: permissions,
@@ -180,7 +180,7 @@ func (r *tableIamBindingResource) Read(ctx context.Context, req resource.ReadReq
 	role := state.Role.ValueString()
 
 	binding, err := r.config.SpannerService.GetTableIamBinding(ctx,
-		fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", project, instance, database, table),
+		names.TableName{Project: project, Instance: instance, Database: database, Table: table}.String(),
 		role,
 	)
 	if err != nil {
@@ -251,7 +251,7 @@ func (r *tableIamBindingResource) Update(ctx context.Context, req resource.Updat
 	}
 
 	binding, err := r.config.SpannerService.SetTableIamBinding(ctx,
-		fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", project, instance, database, table),
+		names.TableName{Project: project, Instance: instance, Database: database, Table: table}.String(),
 		&services.TablePolicyBinding{
 			Role:        role,
 			Permissions: permissions,
@@ -300,7 +300,7 @@ func (r *tableIamBindingResource) Delete(ctx context.Context, req resource.Delet
 	role := state.Role.ValueString()
 
 	err := r.config.SpannerService.DeleteTableIamBinding(ctx,
-		fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", project, instance, database, table),
+		names.TableName{Project: project, Instance: instance, Database: database, Table: table}.String(),
 		role,
 	)
 	if err != nil {
@@ -313,13 +313,11 @@ func (r *tableIamBindingResource) Delete(ctx context.Context, req resource.Delet
 }
 
 func (r *tableIamBindingResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	// Split import ID to get project, instance, and database id
-	// projects/{project}/instances/{instance}/databases/{database}/tables/{tables}/tableRoles/{role}
-	importIDParts := strings.Split(req.ID, "/")
-	if len(importIDParts) != 10 {
+	importName, err := names.ParseTableRole(req.ID)
+	if err != nil {
 		resp.Diagnostics.AddError(
 			"Invalid Import ID",
-			"Import ID must be in the format projects/{project}/instances/{instance}/databases/{database}/tables/{table}/tableRoles/{role}",
+			"Import ID must be in the format projects/{project}/instances/{instance}/databases/{database}/tables/{table}/tableRoles/{role}: "+err.Error(),
 		)
 		return
 	}
@@ -332,11 +330,11 @@ func (r *tableIamBindingResource) ImportState(ctx context.Context, req resource.
 		return
 	}
 
-	project := importIDParts[1]
-	instanceName := importIDParts[3]
-	databaseName := importIDParts[5]
-	tableName := importIDParts[7]
-	role := importIDParts[9]
+	project := importName.Project
+	instanceName := importName.Instance
+	databaseName := importName.Database
+	tableName := importName.Table
+	role := importName.Role
 
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("project"), project)...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("instance"), instanceName)...)

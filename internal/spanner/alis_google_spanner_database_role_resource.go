@@ -2,8 +2,9 @@ package spanner
 
 import (
 	"context"
-	"fmt"
-	"strings"
+
+	"terraform-provider-alis/internal"
+	"terraform-provider-alis/internal/spanner/names"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -13,7 +14,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"terraform-provider-alis/internal"
 )
 
 // Ensure the implementation satisfies the expected interfaces.
@@ -95,8 +95,9 @@ func (r *databaseRoleResource) Create(ctx context.Context, req resource.CreateRe
 	database := plan.Database.ValueString()
 	role := plan.Role.ValueString()
 
-	existingRole, err := r.config.SpannerService.GetDatabaseRole(ctx,
-		fmt.Sprintf("projects/%s/instances/%s/databases/%s/databaseRoles/%s", project, instance, database, role),
+	existingRole, err := r.config.SpannerService.GetDatabaseRole(
+		ctx,
+		names.DatabaseRoleName{Project: project, Instance: instance, Database: database, Role: role}.String(),
 	)
 	if err != nil && status.Code(err) != codes.NotFound {
 		resp.Diagnostics.AddError(
@@ -112,8 +113,9 @@ func (r *databaseRoleResource) Create(ctx context.Context, req resource.CreateRe
 		return
 	}
 
-	_, err = r.config.SpannerService.CreateDatabaseRole(ctx,
-		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
+	_, err = r.config.SpannerService.CreateDatabaseRole(
+		ctx,
+		names.DatabaseName{Project: project, Instance: instance, Database: database}.String(),
 		role,
 	)
 	if err != nil {
@@ -148,8 +150,9 @@ func (r *databaseRoleResource) Read(ctx context.Context, req resource.ReadReques
 	database := state.Database.ValueString()
 	role := state.Role.ValueString()
 
-	_, err := r.config.SpannerService.GetDatabaseRole(ctx,
-		fmt.Sprintf("projects/%s/instances/%s/databases/%s/databaseRoles/%s", project, instance, database, role),
+	_, err := r.config.SpannerService.GetDatabaseRole(
+		ctx,
+		names.DatabaseRoleName{Project: project, Instance: instance, Database: database, Role: role}.String(),
 	)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -209,7 +212,7 @@ func (r *databaseRoleResource) Delete(ctx context.Context, req resource.DeleteRe
 	database := state.Database.ValueString()
 	role := state.Role.ValueString()
 
-	err := r.config.SpannerService.DeleteDatabaseRole(ctx, fmt.Sprintf("projects/%s/instances/%s/databases/%s/databaseRoles/%s", project, instance, database, role))
+	err := r.config.SpannerService.DeleteDatabaseRole(ctx, names.DatabaseRoleName{Project: project, Instance: instance, Database: database, Role: role}.String())
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Deleting Database Role",
@@ -220,19 +223,18 @@ func (r *databaseRoleResource) Delete(ctx context.Context, req resource.DeleteRe
 }
 
 func (r *databaseRoleResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	// Split import ID to get project, instance, and database id
-	// projects/{project}/instances/{instance}/databases/{database}/databaseRoles/{role}
-	importIDParts := strings.Split(req.ID, "/")
-	if len(importIDParts) != 8 {
+	importName, err := names.ParseDatabaseRole(req.ID)
+	if err != nil {
 		resp.Diagnostics.AddError(
 			"Invalid Import ID",
-			"Import ID must be in the format projects/{project}/instances/{instance}/databases/{database}/databaseRoles/{role}",
+			"Import ID must be in the format projects/{project}/instances/{instance}/databases/{database}/databaseRoles/{role}: "+err.Error(),
 		)
+		return
 	}
-	project := importIDParts[1]
-	instanceName := importIDParts[3]
-	databaseName := importIDParts[5]
-	role := importIDParts[7]
+	project := importName.Project
+	instanceName := importName.Instance
+	databaseName := importName.Database
+	role := importName.Role
 
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("project"), project)...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("instance"), instanceName)...)

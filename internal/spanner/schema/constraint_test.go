@@ -41,9 +41,9 @@ func TestSpannerTableForeignKeyConstraintDdl(t *testing.T) {
 	t.Run("missing fields error", func(t *testing.T) {
 		cases := []*SpannerTableForeignKeyConstraint{
 			{Column: "c", ReferencedTable: "t", ReferencedColumn: "r"}, // no name
-			{Name: "n", ReferencedTable: "t", ReferencedColumn: "r"},  // no column
-			{Name: "n", Column: "c", ReferencedColumn: "r"},           // no referenced table
-			{Name: "n", Column: "c", ReferencedTable: "t"},            // no referenced column
+			{Name: "n", ReferencedTable: "t", ReferencedColumn: "r"},   // no column
+			{Name: "n", Column: "c", ReferencedColumn: "r"},            // no referenced table
+			{Name: "n", Column: "c", ReferencedTable: "t"},             // no referenced column
 		}
 		for i, c := range cases {
 			if _, err := c.CreateDdl("orders"); err == nil {

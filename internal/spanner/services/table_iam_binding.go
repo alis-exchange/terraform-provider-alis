@@ -2,13 +2,13 @@ package services
 
 import (
 	"context"
-	"fmt"
-	"strings"
+
+	"terraform-provider-alis/internal/spanner/names"
+	"terraform-provider-alis/internal/spanner/schema"
+	"terraform-provider-alis/internal/utils"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"terraform-provider-alis/internal/spanner/schema"
-	"terraform-provider-alis/internal/utils"
 )
 
 func (s *SpannerService) SetTableIamBinding(ctx context.Context, parent string, binding *TablePolicyBinding) (*TablePolicyBinding, error) {
@@ -35,13 +35,12 @@ func (s *SpannerService) SetTableIamBinding(ctx context.Context, parent string, 
 		return nil, status.Error(codes.InvalidArgument, "Invalid argument binding.permissions, field is required but not provided")
 	}
 
-	// Deconstruct parent name to get project, instance, database and table
-	parentNameParts := strings.Split(parent, "/")
-	project := parentNameParts[1]
-	instance := parentNameParts[3]
-	databaseId := parentNameParts[5]
-	tableId := parentNameParts[7]
-	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
+	parentName, err := names.ParseTable(parent)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s): %v", parent, err)
+	}
+	database := parentName.DatabaseName().String()
+	tableId := parentName.Table
 
 	// Verify the database exists before issuing DDL
 	if _, err := s.conn.Dialect(ctx, database); err != nil {
@@ -74,13 +73,12 @@ func (s *SpannerService) GetTableIamBinding(ctx context.Context, parent string, 
 		return nil, status.Error(codes.InvalidArgument, "Invalid argument role, field is required but not provided")
 	}
 
-	// Deconstruct parent name to get project, instance and database id
-	parentNameParts := strings.Split(parent, "/")
-	project := parentNameParts[1]
-	instance := parentNameParts[3]
-	databaseId := parentNameParts[5]
-	tableId := parentNameParts[7]
-	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
+	parentName, err := names.ParseTable(parent)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s): %v", parent, err)
+	}
+	database := parentName.DatabaseName().String()
+	tableId := parentName.Table
 
 	var rows []*TablePermissionsRow
 	if err := s.conn.Query(ctx, database, &rows,
@@ -120,13 +118,12 @@ func (s *SpannerService) DeleteTableIamBinding(ctx context.Context, parent strin
 		return status.Error(codes.InvalidArgument, "Invalid argument role, field is required but not provided")
 	}
 
-	// Deconstruct parent name to get project, instance and database id
-	parentNameParts := strings.Split(parent, "/")
-	project := parentNameParts[1]
-	instance := parentNameParts[3]
-	databaseId := parentNameParts[5]
-	tableId := parentNameParts[7]
-	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
+	parentName, err := names.ParseTable(parent)
+	if err != nil {
+		return status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s): %v", parent, err)
+	}
+	database := parentName.DatabaseName().String()
+	tableId := parentName.Table
 
 	// Verify the database exists before issuing DDL
 	if _, err := s.conn.Dialect(ctx, database); err != nil {

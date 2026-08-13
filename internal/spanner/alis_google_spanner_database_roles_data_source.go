@@ -2,14 +2,15 @@ package spanner
 
 import (
 	"context"
-	"fmt"
+
+	"terraform-provider-alis/internal"
+	"terraform-provider-alis/internal/spanner/names"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"terraform-provider-alis/internal"
 )
 
 // Ensure the implementation satisfies the expected interfaces.
@@ -79,7 +80,7 @@ func (d *databaseRolesDataSource) Read(ctx context.Context, req datasource.ReadR
 	roles := make([]string, 0)
 	for {
 		rolesRes, pageToken, err := d.config.SpannerService.ListDatabaseRoles(ctx,
-			fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database),
+			names.DatabaseName{Project: project, Instance: instance, Database: database}.String(),
 			100, nextPageToken,
 		)
 		if err != nil {

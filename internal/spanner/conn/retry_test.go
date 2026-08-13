@@ -5,10 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"terraform-provider-alis/internal/spanner/conn"
 	"terraform-provider-alis/internal/spanner/conn/connfake"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func fastPolicy(attempts int) conn.RetryPolicy {

@@ -2,13 +2,13 @@ package services
 
 import (
 	"context"
-	"fmt"
-	"strings"
+
+	"terraform-provider-alis/internal/spanner/names"
+	"terraform-provider-alis/internal/spanner/schema"
+	"terraform-provider-alis/internal/utils"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"terraform-provider-alis/internal/spanner/schema"
-	"terraform-provider-alis/internal/utils"
 )
 
 func (s *SpannerService) CreateSpannerTableForeignKeyConstraint(ctx context.Context, parent string, constraint *schema.SpannerTableForeignKeyConstraint) (*schema.SpannerTableForeignKeyConstraint, error) {
@@ -56,13 +56,12 @@ func (s *SpannerService) CreateSpannerTableForeignKeyConstraint(ctx context.Cont
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument constraint.column (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", constraint.Column, utils.SpannerGoogleSqlColumnIdRegex, utils.SpannerPostgresSqlColumnIdRegex)
 	}
 
-	// Deconstruct parent name to get project, instance, database and table
-	parentNameParts := strings.Split(parent, "/")
-	project := parentNameParts[1]
-	instance := parentNameParts[3]
-	databaseId := parentNameParts[5]
-	tableId := parentNameParts[7]
-	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
+	parentName, err := names.ParseTable(parent)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s): %v", parent, err)
+	}
+	database := parentName.DatabaseName().String()
+	tableId := parentName.Table
 
 	ddl, err := constraint.CreateDdl(tableId)
 	if err != nil {
@@ -90,13 +89,12 @@ func (s *SpannerService) GetSpannerTableForeignKeyConstraint(ctx context.Context
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", name, utils.SpannerGoogleSqlConstraintIdRegex, utils.SpannerPostgresSqlConstraintIdRegex)
 	}
 
-	// Deconstruct parent name to get project, instance, database and table
-	parentNameParts := strings.Split(parent, "/")
-	project := parentNameParts[1]
-	instance := parentNameParts[3]
-	databaseId := parentNameParts[5]
-	tableId := parentNameParts[7]
-	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
+	parentName, err := names.ParseTable(parent)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s): %v", parent, err)
+	}
+	database := parentName.DatabaseName().String()
+	tableId := parentName.Table
 
 	sqlStatement := `
 	SELECT
@@ -162,13 +160,12 @@ func (s *SpannerService) DeleteSpannerTableForeignKeyConstraint(ctx context.Cont
 		return status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", name, utils.SpannerGoogleSqlConstraintIdRegex, utils.SpannerPostgresSqlConstraintIdRegex)
 	}
 
-	// Deconstruct parent name to get project, instance, database and table
-	parentNameParts := strings.Split(parent, "/")
-	project := parentNameParts[1]
-	instance := parentNameParts[3]
-	databaseId := parentNameParts[5]
-	tableId := parentNameParts[7]
-	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
+	parentName, err := names.ParseTable(parent)
+	if err != nil {
+		return status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s): %v", parent, err)
+	}
+	database := parentName.DatabaseName().String()
+	tableId := parentName.Table
 
 	if err := s.conn.ExecuteDDL(ctx, database, schema.DropForeignKeyConstraintDdl(tableId, name)); err != nil {
 		return status.Errorf(codes.Internal, "Error dropping foreign key constraint: %v", err)

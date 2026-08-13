@@ -4,10 +4,11 @@ import (
 	"context"
 	"strings"
 
+	tableschema "terraform-provider-alis/internal/spanner/schema"
+
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"google.golang.org/protobuf/types/known/wrapperspb"
-	tableschema "terraform-provider-alis/internal/spanner/schema"
 )
 
 // tableColumnsToSchema converts the Terraform column list into schema columns.

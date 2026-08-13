@@ -13,9 +13,10 @@ import (
 	"sync"
 	"testing"
 
+	"terraform-provider-alis/internal/spanner/conn"
+
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"terraform-provider-alis/internal/spanner/conn"
 
 	"context"
 )

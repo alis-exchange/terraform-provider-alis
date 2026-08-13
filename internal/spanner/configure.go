@@ -3,8 +3,9 @@ package spanner
 import (
 	"fmt"
 
-	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"terraform-provider-alis/internal"
+
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 )
 
 // configureProviderConfig extracts the provider configuration shared by every

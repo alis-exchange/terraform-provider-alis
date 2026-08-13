@@ -19,6 +19,8 @@ import (
 	"testing"
 	"time"
 
+	"terraform-provider-alis/internal/spanner/conn"
+
 	databaseadmin "cloud.google.com/go/spanner/admin/database/apiv1"
 	"cloud.google.com/go/spanner/admin/database/apiv1/databasepb"
 	instanceadmin "cloud.google.com/go/spanner/admin/instance/apiv1"
@@ -26,7 +28,6 @@ import (
 	tcspanner "github.com/testcontainers/testcontainers-go/modules/gcloud/spanner"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"terraform-provider-alis/internal/spanner/conn"
 )
 
 const (

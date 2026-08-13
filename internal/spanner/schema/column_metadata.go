@@ -8,12 +8,13 @@ import (
 	"fmt"
 	"time"
 
+	"terraform-provider-alis/internal/spanner/conn"
+	"terraform-provider-alis/internal/utils"
+
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-	"terraform-provider-alis/internal/spanner/conn"
-	"terraform-provider-alis/internal/utils"
 )
 
 // metadataGorm resolves the quarantined gorm handle for the ColumnMetadata

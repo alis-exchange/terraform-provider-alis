@@ -4,7 +4,12 @@ import (
 	"context"
 	"fmt"
 	"regexp"
-	"strings"
+
+	"terraform-provider-alis/internal"
+	"terraform-provider-alis/internal/spanner/names"
+	"terraform-provider-alis/internal/spanner/services"
+	"terraform-provider-alis/internal/utils"
+	"terraform-provider-alis/internal/validators"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -19,10 +24,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/wrapperspb"
-	"terraform-provider-alis/internal"
-	"terraform-provider-alis/internal/spanner/services"
-	"terraform-provider-alis/internal/utils"
-	"terraform-provider-alis/internal/validators"
 )
 
 // Ensure the implementation satisfies the expected interfaces.
@@ -221,7 +222,7 @@ func (r *spannerTableIndexResource) Create(ctx context.Context, req resource.Cre
 
 	// Create table
 	_, err := r.config.SpannerService.CreateSpannerTableIndex(ctx,
-		fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", project, instanceName, databaseId, tableId),
+		names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String(),
 		index,
 	)
 	if err != nil {
@@ -268,7 +269,7 @@ func (r *spannerTableIndexResource) Read(ctx context.Context, req resource.ReadR
 
 	// Get table from API
 	index, err := r.config.SpannerService.GetSpannerTableIndex(ctx,
-		fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", project, instanceName, databaseId, tableId),
+		names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String(),
 		indexName,
 	)
 	if err != nil {
@@ -360,7 +361,7 @@ func (r *spannerTableIndexResource) Delete(ctx context.Context, req resource.Del
 
 	// Delete existing database
 	_, err := r.config.SpannerService.DeleteSpannerTableIndex(ctx,
-		fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", project, instanceName, databaseId, tableId),
+		names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String(),
 		indexName,
 	)
 	if err != nil {
@@ -373,13 +374,11 @@ func (r *spannerTableIndexResource) Delete(ctx context.Context, req resource.Del
 }
 
 func (r *spannerTableIndexResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	// Split import ID to get project, instance, and database id
-	// projects/{project}/instances/{instance}/databases/{database}/tables/{tables}/indexes/{index}
-	importIDParts := strings.Split(req.ID, "/")
-	if len(importIDParts) != 10 {
+	importName, err := names.ParseIndex(req.ID)
+	if err != nil {
 		resp.Diagnostics.AddError(
 			"Invalid Import ID",
-			"Import ID must be in the format projects/{project}/instances/{instance}/databases/{database}/tables/{table}/indexes/{index}",
+			"Import ID must be in the format projects/{project}/instances/{instance}/databases/{database}/tables/{table}/indexes/{index}: "+err.Error(),
 		)
 		return
 	}
@@ -392,11 +391,11 @@ func (r *spannerTableIndexResource) ImportState(ctx context.Context, req resourc
 		return
 	}
 
-	project := importIDParts[1]
-	instanceName := importIDParts[3]
-	databaseName := importIDParts[5]
-	tableName := importIDParts[7]
-	indexName := importIDParts[9]
+	project := importName.Project
+	instanceName := importName.Instance
+	databaseName := importName.Database
+	tableName := importName.Table
+	indexName := importName.Index
 
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("project"), project)...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("instance"), instanceName)...)

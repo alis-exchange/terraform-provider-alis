@@ -4,7 +4,12 @@ import (
 	"context"
 	"fmt"
 	"regexp"
-	"strings"
+
+	"terraform-provider-alis/internal"
+	"terraform-provider-alis/internal/spanner/names"
+	tableschema "terraform-provider-alis/internal/spanner/schema"
+	"terraform-provider-alis/internal/utils"
+	"terraform-provider-alis/internal/validators"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -22,10 +27,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
-	"terraform-provider-alis/internal"
-	tableschema "terraform-provider-alis/internal/spanner/schema"
-	"terraform-provider-alis/internal/utils"
-	"terraform-provider-alis/internal/validators"
 )
 
 // Ensure the implementation satisfies the expected interfaces.
@@ -344,7 +345,7 @@ func (r *spannerTableResource) Create(ctx context.Context, req resource.CreateRe
 
 	// Create table
 	_, err := r.config.SpannerService.CreateSpannerTable(ctx,
-		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instanceName, databaseId),
+		names.DatabaseName{Project: project, Instance: instanceName, Database: databaseId}.String(),
 		tableId,
 		table,
 	)
@@ -391,7 +392,7 @@ func (r *spannerTableResource) Read(ctx context.Context, req resource.ReadReques
 
 	// Get table from API
 	table, err := r.config.SpannerService.GetSpannerTable(ctx,
-		fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", project, instanceName, databaseId, tableId),
+		names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String(),
 	)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -457,7 +458,7 @@ func (r *spannerTableResource) Update(ctx context.Context, req resource.UpdateRe
 
 	// Generate table from plan
 	table := &tableschema.SpannerTable{
-		Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", project, instanceName, databaseId, tableId),
+		Name: names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String(),
 		Schema: &tableschema.SpannerTableSchema{
 			Columns: nil,
 		},
@@ -527,7 +528,7 @@ func (r *spannerTableResource) Delete(ctx context.Context, req resource.DeleteRe
 	}
 
 	// Delete existing database
-	_, err := r.config.SpannerService.DeleteSpannerTable(ctx, fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", project, instanceName, databaseId, tableId))
+	_, err := r.config.SpannerService.DeleteSpannerTable(ctx, names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String())
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Deleting Table",
@@ -538,13 +539,11 @@ func (r *spannerTableResource) Delete(ctx context.Context, req resource.DeleteRe
 }
 
 func (r *spannerTableResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	// Split import ID to get project, instance, and database id
-	// projects/{project}/instances/{instance}/databases/{database}/tables/{tables}
-	importIDParts := strings.Split(req.ID, "/")
-	if len(importIDParts) != 8 {
+	importName, err := names.ParseTable(req.ID)
+	if err != nil {
 		resp.Diagnostics.AddError(
 			"Invalid Import ID",
-			"Import ID must be in the format projects/{project}/instances/{instance}/databases/{database}/tables/{table}",
+			"Import ID must be in the format projects/{project}/instances/{instance}/databases/{database}/tables/{table}: "+err.Error(),
 		)
 		return
 	}
@@ -557,10 +556,10 @@ func (r *spannerTableResource) ImportState(ctx context.Context, req resource.Imp
 		return
 	}
 
-	project := importIDParts[1]
-	instanceName := importIDParts[3]
-	databaseName := importIDParts[5]
-	tableName := importIDParts[7]
+	project := importName.Project
+	instanceName := importName.Instance
+	databaseName := importName.Database
+	tableName := importName.Table
 
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("project"), project)...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("instance"), instanceName)...)

@@ -4,8 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"terraform-provider-alis/internal"
+
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 )
 
 func TestConfigureProviderConfig(t *testing.T) {

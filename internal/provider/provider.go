@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"terraform-provider-alis/internal"
-	"terraform-provider-alis/internal/spanner/conn"
 	"terraform-provider-alis/internal/spanner"
+	"terraform-provider-alis/internal/spanner/conn"
 	spannerservices "terraform-provider-alis/internal/spanner/services"
 	"terraform-provider-alis/internal/utils"
 	"terraform-provider-alis/internal/validators"

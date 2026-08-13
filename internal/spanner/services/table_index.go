@@ -2,14 +2,14 @@ package services
 
 import (
 	"context"
-	"fmt"
-	"strings"
+
+	"terraform-provider-alis/internal/spanner/names"
+	"terraform-provider-alis/internal/spanner/schema"
+	"terraform-provider-alis/internal/utils"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
-	"terraform-provider-alis/internal/spanner/schema"
-	"terraform-provider-alis/internal/utils"
 )
 
 // CreateSpannerTableIndex creates a new Spanner table index.
@@ -51,13 +51,12 @@ func (s *SpannerService) CreateSpannerTableIndex(ctx context.Context, parent str
 		}
 	}
 
-	// Deconstruct parent name to get project, instance and database id
-	parentNameParts := strings.Split(parent, "/")
-	project := parentNameParts[1]
-	instance := parentNameParts[3]
-	databaseId := parentNameParts[5]
-	tableId := parentNameParts[7]
-	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
+	parentName, err := names.ParseTable(parent)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s): %v", parent, err)
+	}
+	database := parentName.DatabaseName().String()
+	tableId := parentName.Table
 
 	// Get parent table
 	if _, err := s.GetSpannerTable(ctx, parent); err != nil {
@@ -98,13 +97,12 @@ func (s *SpannerService) GetSpannerTableIndex(ctx context.Context, parent string
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", name, utils.SpannerGoogleSqlIndexIdRegex, utils.SpannerPostgresSqlIndexIdRegex)
 	}
 
-	// Deconstruct parent name to get project, instance and database id
-	parentNameParts := strings.Split(parent, "/")
-	project := parentNameParts[1]
-	instance := parentNameParts[3]
-	databaseId := parentNameParts[5]
-	tableId := parentNameParts[7]
-	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
+	parentName, err := names.ParseTable(parent)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s): %v", parent, err)
+	}
+	database := parentName.DatabaseName().String()
+	tableId := parentName.Table
 
 	indexes, err := GetIndexes(ctx, s.conn, database, tableId)
 	if err != nil {
@@ -135,13 +133,12 @@ func (s *SpannerService) ListSpannerTableIndices(ctx context.Context, parent str
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", parent, utils.SpannerGoogleSqlTableNameRegex, utils.SpannerPostgresSqlTableNameRegex)
 	}
 
-	// Deconstruct parent name to get project, instance and database id
-	parentNameParts := strings.Split(parent, "/")
-	project := parentNameParts[1]
-	instance := parentNameParts[3]
-	databaseId := parentNameParts[5]
-	tableId := parentNameParts[7]
-	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
+	parentName, err := names.ParseTable(parent)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s): %v", parent, err)
+	}
+	database := parentName.DatabaseName().String()
+	tableId := parentName.Table
 
 	indexes, err := GetIndexes(ctx, s.conn, database, tableId)
 	if err != nil {
@@ -174,12 +171,11 @@ func (s *SpannerService) DeleteSpannerTableIndex(ctx context.Context, parent str
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument index_name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", indexName, utils.SpannerGoogleSqlIndexIdRegex, utils.SpannerPostgresSqlIndexIdRegex)
 	}
 
-	// Deconstruct parent name to get project, instance, database and table
-	parentNameParts := strings.Split(parent, "/")
-	project := parentNameParts[1]
-	instance := parentNameParts[3]
-	databaseId := parentNameParts[5]
-	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
+	parentName, err := names.ParseTable(parent)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s): %v", parent, err)
+	}
+	database := parentName.DatabaseName().String()
 
 	// Drop the index
 	if err := s.conn.ExecuteDDL(ctx, database, schema.DropIndexDdl(indexName)); err != nil {

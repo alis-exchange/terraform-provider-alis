@@ -1,8 +1,9 @@
 package services
 
 import (
-	_ "github.com/googleapis/go-sql-spanner"
 	"terraform-provider-alis/internal/spanner/conn"
+
+	_ "github.com/googleapis/go-sql-spanner"
 )
 
 const (

@@ -3,13 +3,14 @@ package services
 import (
 	"context"
 	"fmt"
-	"strings"
+
+	"terraform-provider-alis/internal/spanner/names"
+	"terraform-provider-alis/internal/spanner/schema"
+	"terraform-provider-alis/internal/utils"
 
 	"cloud.google.com/go/spanner/admin/database/apiv1/databasepb"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"terraform-provider-alis/internal/spanner/schema"
-	"terraform-provider-alis/internal/utils"
 )
 
 func (s *SpannerService) CreateDatabaseRole(ctx context.Context, parent string, roleId string) (*databasepb.DatabaseRole, error) {
@@ -48,12 +49,11 @@ func (s *SpannerService) GetDatabaseRole(ctx context.Context, name string) (*dat
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", name, utils.SpannerGoogleSqlDatabaseNameRegex, utils.SpannerPostgresSqlDatabaseNameRegex)
 	}
 
-	// Decompose name to get project, instance, database
-	nameParts := strings.Split(name, "/")
-	project := nameParts[1]
-	instance := nameParts[3]
-	databaseId := nameParts[5]
-	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
+	roleName, err := names.ParseDatabaseRole(name)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument name (%s): %v", name, err)
+	}
+	database := roleName.DatabaseName().String()
 
 	// List all roles (unpaged) and find the requested one.
 	roleNames, _, err := s.conn.DatabaseRoles(ctx, database, 0, "")
@@ -99,13 +99,12 @@ func (s *SpannerService) DeleteDatabaseRole(ctx context.Context, name string) er
 		return status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", name, utils.SpannerGoogleSqlDatabaseNameRegex, utils.SpannerPostgresSqlDatabaseNameRegex)
 	}
 
-	// Decompose name to get project, instance, database
-	nameParts := strings.Split(name, "/")
-	project := nameParts[1]
-	instance := nameParts[3]
-	databaseId := nameParts[5]
-	roleId := nameParts[7]
-	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
+	roleName, err := names.ParseDatabaseRole(name)
+	if err != nil {
+		return status.Errorf(codes.InvalidArgument, "Invalid argument name (%s): %v", name, err)
+	}
+	roleId := roleName.Role
+	database := roleName.DatabaseName().String()
 
 	// Verify the database exists before issuing DDL
 	if _, err := s.conn.Dialect(ctx, database); err != nil {

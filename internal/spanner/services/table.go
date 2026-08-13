@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"terraform-provider-alis/internal/spanner/names"
 	"terraform-provider-alis/internal/spanner/schema"
 	"terraform-provider-alis/internal/utils"
 
@@ -83,11 +84,9 @@ func (s *SpannerService) CreateSpannerTable(ctx context.Context, parent string, 
 	// Set table name
 	table.Name = fmt.Sprintf("%s/tables/%s", parent, tableId)
 
-	// Deconstruct parent name to get project, instance and database id
-	parentNameParts := strings.Split(parent, "/")
-	project := parentNameParts[1]
-	instance := parentNameParts[3]
-	databaseId := parentNameParts[5]
+	if _, err := names.ParseDatabase(parent); err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s): %v", parent, err)
+	}
 
 	// Check if we have any PROTO columns and create the necessary proto bundles
 	for _, column := range table.GetSchema().GetColumns() {
@@ -116,7 +115,7 @@ func (s *SpannerService) CreateSpannerTable(ctx context.Context, parent string, 
 		column.GetProtoFileDescriptorSet().SetFileDescriptorSet(fds)
 
 		// Create proto bundle
-		if err := CreateProtoBundle(ctx, s.conn, fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId), column.GetProtoFileDescriptorSet().GetProtoPackage().GetValue(), fdsBytes); err != nil {
+		if err := CreateProtoBundle(ctx, s.conn, parent, column.GetProtoFileDescriptorSet().GetProtoPackage().GetValue(), fdsBytes); err != nil {
 			return nil, status.Errorf(codes.Internal, "Error creating proto bundle: %v", err)
 		}
 
@@ -255,12 +254,11 @@ func (s *SpannerService) UpdateSpannerTable(ctx context.Context, table *schema.S
 		return nil, status.Error(codes.InvalidArgument, "Invalid argument allow_missing, must be true if update_mask is not provided")
 	}
 
-	// Decompose name to get project, instance, database and table
-	nameParts := strings.Split(table.Name, "/")
-	project := nameParts[1]
-	instance := nameParts[3]
-	databaseId := nameParts[5]
-	tableId := nameParts[7]
+	tableName, err := names.ParseTable(table.Name)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.name (%s): %v", table.Name, err)
+	}
+	tableId := tableName.Table
 
 	// Get table state
 	existingTable, err := s.GetSpannerTable(ctx, table.GetName())
@@ -280,7 +278,7 @@ func (s *SpannerService) UpdateSpannerTable(ctx context.Context, table *schema.S
 
 	// If table does not exist and allow missing is set, create the table
 	if existingTable == nil {
-		return s.CreateSpannerTable(ctx, fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId), tableId, table)
+		return s.CreateSpannerTable(ctx, tableName.DatabaseName().String(), tableId, table)
 	}
 
 	// Check if we have any PROTO columns and create the necessary proto bundles
@@ -310,7 +308,7 @@ func (s *SpannerService) UpdateSpannerTable(ctx context.Context, table *schema.S
 		column.GetProtoFileDescriptorSet().SetFileDescriptorSet(fds)
 
 		// Create proto bundle
-		if err := CreateProtoBundle(ctx, s.conn, fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId), column.GetProtoFileDescriptorSet().GetProtoPackage().GetValue(), fdsBytes); err != nil {
+		if err := CreateProtoBundle(ctx, s.conn, tableName.DatabaseName().String(), column.GetProtoFileDescriptorSet().GetProtoPackage().GetValue(), fdsBytes); err != nil {
 			return nil, status.Errorf(codes.Internal, "Error creating proto bundle: %v", err)
 		}
 	}

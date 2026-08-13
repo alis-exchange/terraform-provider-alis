@@ -7,6 +7,10 @@ import (
 	"sort"
 	"strings"
 
+	"terraform-provider-alis/internal/spanner/conn"
+	"terraform-provider-alis/internal/spanner/schema"
+	"terraform-provider-alis/internal/utils"
+
 	_ "github.com/googleapis/go-sql-spanner"
 	alUtils "go.alis.build/utils"
 	"google.golang.org/grpc/codes"
@@ -16,9 +20,6 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
-	"terraform-provider-alis/internal/spanner/conn"
-	"terraform-provider-alis/internal/spanner/schema"
-	"terraform-provider-alis/internal/utils"
 )
 
 func GetIndexes(ctx context.Context, cn conn.Connection, database string, tableName string) ([]*SpannerTableIndex, error) {

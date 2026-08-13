@@ -6,11 +6,13 @@ import (
 	"strconv"
 	"strings"
 
+	"terraform-provider-alis/internal/spanner/names"
+	"terraform-provider-alis/internal/spanner/schema"
+	"terraform-provider-alis/internal/utils"
+
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/wrapperspb"
-	"terraform-provider-alis/internal/spanner/schema"
-	"terraform-provider-alis/internal/utils"
 )
 
 func (s *SpannerService) CreateSpannerSequence(ctx context.Context, parent string, sequence *schema.SpannerSequence) (*schema.SpannerSequence, error) {
@@ -56,13 +58,12 @@ func (s *SpannerService) GetSpannerSequence(ctx context.Context, name string) (*
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", name, utils.SpannerGoogleSqlSequenceNameRegex, utils.SpannerPostgresSqlSequenceNameRegex)
 	}
 
-	// "projects/my-project/instances/my-instance/database/my-db/sequences/my-sequence"
-	sequenceNameParts := strings.Split(name, "/")
-	projectId := sequenceNameParts[1]
-	instanceId := sequenceNameParts[3]
-	databaseId := sequenceNameParts[5]
-	sequenceId := sequenceNameParts[7]
-	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", projectId, instanceId, databaseId)
+	sequenceName, err := names.ParseSequence(name)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument name (%s): %v", name, err)
+	}
+	sequenceId := sequenceName.Sequence
+	database := sequenceName.DatabaseName().String()
 
 	var rows []*SequenceRow
 	if err := s.conn.Query(ctx, database, &rows,
@@ -151,7 +152,7 @@ func (s *SpannerService) GetSpannerSequence(ctx context.Context, name string) (*
 	}
 
 	return &schema.SpannerSequence{
-		Name:    fmt.Sprintf("projects/%s/instances/%s/databases/%s/sequences/%s", projectId, instanceId, databaseId, sequenceId),
+		Name:    sequenceName.String(),
 		Options: sequenceOptions,
 	}, nil
 }
@@ -170,12 +171,11 @@ func (s *SpannerService) UpdateSpannerSequence(ctx context.Context, sequence *sc
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", sequence.GetName(), utils.SpannerGoogleSqlSequenceNameRegex, utils.SpannerPostgresSqlSequenceNameRegex)
 	}
 
-	// "projects/my-project/instances/my-instance/database/my-db/sequences/my-sequence"
-	sequenceNameParts := strings.Split(sequence.GetName(), "/")
-	projectId := sequenceNameParts[1]
-	instanceId := sequenceNameParts[3]
-	databaseId := sequenceNameParts[5]
-	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", projectId, instanceId, databaseId)
+	sequenceName, err := names.ParseSequence(sequence.GetName())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument sequence.name (%s): %v", sequence.GetName(), err)
+	}
+	database := sequenceName.DatabaseName().String()
 
 	// Verify the database exists before issuing DDL
 	if _, err := s.conn.Dialect(ctx, database); err != nil {
@@ -202,12 +202,11 @@ func (s *SpannerService) DeleteSpannerSequence(ctx context.Context, name string)
 		return status.Errorf(codes.InvalidArgument, "Invalid argument name (%s), must match `%s` for GoogleSql dialect or `%s` for PostgreSQL dialect", name, utils.SpannerGoogleSqlSequenceNameRegex, utils.SpannerPostgresSqlSequenceNameRegex)
 	}
 
-	// "projects/my-project/instances/my-instance/database/my-db/sequences/my-sequence"
-	sequenceNameParts := strings.Split(name, "/")
-	projectId := sequenceNameParts[1]
-	instanceId := sequenceNameParts[3]
-	databaseId := sequenceNameParts[5]
-	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", projectId, instanceId, databaseId)
+	sequenceName, err := names.ParseSequence(name)
+	if err != nil {
+		return status.Errorf(codes.InvalidArgument, "Invalid argument name (%s): %v", name, err)
+	}
+	database := sequenceName.DatabaseName().String()
 
 	// Verify the database exists before issuing DDL
 	if _, err := s.conn.Dialect(ctx, database); err != nil {

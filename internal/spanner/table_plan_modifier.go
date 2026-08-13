@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"sort"
 
+	tableschema "terraform-provider-alis/internal/spanner/schema"
+
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
-	tableschema "terraform-provider-alis/internal/spanner/schema"
 )
 
 // tableColumnsRequireReplace is the RequiresReplaceIf handler for schema.columns.

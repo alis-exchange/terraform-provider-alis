@@ -8,11 +8,13 @@ import (
 	"strconv"
 	"strings"
 
+	"terraform-provider-alis/internal/spanner/conn"
+	"terraform-provider-alis/internal/spanner/names"
+
 	"go.alis.build/alog"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/wrapperspb"
-	"terraform-provider-alis/internal/spanner/conn"
 )
 
 // SpannerTable represents a Spanner table.
@@ -26,87 +28,62 @@ type SpannerTable struct {
 	Interleave *SpannerTableInterleave
 }
 
+// GetProject returns "projects/{p}", or "" when the table name is unset or
+// malformed (no panics on short names).
 func (t *SpannerTable) GetProject() string {
-	if t == nil {
+	n, err := names.ParseTable(t.GetName())
+	if err != nil {
 		return ""
 	}
-
-	if t.GetName() == "" {
-		return ""
-	}
-
-	tableNameParts := strings.Split(t.GetName(), "/")
-	projectId := tableNameParts[1]
-
-	return fmt.Sprintf("projects/%s", projectId)
+	return fmt.Sprintf("projects/%s", n.Project)
 }
 
 func (t *SpannerTable) GetProjectId() string {
-	if t == nil {
+	n, err := names.ParseTable(t.GetName())
+	if err != nil {
 		return ""
 	}
-
-	return strings.TrimPrefix(t.GetProject(), "projects/")
+	return n.Project
 }
 
 func (t *SpannerTable) GetInstance() string {
-	if t == nil {
+	n, err := names.ParseTable(t.GetName())
+	if err != nil {
 		return ""
 	}
-
-	if t.GetName() == "" {
-		return ""
-	}
-
-	tableNameParts := strings.Split(t.GetName(), "/")
-	instanceId := tableNameParts[3]
-
-	return fmt.Sprintf("%s/instances/%s", t.GetProject(), instanceId)
+	return fmt.Sprintf("projects/%s/instances/%s", n.Project, n.Instance)
 }
 
 func (t *SpannerTable) GetInstanceId() string {
-	if t == nil {
+	n, err := names.ParseTable(t.GetName())
+	if err != nil {
 		return ""
 	}
-
-	instanceParts := strings.Split(t.GetInstance(), "/")
-	return instanceParts[len(instanceParts)-1]
+	return n.Instance
 }
 
 func (t *SpannerTable) GetDatabase() string {
-	if t == nil {
+	n, err := names.ParseTable(t.GetName())
+	if err != nil {
 		return ""
 	}
-
-	if t.GetName() == "" {
-		return ""
-	}
-
-	tableNameParts := strings.Split(t.GetName(), "/")
-	databaseId := tableNameParts[5]
-
-	return fmt.Sprintf("%s/databases/%s", t.GetInstance(), databaseId)
+	return n.DatabaseName().String()
 }
 
 func (t *SpannerTable) GetDatabaseId() string {
-	if t == nil {
+	n, err := names.ParseTable(t.GetName())
+	if err != nil {
 		return ""
 	}
-
-	databaseParts := strings.Split(t.GetDatabase(), "/")
-	return databaseParts[len(databaseParts)-1]
+	return n.Database
 }
 
 func (t *SpannerTable) GetTableId() string {
-	if t == nil {
+	n, err := names.ParseTable(t.GetName())
+	if err != nil {
 		return ""
 	}
-
-	if t.GetName() == "" {
-		return ""
-	}
-
-	return strings.Split(t.GetName(), "/")[7]
+	return n.Table
 }
 
 func (t *SpannerTable) GetName() string {

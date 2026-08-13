@@ -4,7 +4,12 @@ import (
 	"context"
 	"fmt"
 	"regexp"
-	"strings"
+
+	"terraform-provider-alis/internal"
+	"terraform-provider-alis/internal/spanner/names"
+	"terraform-provider-alis/internal/spanner/services"
+	"terraform-provider-alis/internal/utils"
+	"terraform-provider-alis/internal/validators"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -18,10 +23,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/wrapperspb"
-	"terraform-provider-alis/internal"
-	"terraform-provider-alis/internal/spanner/services"
-	"terraform-provider-alis/internal/utils"
-	"terraform-provider-alis/internal/validators"
 )
 
 // Ensure the implementation satisfies the expected interfaces.
@@ -144,7 +145,7 @@ func (r *spannerTableTtlPolicyResource) Create(ctx context.Context, req resource
 
 	// Create row deletion policy
 	_, err := r.config.SpannerService.CreateSpannerTableRowDeletionPolicy(ctx,
-		fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", project, instanceName, databaseId, tableId),
+		names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String(),
 		policy,
 	)
 	if err != nil {
@@ -186,7 +187,7 @@ func (r *spannerTableTtlPolicyResource) Read(ctx context.Context, req resource.R
 	tableId := state.Table.ValueString()
 
 	// Get policy from API
-	policy, err := r.config.SpannerService.GetSpannerTableRowDeletionPolicy(ctx, fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", project, instanceName, databaseId, tableId))
+	policy, err := r.config.SpannerService.GetSpannerTableRowDeletionPolicy(ctx, names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String())
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			resp.State.RemoveResource(ctx)
@@ -241,7 +242,7 @@ func (r *spannerTableTtlPolicyResource) Update(ctx context.Context, req resource
 
 	// Update row deletion policy
 	_, err := r.config.SpannerService.UpdateSpannerTableRowDeletionPolicy(ctx,
-		fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", project, instanceName, databaseId, tableId),
+		names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String(),
 		policy,
 	)
 	if err != nil {
@@ -277,7 +278,7 @@ func (r *spannerTableTtlPolicyResource) Delete(ctx context.Context, req resource
 	tableId := state.Table.ValueString()
 
 	// Delete existing database
-	err := r.config.SpannerService.DeleteSpannerTableRowDeletionPolicy(ctx, fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", project, instanceName, databaseId, tableId))
+	err := r.config.SpannerService.DeleteSpannerTableRowDeletionPolicy(ctx, names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String())
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Deleting TTL Policy",
@@ -288,13 +289,11 @@ func (r *spannerTableTtlPolicyResource) Delete(ctx context.Context, req resource
 }
 
 func (r *spannerTableTtlPolicyResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	// Split import ID to get project, instance, and database id
-	// projects/{project}/instances/{instance}/databases/{database}/tables/{tables}
-	importIDParts := strings.Split(req.ID, "/")
-	if len(importIDParts) != 8 {
+	importName, err := names.ParseTable(req.ID)
+	if err != nil {
 		resp.Diagnostics.AddError(
 			"Invalid Import ID",
-			"Import ID must be in the format projects/{project}/instances/{instance}/databases/{database}/tables/{table}",
+			"Import ID must be in the format projects/{project}/instances/{instance}/databases/{database}/tables/{table}: "+err.Error(),
 		)
 		return
 	}
@@ -307,10 +306,10 @@ func (r *spannerTableTtlPolicyResource) ImportState(ctx context.Context, req res
 		return
 	}
 
-	project := importIDParts[1]
-	instanceName := importIDParts[3]
-	databaseName := importIDParts[5]
-	tableName := importIDParts[7]
+	project := importName.Project
+	instanceName := importName.Instance
+	databaseName := importName.Database
+	tableName := importName.Table
 
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("project"), project)...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("instance"), instanceName)...)
