@@ -8,6 +8,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"terraform-provider-alis/internal/spanner/schema"
 	"terraform-provider-alis/internal/utils"
 )
 
@@ -64,7 +65,11 @@ func (s *SpannerService) CreateSpannerTableIndex(ctx context.Context, parent str
 	}
 
 	// Create index
-	if err := CreateIndex(ctx, s.conn, database, tableId, index); err != nil {
+	ddl, err := index.CreateDdl(tableId)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if err := s.conn.ExecuteDDL(ctx, database, ddl); err != nil {
 		return nil, status.Errorf(codes.Internal, "Error creating index: %v", err)
 	}
 
@@ -176,8 +181,8 @@ func (s *SpannerService) DeleteSpannerTableIndex(ctx context.Context, parent str
 	databaseId := parentNameParts[5]
 	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
 
-	// Drop the index.
-	if err := s.conn.ExecuteDDL(ctx, database, fmt.Sprintf("DROP INDEX %s", indexName)); err != nil {
+	// Drop the index
+	if err := s.conn.ExecuteDDL(ctx, database, schema.DropIndexDdl(indexName)); err != nil {
 		return nil, status.Errorf(codes.Internal, "Error dropping index: %v", err)
 	}
 

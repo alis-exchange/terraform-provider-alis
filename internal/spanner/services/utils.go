@@ -91,31 +91,6 @@ func GetIndexes(ctx context.Context, cn conn.Connection, database string, tableN
 	return indexes, nil
 }
 
-func CreateIndex(ctx context.Context, cn conn.Connection, database string, tableName string, index *SpannerTableIndex) error {
-	unique := ""
-	if index.Unique != nil && index.Unique.GetValue() {
-		unique = "UNIQUE"
-	}
-	columns := make([]string, 0)
-	for _, column := range index.Columns {
-
-		if column.Order == SpannerTableIndexColumnOrder_UNSPECIFIED {
-			column.Order = SpannerTableIndexColumnOrder_ASC
-		}
-
-		columns = append(columns, fmt.Sprintf("%s %s", column.Name, column.Order.String()))
-	}
-
-	// Create the index. Index creation is a schema change: it rides
-	// ExecuteDDL (uniform retry + LRO wait) instead of the data path.
-	return cn.ExecuteDDL(ctx, database, fmt.Sprintf("CREATE %s INDEX %s ON %s (%s)",
-		unique,
-		index.Name,
-		tableName,
-		strings.Join(columns, ", "),
-	))
-}
-
 func fetchDescriptorSet(ctx context.Context, fds *schema.ProtoFileDescriptorSet) ([]byte, error) {
 	switch fds.FileDescriptorSetPathSource {
 	case schema.ProtoFileDescriptorSetSourceGcs:
@@ -247,7 +222,7 @@ func CreateProtoBundle(ctx context.Context, cn conn.Connection, databaseName str
 		return fmt.Sprintf("`%s`", name)
 	})
 
-	createStatement := fmt.Sprintf("CREATE PROTO BUNDLE (%s)", strings.Join(formattedProtoPackageNames, ", "))
+	createStatement := schema.CreateProtoBundleDdl(formattedProtoPackageNames)
 	err = cn.ExecuteDDLWithDescriptors(ctx, databaseName, descriptorSet, createStatement)
 	if err != nil {
 		if status.Code(err) != codes.AlreadyExists && status.Code(err) != codes.InvalidArgument {
@@ -255,7 +230,7 @@ func CreateProtoBundle(ctx context.Context, cn conn.Connection, databaseName str
 		}
 
 		// Try to insert the proto bundle
-		insertStatement := fmt.Sprintf("ALTER PROTO BUNDLE INSERT (%s)", strings.Join(formattedProtoPackageNames, ", "))
+		insertStatement := schema.AlterProtoBundleInsertDdl(formattedProtoPackageNames)
 		err = cn.ExecuteDDLWithDescriptors(ctx, databaseName, descriptorSet, insertStatement)
 		if err != nil {
 			if status.Code(err) != codes.AlreadyExists && status.Code(err) != codes.InvalidArgument {
@@ -263,7 +238,7 @@ func CreateProtoBundle(ctx context.Context, cn conn.Connection, databaseName str
 			}
 
 			// Try to update the proto bundle
-			updateStatement := fmt.Sprintf("ALTER PROTO BUNDLE UPDATE (%s)", strings.Join(formattedProtoPackageNames, ", "))
+			updateStatement := schema.AlterProtoBundleUpdateDdl(formattedProtoPackageNames)
 			err = cn.ExecuteDDLWithDescriptors(ctx, databaseName, descriptorSet, updateStatement)
 			if err != nil {
 				return err

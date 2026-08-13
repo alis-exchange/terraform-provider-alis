@@ -9,7 +9,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/wrapperspb"
-	"terraform-provider-alis/internal/spanner/conn"
 	"terraform-provider-alis/internal/spanner/schema"
 	"terraform-provider-alis/internal/utils"
 )
@@ -28,9 +27,8 @@ func (s *SpannerService) CreateSpannerSequence(ctx context.Context, parent strin
 		return nil, status.Error(codes.InvalidArgument, "Invalid argument sequence.name, field is required but not provided")
 	}
 
-	// Get database dialect (also verifies the database exists)
-	dialect, err := s.conn.Dialect(ctx, parent)
-	if err != nil {
+	// Verify the database exists before issuing DDL
+	if _, err := s.conn.Dialect(ctx, parent); err != nil {
 		return nil, err
 	}
 
@@ -39,14 +37,7 @@ func (s *SpannerService) CreateSpannerSequence(ctx context.Context, parent strin
 	if err != nil {
 		return nil, err
 	}
-	var ddlStatements []string
-	if dialect == conn.DialectGoogleSQL {
-		ddlStatements = append(ddlStatements, ddl)
-	}
-	if dialect == conn.DialectPostgreSQL {
-		ddlStatements = append(ddlStatements, ddl)
-	}
-	if err := s.conn.ExecuteDDL(ctx, parent, ddlStatements...); err != nil {
+	if err := s.conn.ExecuteDDL(ctx, parent, ddl); err != nil {
 		return nil, err
 	}
 
@@ -186,9 +177,8 @@ func (s *SpannerService) UpdateSpannerSequence(ctx context.Context, sequence *sc
 	databaseId := sequenceNameParts[5]
 	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", projectId, instanceId, databaseId)
 
-	// Get database dialect (also verifies the database exists)
-	dialect, err := s.conn.Dialect(ctx, database)
-	if err != nil {
+	// Verify the database exists before issuing DDL
+	if _, err := s.conn.Dialect(ctx, database); err != nil {
 		return nil, err
 	}
 
@@ -196,14 +186,7 @@ func (s *SpannerService) UpdateSpannerSequence(ctx context.Context, sequence *sc
 	if err != nil {
 		return nil, err
 	}
-	var ddlStatements []string
-	if dialect == conn.DialectGoogleSQL {
-		ddlStatements = append(ddlStatements, ddl)
-	}
-	if dialect == conn.DialectPostgreSQL {
-		ddlStatements = append(ddlStatements, ddl)
-	}
-	if err := s.conn.ExecuteDDL(ctx, database, ddlStatements...); err != nil {
+	if err := s.conn.ExecuteDDL(ctx, database, ddl); err != nil {
 		return nil, err
 	}
 
@@ -226,9 +209,8 @@ func (s *SpannerService) DeleteSpannerSequence(ctx context.Context, name string)
 	databaseId := sequenceNameParts[5]
 	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", projectId, instanceId, databaseId)
 
-	// Get database dialect (also verifies the database exists)
-	dialect, err := s.conn.Dialect(ctx, database)
-	if err != nil {
+	// Verify the database exists before issuing DDL
+	if _, err := s.conn.Dialect(ctx, database); err != nil {
 		return err
 	}
 
@@ -240,12 +222,5 @@ func (s *SpannerService) DeleteSpannerSequence(ctx context.Context, name string)
 	if err != nil {
 		return err
 	}
-	var ddlStatements []string
-	if dialect == conn.DialectGoogleSQL {
-		ddlStatements = append(ddlStatements, ddl)
-	}
-	if dialect == conn.DialectPostgreSQL {
-		ddlStatements = append(ddlStatements, ddl)
-	}
-	return s.conn.ExecuteDDL(ctx, database, ddlStatements...)
+	return s.conn.ExecuteDDL(ctx, database, ddl)
 }

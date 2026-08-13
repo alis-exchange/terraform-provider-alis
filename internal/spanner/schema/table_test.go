@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"reflect"
-	"sort"
 	"testing"
 
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -117,13 +116,13 @@ func Test_SpannerTable_createDdl(t1 *testing.T) {
 				Interleave: tt.fields.Interleave,
 			}
 
-			got, err := t.createDdl()
+			got, err := t.CreateDdl()
 			if (err != nil) != tt.wantErr {
-				t1.Errorf("createDdl() error = %v, wantErr %v", err, tt.wantErr)
+				t1.Errorf("CreateDdl() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if got != tt.want {
-				t1.Errorf("createDdl() got = %v, want %v", got, tt.want)
+				t1.Errorf("CreateDdl() got = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -351,15 +350,17 @@ func TestSpannerTable_alterDdl(t1 *testing.T) {
 					},
 				},
 			},
+			// Deterministic order: drops, then adds, then in-place alters,
+			// each sorted by column name.
 			want: []string{
+				"ALTER TABLE `tf_test` DROP COLUMN `tags`",
 				"ALTER TABLE `tf_test` ADD COLUMN `discounts` ARRAY<FLOAT32>",
 				"ALTER TABLE `tf_test` ALTER COLUMN `data` BYTES NOT NULL",
-				"ALTER TABLE `tf_test` ALTER COLUMN `display_name` SET DEFAULT (10.0)",
 				"ALTER TABLE `tf_test` ALTER COLUMN `display_name` STRING(250)",
+				"ALTER TABLE `tf_test` ALTER COLUMN `display_name` SET DEFAULT (10.0)",
 				"ALTER TABLE `tf_test` ALTER COLUMN `latest_return` SET DEFAULT (10.0)",
-				"ALTER TABLE `tf_test` ALTER COLUMN `user_name` STRING(255)",
 				"ALTER TABLE `tf_test` ALTER COLUMN `user` `alis.open.iam.v1.User`",
-				"ALTER TABLE `tf_test` DROP COLUMN `tags`",
+				"ALTER TABLE `tf_test` ALTER COLUMN `user_name` STRING(255)",
 			},
 			wantErr: false,
 		},
@@ -371,16 +372,13 @@ func TestSpannerTable_alterDdl(t1 *testing.T) {
 				Schema:     tt.fields.Schema,
 				Interleave: tt.fields.Interleave,
 			}
-			got, _, err := t.alterDdl(tt.args.existingTable)
+			got, _, err := t.AlterDdl(tt.args.existingTable)
 			if (err != nil) != tt.wantErr {
-				t1.Errorf("alterDdl() error = %v, wantErr %v", err, tt.wantErr)
+				t1.Errorf("AlterDdl() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			// alterDdl builds statements from map iteration, so order is not
-			// deterministic; compare sorted.
-			sort.Strings(got)
 			if !reflect.DeepEqual(got, tt.want) {
-				t1.Errorf("alterDdl() got = %v, want %v", got, tt.want)
+				t1.Errorf("AlterDdl() got = %v, want %v", got, tt.want)
 			}
 		})
 	}

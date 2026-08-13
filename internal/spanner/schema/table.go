@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -132,7 +133,9 @@ func (t *SpannerTable) GetInterleave() *SpannerTableInterleave {
 	return t.Interleave
 }
 
-func (t *SpannerTable) createDdl() (string, error) {
+// CreateDdl renders the CREATE TABLE statement, including primary key and
+// interleave clauses.
+func (t *SpannerTable) CreateDdl() (string, error) {
 
 	ddl := fmt.Sprintf("CREATE TABLE `%s` (", t.GetTableId())
 
@@ -174,7 +177,12 @@ func (t *SpannerTable) createDdl() (string, error) {
 	return ddl, nil
 }
 
-func (t *SpannerTable) alterDdl(existingTable *SpannerTable) ([]string, []*SpannerTableColumn, error) {
+// AlterDdl diffs the table against its existing state and renders the ALTER
+// statements plus the list of dropped columns. Statement order is
+// deterministic: drops, then adds, then in-place alters, each sorted by
+// column name — the batch is submitted to UpdateDatabaseDdl as-is, so a
+// stable order keeps applies reproducible.
+func (t *SpannerTable) AlterDdl(existingTable *SpannerTable) ([]string, []*SpannerTableColumn, error) {
 	// If either table is nil, return gracefully.
 	if t == nil || existingTable == nil {
 		return nil, nil, nil
@@ -194,9 +202,20 @@ func (t *SpannerTable) alterDdl(existingTable *SpannerTable) ([]string, []*Spann
 		updatedColumnsMap[column.GetName()] = column
 	}
 
+	sortedNames := func(m map[string]*SpannerTableColumn) []string {
+		names := make([]string, 0, len(m))
+		for name := range m {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		return names
+	}
+	existingNames := sortedNames(existingColumnsMap)
+	updatedNames := sortedNames(updatedColumnsMap)
+
 	// Find columns to drop(only existing columns)
 	var dropColumns []*SpannerTableColumn
-	for name := range existingColumnsMap {
+	for _, name := range existingNames {
 		if _, exists := updatedColumnsMap[name]; !exists {
 			statements = append(statements, fmt.Sprintf("ALTER TABLE `%s` DROP COLUMN `%s`", t.GetTableId(), name))
 			dropColumns = append(dropColumns, existingColumnsMap[name])
@@ -204,9 +223,9 @@ func (t *SpannerTable) alterDdl(existingTable *SpannerTable) ([]string, []*Spann
 	}
 
 	// Find columns to add(only new columns)
-	for name, column := range updatedColumnsMap {
+	for _, name := range updatedNames {
 		if _, exists := existingColumnsMap[name]; !exists {
-			columnDdl, err := column.ddl()
+			columnDdl, err := updatedColumnsMap[name].ddl()
 			if err != nil {
 				return nil, nil, err
 			}
@@ -215,7 +234,8 @@ func (t *SpannerTable) alterDdl(existingTable *SpannerTable) ([]string, []*Spann
 	}
 
 	// Find columns to modify
-	for name, updatedColumn := range updatedColumnsMap {
+	for _, name := range updatedNames {
+		updatedColumn := updatedColumnsMap[name]
 		existingColumn, exists := existingColumnsMap[name]
 		if !exists {
 			continue
@@ -239,7 +259,8 @@ func (t *SpannerTable) alterDdl(existingTable *SpannerTable) ([]string, []*Spann
 	return statements, dropColumns, nil
 }
 
-func (t *SpannerTable) deleteDdl() (string, error) {
+// DeleteDdl renders the DROP TABLE statement.
+func (t *SpannerTable) DeleteDdl() (string, error) {
 	return fmt.Sprintf("DROP TABLE `%s`", t.GetTableId()), nil
 }
 
@@ -251,7 +272,7 @@ func (t *SpannerTable) Create(ctx context.Context, cn conn.Connection) (*Spanner
 	}
 
 	// Generate table DDL
-	ddl, err := t.createDdl()
+	ddl, err := t.CreateDdl()
 	if err != nil {
 		return nil, err
 	}
@@ -588,7 +609,7 @@ func (t *SpannerTable) Update(ctx context.Context, cn conn.Connection, existingT
 	}
 
 	// Generate alter DDL
-	statements, droppedColumns, err := t.alterDdl(existingTable)
+	statements, droppedColumns, err := t.AlterDdl(existingTable)
 	if err != nil {
 		return nil, err
 	}
@@ -621,7 +642,7 @@ func (t *SpannerTable) Delete(ctx context.Context, cn conn.Connection) error {
 	}
 
 	// Generate table DDL
-	ddl, err := t.deleteDdl()
+	ddl, err := t.DeleteDdl()
 	if err != nil {
 		return err
 	}

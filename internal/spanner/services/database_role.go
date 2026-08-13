@@ -8,7 +8,7 @@ import (
 	"cloud.google.com/go/spanner/admin/database/apiv1/databasepb"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"terraform-provider-alis/internal/spanner/conn"
+	"terraform-provider-alis/internal/spanner/schema"
 	"terraform-provider-alis/internal/utils"
 )
 
@@ -26,21 +26,12 @@ func (s *SpannerService) CreateDatabaseRole(ctx context.Context, parent string, 
 		return nil, status.Error(codes.InvalidArgument, "Invalid argument roleId, field is required but not provided")
 	}
 
-	// Get database dialect (also verifies the database exists)
-	dialect, err := s.conn.Dialect(ctx, parent)
-	if err != nil {
+	// Verify the database exists before issuing DDL
+	if _, err := s.conn.Dialect(ctx, parent); err != nil {
 		return nil, err
 	}
 
-	// CREATE ROLE inventory_admin;
-	var ddlStatements []string
-	if dialect == conn.DialectGoogleSQL {
-		ddlStatements = append(ddlStatements, fmt.Sprintf("CREATE ROLE %s", roleId))
-	}
-	if dialect == conn.DialectPostgreSQL {
-		ddlStatements = append(ddlStatements, fmt.Sprintf("CREATE ROLE %s", roleId))
-	}
-	if err := s.conn.ExecuteDDL(ctx, parent, ddlStatements...); err != nil {
+	if err := s.conn.ExecuteDDL(ctx, parent, schema.CreateRoleDdl(roleId)); err != nil {
 		return nil, err
 	}
 
@@ -116,18 +107,10 @@ func (s *SpannerService) DeleteDatabaseRole(ctx context.Context, name string) er
 	roleId := nameParts[7]
 	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
 
-	// Get database dialect (also verifies the database exists)
-	dialect, err := s.conn.Dialect(ctx, database)
-	if err != nil {
+	// Verify the database exists before issuing DDL
+	if _, err := s.conn.Dialect(ctx, database); err != nil {
 		return err
 	}
 
-	var ddlStatements []string
-	if dialect == conn.DialectGoogleSQL {
-		ddlStatements = append(ddlStatements, fmt.Sprintf("DROP ROLE %s", roleId))
-	}
-	if dialect == conn.DialectPostgreSQL {
-		ddlStatements = append(ddlStatements, fmt.Sprintf("DROP ROLE %s", roleId))
-	}
-	return s.conn.ExecuteDDL(ctx, database, ddlStatements...)
+	return s.conn.ExecuteDDL(ctx, database, schema.DropRoleDdl(roleId))
 }

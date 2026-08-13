@@ -1,27 +1,25 @@
 package services
 
 import (
-	"google.golang.org/protobuf/types/known/wrapperspb"
+	"terraform-provider-alis/internal/spanner/schema"
 )
 
-type SpannerTableIndexColumn struct {
-	// The name of the column
-	Name string
-	// The sort order of the column in the index
-	//
-	// Accepts either SpannerTableIndexColumnOrder_ASC or SpannerTableIndexColumnOrder_DESC
-	Order SpannerTableIndexColumnOrder
-}
+// The index and row-deletion-policy types are owned by the schema package
+// alongside their DDL builders; these aliases keep existing callers compiling.
+type (
+	SpannerTableIndex             = schema.SpannerTableIndex
+	SpannerTableIndexColumn       = schema.SpannerTableIndexColumn
+	SpannerTableIndexColumnOrder  = schema.SpannerTableIndexColumnOrder
+	SpannerTableRowDeletionPolicy = schema.SpannerTableRowDeletionPolicy
+)
 
-// SpannerTableIndex represents a Spanner table index.
-type SpannerTableIndex struct {
-	// The name of the index
-	Name string
-	// The columns that make up the index
-	Columns []*SpannerTableIndexColumn
-	// Whether the index is unique
-	Unique *wrapperspb.BoolValue
-}
+const (
+	SpannerTableIndexColumnOrder_UNSPECIFIED = schema.SpannerTableIndexColumnOrder_UNSPECIFIED
+	SpannerTableIndexColumnOrder_ASC         = schema.SpannerTableIndexColumnOrder_ASC
+	SpannerTableIndexColumnOrder_DESC        = schema.SpannerTableIndexColumnOrder_DESC
+)
+
+var SpannerTableIndexColumnOrders = schema.SpannerTableIndexColumnOrders
 
 // TablePolicyBindingPermission represents a Spanner table role binding permission.
 type TablePolicyBindingPermission int64
@@ -99,30 +97,6 @@ type Constraint struct {
 	DELETE_RULE        string
 	REFERENCED_TABLE   string
 	REFERENCED_COLUMN  string
-}
-
-type SpannerTableIndexColumnOrder int64
-
-const (
-	SpannerTableIndexColumnOrder_UNSPECIFIED SpannerTableIndexColumnOrder = iota
-	SpannerTableIndexColumnOrder_ASC
-	SpannerTableIndexColumnOrder_DESC
-)
-
-func (s SpannerTableIndexColumnOrder) String() string {
-	return [...]string{"unspecified", "asc", "desc"}[s]
-}
-
-var SpannerTableIndexColumnOrders = []string{
-	SpannerTableIndexColumnOrder_ASC.String(),
-	SpannerTableIndexColumnOrder_DESC.String(),
-}
-
-type SpannerTableRowDeletionPolicy struct {
-	// The name of the TIMESTAMP column that is used to determine when a row is deleted
-	Column string
-	// The duration after which a row is deleted in days
-	Duration *wrapperspb.Int64Value
 }
 
 type SequenceRow struct {

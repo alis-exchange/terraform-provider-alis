@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/wrapperspb"
+	"terraform-provider-alis/internal/spanner/schema"
 	"terraform-provider-alis/internal/utils"
 )
 
@@ -52,9 +53,12 @@ func (s *SpannerService) CreateSpannerTableRowDeletionPolicy(ctx context.Context
 		return nil, err
 	}
 
-	// Create the deletion policy. Schema changes ride ExecuteDDL: uniform
-	// retry and LRO wait come from the Connection module.
-	if err := s.conn.ExecuteDDL(ctx, database, fmt.Sprintf("ALTER TABLE %s ADD ROW DELETION POLICY (OLDER_THAN(%s, INTERVAL %d DAY))", tableId, ttl.Column, ttl.Duration.GetValue())); err != nil {
+	// Create the deletion policy
+	ddl, err := ttl.CreateDdl(tableId)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if err := s.conn.ExecuteDDL(ctx, database, ddl); err != nil {
 		return nil, status.Errorf(codes.Internal, "Error creating row deletion policy: %v", err)
 	}
 
@@ -161,7 +165,11 @@ func (s *SpannerService) UpdateSpannerTableRowDeletionPolicy(ctx context.Context
 	}
 
 	// Replace the deletion policy
-	if err := s.conn.ExecuteDDL(ctx, database, fmt.Sprintf("ALTER TABLE %s REPLACE ROW DELETION POLICY (OLDER_THAN(%s, INTERVAL %d DAY))", tableId, ttl.Column, ttl.Duration.GetValue())); err != nil {
+	ddl, err := ttl.ReplaceDdl(tableId)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if err := s.conn.ExecuteDDL(ctx, database, ddl); err != nil {
 		return nil, status.Errorf(codes.Internal, "Error creating row deletion policy: %v", err)
 	}
 
@@ -190,7 +198,7 @@ func (s *SpannerService) DeleteSpannerTableRowDeletionPolicy(ctx context.Context
 	}
 
 	// Drop the deletion policy
-	if err := s.conn.ExecuteDDL(ctx, database, fmt.Sprintf("ALTER TABLE %s DROP ROW DELETION POLICY", tableId)); err != nil {
+	if err := s.conn.ExecuteDDL(ctx, database, schema.DropRowDeletionPolicyDdl(tableId)); err != nil {
 		return status.Errorf(codes.Internal, "Error creating row deletion policy: %v", err)
 	}
 

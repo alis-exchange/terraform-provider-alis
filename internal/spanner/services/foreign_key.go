@@ -64,11 +64,11 @@ func (s *SpannerService) CreateSpannerTableForeignKeyConstraint(ctx context.Cont
 	tableId := parentNameParts[7]
 	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
 
-	sqlStatement := fmt.Sprintf("ALTER TABLE `%s` ADD CONSTRAINT `%s` FOREIGN KEY (`%s`) REFERENCES %s(`%s`)", tableId, constraint.Name, constraint.Column, constraint.ReferencedTable, constraint.ReferencedColumn)
-	if constraint.OnDelete != schema.SpannerTableConstraintActionUnspecified {
-		sqlStatement += fmt.Sprintf(" ON DELETE %s", constraint.OnDelete.String())
+	ddl, err := constraint.CreateDdl(tableId)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "%v", err)
 	}
-	if err := s.conn.ExecuteDDL(ctx, database, sqlStatement); err != nil {
+	if err := s.conn.ExecuteDDL(ctx, database, ddl); err != nil {
 		return nil, status.Errorf(codes.Internal, "Error creating foreign key constraint: %v", err)
 	}
 
@@ -170,7 +170,7 @@ func (s *SpannerService) DeleteSpannerTableForeignKeyConstraint(ctx context.Cont
 	tableId := parentNameParts[7]
 	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
 
-	if err := s.conn.ExecuteDDL(ctx, database, fmt.Sprintf("ALTER TABLE `%s` DROP CONSTRAINT `%s`", tableId, name)); err != nil {
+	if err := s.conn.ExecuteDDL(ctx, database, schema.DropForeignKeyConstraintDdl(tableId, name)); err != nil {
 		return status.Errorf(codes.Internal, "Error dropping foreign key constraint: %v", err)
 	}
 

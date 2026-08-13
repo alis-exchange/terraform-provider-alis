@@ -7,7 +7,7 @@ import (
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"terraform-provider-alis/internal/spanner/conn"
+	"terraform-provider-alis/internal/spanner/schema"
 	"terraform-provider-alis/internal/utils"
 )
 
@@ -43,9 +43,8 @@ func (s *SpannerService) SetTableIamBinding(ctx context.Context, parent string, 
 	tableId := parentNameParts[7]
 	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
 
-	// Get database dialect (also verifies the database exists)
-	dialect, err := s.conn.Dialect(ctx, database)
-	if err != nil {
+	// Verify the database exists before issuing DDL
+	if _, err := s.conn.Dialect(ctx, database); err != nil {
 		return nil, err
 	}
 
@@ -54,14 +53,7 @@ func (s *SpannerService) SetTableIamBinding(ctx context.Context, parent string, 
 		permissions = append(permissions, permission.String())
 	}
 
-	var ddlStatements []string
-	if dialect == conn.DialectGoogleSQL {
-		ddlStatements = append(ddlStatements, fmt.Sprintf("GRANT %s ON TABLE %s TO ROLE %s", strings.Join(permissions, ", "), tableId, binding.Role))
-	}
-	if dialect == conn.DialectPostgreSQL {
-		ddlStatements = append(ddlStatements, fmt.Sprintf("GRANT %s ON TABLE %s TO ROLE %s", strings.Join(permissions, ", "), tableId, binding.Role))
-	}
-	if err := s.conn.ExecuteDDL(ctx, database, ddlStatements...); err != nil {
+	if err := s.conn.ExecuteDDL(ctx, database, schema.GrantTablePrivilegesDdl(tableId, binding.Role, permissions)); err != nil {
 		return nil, err
 	}
 
@@ -136,9 +128,8 @@ func (s *SpannerService) DeleteTableIamBinding(ctx context.Context, parent strin
 	tableId := parentNameParts[7]
 	database := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId)
 
-	// Get database dialect (also verifies the database exists)
-	dialect, err := s.conn.Dialect(ctx, database)
-	if err != nil {
+	// Verify the database exists before issuing DDL
+	if _, err := s.conn.Dialect(ctx, database); err != nil {
 		return err
 	}
 
@@ -153,12 +144,5 @@ func (s *SpannerService) DeleteTableIamBinding(ctx context.Context, parent strin
 		permissions = append(permissions, permission.String())
 	}
 
-	var ddlStatements []string
-	if dialect == conn.DialectGoogleSQL {
-		ddlStatements = append(ddlStatements, fmt.Sprintf("REVOKE %s ON TABLE %s FROM ROLE %s", strings.Join(permissions, ", "), tableId, role))
-	}
-	if dialect == conn.DialectPostgreSQL {
-		ddlStatements = append(ddlStatements, fmt.Sprintf("REVOKE %s ON TABLE %s FROM ROLE %s", strings.Join(permissions, ", "), tableId, role))
-	}
-	return s.conn.ExecuteDDL(ctx, database, ddlStatements...)
+	return s.conn.ExecuteDDL(ctx, database, schema.RevokeTablePrivilegesDdl(tableId, role, permissions))
 }
