@@ -27,7 +27,7 @@ Note on PROTO columns: a table column is declared as a protocol buffer type via 
 Requirements:
 
 - [Terraform](https://developer.hashicorp.com/terraform/downloads) >= 1.5 — the oldest version the acceptance suite runs against (see the matrix in [`test.yml`](.github/workflows/test.yml)); raise this line and that matrix together
-- [Go](https://go.dev/doc/install) >= 1.26 (only to build the provider from source)
+- [Go](https://go.dev/doc/install) >= 1.26.5 (only to build the provider from source) — the patch floor tracks standard-library security fixes, so it moves when `govulncheck` reports one
 - Docker (only for emulator-backed tests)
 - `protoc` (only to regenerate the proto test fixture)
 

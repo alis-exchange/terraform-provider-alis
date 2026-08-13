@@ -1,6 +1,9 @@
 module terraform-provider-alis
 
-go 1.26.1
+// The patch version is load-bearing, not incidental: CI and GoReleaser both
+// resolve their toolchain from this line, so it decides which standard library
+// the released binaries embed. Raise it when govulncheck reports stdlib fixes.
+go 1.26.5
 
 require (
 	cloud.google.com/go/spanner v1.94.0
