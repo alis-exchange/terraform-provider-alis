@@ -22,7 +22,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
-	"google.golang.org/protobuf/types/known/wrapperspb"
 	"terraform-provider-alis/internal"
 	tableschema "terraform-provider-alis/internal/spanner/schema"
 	"terraform-provider-alis/internal/utils"
@@ -249,119 +248,7 @@ func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaReques
 						},
 						Description: "The columns of the table.",
 						PlanModifiers: []planmodifier.List{
-							listplanmodifier.RequiresReplaceIf(func(ctx context.Context, req planmodifier.ListRequest, resp *listplanmodifier.RequiresReplaceIfFuncResponse) {
-								// Create a map of the columns by name
-								type PriorAndCurrentColumns struct {
-									Prior   *spannerTableColumn
-									Current *spannerTableColumn
-								}
-								columnsMap := make(map[string]*PriorAndCurrentColumns)
-
-								// Get the columns prior to the plan
-								priorColumns := make([]spannerTableColumn, 0, len(req.StateValue.Elements()))
-								d := req.StateValue.ElementsAs(ctx, &priorColumns, false)
-								if d.HasError() {
-									resp.Diagnostics.Append(d...)
-									return
-								}
-								for _, column := range priorColumns {
-									if _, ok := columnsMap[column.Name.ValueString()]; !ok {
-										columnsMap[column.Name.ValueString()] = &PriorAndCurrentColumns{}
-									}
-									columnsMap[column.Name.ValueString()].Prior = &column
-								}
-
-								// Get the columns after the plan
-								currentColumns := make([]spannerTableColumn, 0, len(req.PlanValue.Elements()))
-								d = req.PlanValue.ElementsAs(ctx, &currentColumns, false)
-								if d.HasError() {
-									resp.Diagnostics.Append(d...)
-									return
-								}
-								for _, column := range currentColumns {
-									if _, ok := columnsMap[column.Name.ValueString()]; !ok {
-										columnsMap[column.Name.ValueString()] = &PriorAndCurrentColumns{}
-									}
-									columnsMap[column.Name.ValueString()].Current = &column
-								}
-
-								// Check if the columns are the same.
-								// Columns that are new do not require a replace, unless a primary key is added.
-								// Columns that are removed do not require a replace, unless they are part of the primary key.
-								// Columns that are updated require a replace if: the column type is changed,
-								// the primary key status is changed, the column's computation_ddl is changed, or the column's is_stored status is changed.
-								for name, columns := range columnsMap {
-									// Column is new
-									if columns.Prior == nil && columns.Current != nil {
-										// Check if the column is a primary key
-										if !columns.Current.IsPrimaryKey.IsNull() && columns.Current.IsPrimaryKey.ValueBool() {
-											resp.RequiresReplace = true
-											resp.Diagnostics.AddWarning(fmt.Sprintf("Column %q requires a table replace", name), fmt.Sprintf("Column %q is a new primary key column and requires a table replace", name))
-										}
-										continue
-									}
-
-									// Column is removed
-									if columns.Current == nil && columns.Prior != nil {
-										// Check if the column is a primary key
-										if !columns.Prior.IsPrimaryKey.IsNull() && columns.Prior.IsPrimaryKey.ValueBool() {
-											resp.RequiresReplace = true
-											resp.Diagnostics.AddWarning(fmt.Sprintf("Column %q requires a table replace", name), fmt.Sprintf("Column %q is a removed primary key column and requires a table replace", name))
-										}
-										continue
-									}
-
-									// Column type is changed
-									// Type is required, so we can safely assume it is not null
-									if columns.Prior.Type.ValueString() != columns.Current.Type.ValueString() {
-										resp.RequiresReplace = true
-										resp.Diagnostics.AddWarning(fmt.Sprintf("Column %q requires a table replace", name), fmt.Sprintf("Column %q has a changed type and requires a table replace", name))
-									}
-
-									// Column primary key status is changed
-									// This is not required, so we also need to check if it is null
-									if (!columns.Prior.IsPrimaryKey.IsNull() && !columns.Current.IsPrimaryKey.IsNull() && columns.Prior.IsPrimaryKey.ValueBool() != columns.Current.IsPrimaryKey.ValueBool()) ||
-										(columns.Prior.IsPrimaryKey.IsNull() && !columns.Current.IsPrimaryKey.IsNull() && columns.Current.IsPrimaryKey.ValueBool()) ||
-										(!columns.Prior.IsPrimaryKey.IsNull() && columns.Prior.IsPrimaryKey.ValueBool() && columns.Current.IsPrimaryKey.IsNull()) {
-										resp.RequiresReplace = true
-										resp.Diagnostics.AddWarning(fmt.Sprintf("Column %q requires a table replace", name), fmt.Sprintf("Column %q has a changed primary key status and requires a table replace", name))
-									}
-
-									// Column is computed and computation_ddl is changed
-									// Both fields are required but only if at least one is set
-									if (!columns.Prior.IsComputed.IsNull() && columns.Prior.IsComputed.ValueBool() && !columns.Current.IsComputed.IsNull() && columns.Current.IsComputed.ValueBool() &&
-										columns.Prior.ComputationDdl.ValueString() != columns.Current.ComputationDdl.ValueString()) ||
-										(!columns.Prior.IsComputed.IsNull() && columns.Prior.IsComputed.ValueBool() && (columns.Current.IsComputed.IsNull() || !columns.Current.IsComputed.ValueBool())) {
-										resp.RequiresReplace = true
-										resp.Diagnostics.AddWarning(fmt.Sprintf("Column %q requires a table replace", name), fmt.Sprintf("Column %q has a changed computation_ddl or is_computed has been disabled and requires a table replace", name))
-									}
-
-									// Column is computed and is_stored is changed
-									{
-
-										// (treating null as equivalent to false)
-										isStoredChanged := false
-
-										// Case 1: Prior is true (not null and value is true)
-										priorIsTrue := !columns.Prior.IsStored.IsNull() && columns.Prior.IsStored.ValueBool()
-
-										// Case 2: Current is true (not null and value is true)
-										currentIsTrue := !columns.Current.IsStored.IsNull() && columns.Current.IsStored.ValueBool()
-
-										// A meaningful change occurs when one side is true and the other side is either false or null
-										isStoredChanged = priorIsTrue != currentIsTrue
-
-										if isStoredChanged {
-											resp.RequiresReplace = true
-											resp.Diagnostics.AddWarning(
-												fmt.Sprintf("Column %q requires a table replace", name),
-												fmt.Sprintf("Column %q has a changed is_stored status and requires a table replace", name),
-											)
-										}
-									}
-								}
-
-							},
+							listplanmodifier.RequiresReplaceIf(tableColumnsRequireReplace,
 								"If certain values of any of the columns change, Terraform will destroy and recreate the table.", "If certain values of any of the columns change, Terraform will destroy and recreate the table."),
 						},
 					},
@@ -442,112 +329,18 @@ func (r *spannerTableResource) Create(ctx context.Context, req resource.CreateRe
 
 	// Populate schema if any
 	if plan.Schema != nil {
-		tableSchema := &tableschema.SpannerTableSchema{
-			Columns: nil,
+		columns, d := tableColumnsToSchema(ctx, plan.Schema.Columns)
+		if d.HasError() {
+			tflog.Error(ctx, fmt.Sprintf("Error reading columns: %v", d))
+			return
 		}
-
-		if !plan.Schema.Columns.IsNull() {
-			columns := make([]spannerTableColumn, 0, len(plan.Schema.Columns.Elements()))
-			d := plan.Schema.Columns.ElementsAs(ctx, &columns, false)
-			if d.HasError() {
-				tflog.Error(ctx, fmt.Sprintf("Error reading columns: %v", d))
-				return
-			}
-			diags.Append(d...)
-
-			for _, column := range columns {
-				col := &tableschema.SpannerTableColumn{}
-
-				// Populate column name
-				if !column.Name.IsNull() {
-					col.Name = column.Name.ValueString()
-				}
-
-				// Populate is primary key
-				if !column.IsPrimaryKey.IsNull() {
-					col.IsPrimaryKey = wrapperspb.Bool(column.IsPrimaryKey.ValueBool())
-				}
-
-				// Populate is computed
-				if !column.IsComputed.IsNull() {
-					col.IsComputed = wrapperspb.Bool(column.IsComputed.ValueBool())
-				}
-
-				// Populate computation ddl
-				if !column.ComputationDdl.IsNull() {
-					col.ComputationDdl = wrapperspb.String(column.ComputationDdl.ValueString())
-				}
-
-				// Populate is stored
-				if !column.IsStored.IsNull() {
-					col.IsStored = wrapperspb.Bool(column.IsStored.ValueBool())
-				}
-
-				// Populate auto update time
-				if !column.AutoUpdateTime.IsNull() {
-					col.AutoUpdateTime = wrapperspb.Bool(column.AutoUpdateTime.ValueBool())
-				}
-
-				// Populate type
-				if !column.Type.IsNull() {
-					col.Type = column.Type.ValueString()
-				}
-
-				// Populate size
-				if !column.Size.IsNull() {
-					col.Size = wrapperspb.Int64(column.Size.ValueInt64())
-				}
-
-				// Populate required
-				if !column.Required.IsNull() {
-					col.Required = wrapperspb.Bool(column.Required.ValueBool())
-				}
-
-				// Populate default value
-				if !column.DefaultValue.IsNull() {
-					col.DefaultValue = wrapperspb.String(column.DefaultValue.ValueString())
-				}
-
-				// Populate ProtoFileDescriptorSet
-				if !column.ProtoPackage.IsNull() || !column.FileDescriptor.IsNull() {
-					col.ProtoFileDescriptorSet = &tableschema.ProtoFileDescriptorSet{}
-
-					// Populate proto package
-					if !column.ProtoPackage.IsNull() {
-						col.ProtoFileDescriptorSet.ProtoPackage = wrapperspb.String(column.ProtoPackage.ValueString())
-					}
-
-					// Populate file descriptor
-					if !column.FileDescriptor.IsNull() {
-						col.ProtoFileDescriptorSet.FileDescriptorSetPath = wrapperspb.String(column.FileDescriptor.ValueString())
-
-						if strings.HasPrefix(column.FileDescriptor.ValueString(), "gcs:") {
-							col.ProtoFileDescriptorSet.FileDescriptorSetPathSource = tableschema.ProtoFileDescriptorSetSourceGcs
-						}
-
-						if strings.HasPrefix(column.FileDescriptor.ValueString(), "url:") {
-							col.ProtoFileDescriptorSet.FileDescriptorSetPathSource = tableschema.ProtoFileDescriptorSetSourceUrl
-						}
-					}
-				}
-
-				tableSchema.Columns = append(tableSchema.Columns, col)
-			}
+		table.Schema = &tableschema.SpannerTableSchema{
+			Columns: columns,
 		}
-
-		table.Schema = tableSchema
 	}
 
 	// Populate interleave if any
-	if plan.Interleave != nil {
-		table.Interleave = &tableschema.SpannerTableInterleave{
-			ParentTable: plan.Interleave.ParentTable.ValueString(),
-		}
-
-		if !plan.Interleave.OnDelete.IsNull() {
-			table.Interleave.OnDelete = tableschema.SpannerTableConstraintActionFromString(plan.Interleave.OnDelete.ValueString())
-		}
-	}
+	table.Interleave = tableInterleaveToSchema(plan.Interleave)
 
 	// Create table
 	_, err := r.config.SpannerService.CreateSpannerTable(ctx,
@@ -621,75 +414,7 @@ func (r *spannerTableResource) Read(ctx context.Context, req resource.ReadReques
 	if table.Schema != nil {
 		s := &spannerTableSchema{}
 		if table.Schema.Columns != nil {
-			columns := make([]*spannerTableColumn, 0)
-			for _, column := range table.Schema.Columns {
-				col := &spannerTableColumn{
-					Name: types.StringValue(column.Name),
-				}
-
-				// Get primary key
-				if column.IsPrimaryKey != nil {
-					col.IsPrimaryKey = types.BoolValue(column.IsPrimaryKey.GetValue())
-				}
-
-				// Get computed
-				if column.IsComputed != nil {
-					col.IsComputed = types.BoolValue(column.IsComputed.GetValue())
-				}
-
-				// Get computation ddl
-				if column.ComputationDdl != nil {
-					col.ComputationDdl = types.StringValue(column.ComputationDdl.GetValue())
-				}
-
-				// Get is stored
-				if column.IsStored != nil {
-					col.IsStored = types.BoolValue(column.IsStored.GetValue())
-				}
-
-				// Get auto update time
-				if column.AutoUpdateTime != nil {
-					col.AutoUpdateTime = types.BoolValue(column.AutoUpdateTime.GetValue())
-				}
-
-				// Get type
-				if column.Type != "" {
-					col.Type = types.StringValue(column.Type)
-				}
-
-				// Get size
-				if column.Size != nil {
-					col.Size = types.Int64Value(column.Size.GetValue())
-				}
-
-				// Get required
-				if column.Required != nil {
-					col.Required = types.BoolValue(column.Required.GetValue())
-				}
-
-				// Get default value
-				if column.DefaultValue != nil {
-					col.DefaultValue = types.StringValue(column.DefaultValue.GetValue())
-				}
-
-				if column.ProtoFileDescriptorSet != nil {
-					// Get proto package
-					if column.ProtoFileDescriptorSet.ProtoPackage != nil {
-						col.ProtoPackage = types.StringValue(column.ProtoFileDescriptorSet.ProtoPackage.GetValue())
-					}
-
-					// Get file descriptor set path
-					if column.ProtoFileDescriptorSet.FileDescriptorSetPath != nil {
-						col.FileDescriptor = types.StringValue(column.ProtoFileDescriptorSet.FileDescriptorSetPath.GetValue())
-					}
-				}
-
-				columns = append(columns, col)
-			}
-
-			generatedList, d := types.ListValueFrom(ctx, types.ObjectType{
-				AttrTypes: spannerTableColumn{}.attrTypes(),
-			}, columns)
+			generatedList, d := tableColumnsToModel(ctx, table.Schema.Columns)
 			diags.Append(d...)
 
 			s.Columns = generatedList
@@ -700,15 +425,7 @@ func (r *spannerTableResource) Read(ctx context.Context, req resource.ReadReques
 
 	// Populate interleave
 	if table.Interleave != nil {
-		i := &spannerTableInterleave{
-			ParentTable: types.StringValue(table.Interleave.ParentTable),
-		}
-
-		if table.Interleave.OnDelete != tableschema.SpannerTableConstraintActionUnspecified {
-			i.OnDelete = types.StringValue(table.Interleave.OnDelete.String())
-		}
-
-		state.Interleave = i
+		state.Interleave = tableInterleaveToModel(table.Interleave)
 	}
 
 	// Set refreshed state
@@ -748,112 +465,18 @@ func (r *spannerTableResource) Update(ctx context.Context, req resource.UpdateRe
 
 	// Populate schema if any
 	if plan.Schema != nil {
-		tableSchema := &tableschema.SpannerTableSchema{
-			Columns: nil,
+		columns, d := tableColumnsToSchema(ctx, plan.Schema.Columns)
+		if d.HasError() {
+			tflog.Error(ctx, fmt.Sprintf("Error reading columns: %v", d))
+			return
 		}
-
-		if !plan.Schema.Columns.IsNull() {
-			columns := make([]spannerTableColumn, 0, len(plan.Schema.Columns.Elements()))
-			d := plan.Schema.Columns.ElementsAs(ctx, &columns, false)
-			if d.HasError() {
-				tflog.Error(ctx, fmt.Sprintf("Error reading columns: %v", d))
-				return
-			}
-			diags.Append(d...)
-
-			for _, column := range columns {
-				col := &tableschema.SpannerTableColumn{}
-
-				// Populate column name
-				if !column.Name.IsNull() {
-					col.Name = column.Name.ValueString()
-				}
-
-				// Populate is primary key
-				if !column.IsPrimaryKey.IsNull() {
-					col.IsPrimaryKey = wrapperspb.Bool(column.IsPrimaryKey.ValueBool())
-				}
-
-				// Populate is computed
-				if !column.IsComputed.IsNull() {
-					col.IsComputed = wrapperspb.Bool(column.IsComputed.ValueBool())
-				}
-
-				// Populate computation ddl
-				if !column.ComputationDdl.IsNull() {
-					col.ComputationDdl = wrapperspb.String(column.ComputationDdl.ValueString())
-				}
-
-				// Populate is stored
-				if !column.IsStored.IsNull() {
-					col.IsStored = wrapperspb.Bool(column.IsStored.ValueBool())
-				}
-
-				// Populate auto update time
-				if !column.AutoUpdateTime.IsNull() {
-					col.AutoUpdateTime = wrapperspb.Bool(column.AutoUpdateTime.ValueBool())
-				}
-
-				// Populate type
-				if !column.Type.IsNull() {
-					col.Type = column.Type.ValueString()
-				}
-
-				// Populate size
-				if !column.Size.IsNull() {
-					col.Size = wrapperspb.Int64(column.Size.ValueInt64())
-				}
-
-				// Populate required
-				if !column.Required.IsNull() {
-					col.Required = wrapperspb.Bool(column.Required.ValueBool())
-				}
-
-				// Populate default value
-				if !column.DefaultValue.IsNull() {
-					col.DefaultValue = wrapperspb.String(column.DefaultValue.ValueString())
-				}
-
-				// Populate ProtoFileDescriptorSet
-				if !column.ProtoPackage.IsNull() || !column.FileDescriptor.IsNull() {
-					col.ProtoFileDescriptorSet = &tableschema.ProtoFileDescriptorSet{}
-
-					// Populate proto package
-					if !column.ProtoPackage.IsNull() {
-						col.ProtoFileDescriptorSet.ProtoPackage = wrapperspb.String(column.ProtoPackage.ValueString())
-					}
-
-					// Populate file descriptor
-					if !column.FileDescriptor.IsNull() {
-						col.ProtoFileDescriptorSet.FileDescriptorSetPath = wrapperspb.String(column.FileDescriptor.ValueString())
-
-						if strings.HasPrefix(column.FileDescriptor.ValueString(), "gcs:") {
-							col.ProtoFileDescriptorSet.FileDescriptorSetPathSource = tableschema.ProtoFileDescriptorSetSourceGcs
-						}
-
-						if strings.HasPrefix(column.FileDescriptor.ValueString(), "url:") {
-							col.ProtoFileDescriptorSet.FileDescriptorSetPathSource = tableschema.ProtoFileDescriptorSetSourceUrl
-						}
-					}
-				}
-
-				tableSchema.Columns = append(tableSchema.Columns, col)
-			}
+		table.Schema = &tableschema.SpannerTableSchema{
+			Columns: columns,
 		}
-
-		table.Schema = tableSchema
 	}
 
 	// Populate interleave if any
-	if plan.Interleave != nil {
-		table.Interleave = &tableschema.SpannerTableInterleave{
-			ParentTable: plan.Interleave.ParentTable.ValueString(),
-		}
-
-		if !plan.Interleave.OnDelete.IsNull() {
-			table.Interleave.OnDelete = tableschema.SpannerTableConstraintActionFromString(plan.Interleave.OnDelete.ValueString())
-		}
-	}
+	table.Interleave = tableInterleaveToSchema(plan.Interleave)
 
 	// Update table
 	_, err := r.config.SpannerService.UpdateSpannerTable(ctx, table, &fieldmaskpb.FieldMask{
