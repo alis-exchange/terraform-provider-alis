@@ -1,47 +1,81 @@
+# -----------------------------------------------------------------------------
+# terraform-provider-alis
+#
+# Ignore local build output, editor junk, Terraform state, and secrets.
+# Commit source, examples, docs, and Conductor track files.
+# -----------------------------------------------------------------------------
+
+# --- OS ---
+.DS_Store
+
+# --- Editors / IDEs ---
+.idea/
+*.iml
+*~
+.*.swp
+.cursor/
+.vscode/
+
+# --- Go build artifacts ---
+# Compiled binaries and `go test` test binaries.
 *.dll
 *.exe
-.DS_Store
-example.tf
-terraform.tfplan
-terraform.tfstate
+*.test
 bin/
 dist/
-modules-dev/
 /pkg/
+
+# --- Terraform local runtime ---
+# Provider cache, plans, and state from running terraform in this repo.
+.terraform/
+*.tfplan
+terraform.tfplan
+*.tfstate
+*.tfstate.*
+./*.tfstate
+*.backup
+example.tf
+
+# --- Logs and editor backups ---
+*.log
+*.bak
+
+# --- Secrets and local credentials ---
+# Service-account keys, env files, and variable files with real values.
+local.env
+key-**.json
+**.tfvars
+
+# --- Local testing fixtures (testing/) ---
+# Commit .tf configs. Ignore lock files, state, and any leftover local cache.
+# *.tfvars is already ignored globally above.
+/testing/**/.terraform/
+/testing/**/.terraform.lock.hcl
+/testing/**/*.tfstate
+/testing/**/*.tfstate.*
+
+# --- Generated local templates ---
+# Bigtable template renders are local-only; do not commit them.
+internal/bigtable/templates/**.tf
+
+# --- Claude Code ---
+# Per-developer overrides; the rest of .claude/ may be committed.
+.claude/settings.local.json
+
+# --- Conductor ---
+# Track specs, plans, and artifacts
+conductor/
+
+
+# --- HashiCorp scaffolding leftovers ---
+# website/, Vagrant, and command/test-fixtures come from the plugin scaffold.
+# They are unused in this repo today; kept so local copies stay untracked.
+modules-dev/
+.vagrant/
 website/.vagrant
 website/.bundle
 website/build
 website/node_modules
-.vagrant/
-*.backup
-./*.tfstate
-.terraform/
-*.log
-*.bak
-*~
-.*.swp
-.idea
-*.iml
-*.test
-*.iml
-
 website/vendor
-
-# Test exclusions
 !command/test-fixtures/**/*.tfstate
 !command/test-fixtures/**/.terraform/
-
-# Keep windows files with windows line endings
-*.winfile eol=crlf
-
-local.env
-key-**.json
-**.tfvars
-internal/bigtable/templates/**.tf
-/testing/**/**
-
-conductor/*
-# Claude Code local overrides (per-developer, not committed)
-.claude/settings.local.json
-
-# Conductor artifacts under conductor/ are meant to be committed — do not ignore them.
