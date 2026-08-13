@@ -1,0 +1,457 @@
+package spanner
+
+import (
+	"context"
+	"fmt"
+	"regexp"
+	"strings"
+
+	"terraform-provider-alis/internal"
+	"terraform-provider-alis/internal/validators"
+
+	"terraform-provider-alis/internal/utils"
+
+	sequenceschema "terraform-provider-alis/internal/spanner/schema"
+
+	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/path"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/wrapperspb"
+)
+
+// Ensure the implementation satisfies the expected interfaces.
+var (
+	_ resource.Resource                = &databaseSequenceResource{}
+	_ resource.ResourceWithConfigure   = &databaseSequenceResource{}
+	_ resource.ResourceWithImportState = &databaseSequenceResource{}
+)
+
+// NewDatabaseSequenceResource is a helper function to simplify the provider implementation.
+func NewDatabaseSequenceResource() resource.Resource {
+	return &databaseSequenceResource{}
+}
+
+type databaseSequenceResource struct {
+	config *internal.ProviderConfig
+}
+
+type databaseSequenceModel struct {
+	Project  types.String            `tfsdk:"project"`
+	Instance types.String            `tfsdk:"instance"`
+	Database types.String            `tfsdk:"database"`
+	Sequence types.String            `tfsdk:"sequence"`
+	Options  *spannerSequenceOptions `tfsdk:"options"`
+}
+
+type spannerSequenceOptions struct {
+	SequenceKind     types.String              `tfsdk:"sequence_kind"`
+	SkipRange        *spannerSequenceSkipRange `tfsdk:"skip_range"`
+	StartWithCounter types.Int64               `tfsdk:"start_with_counter"`
+}
+
+func (o spannerSequenceOptions) attrTypes() map[string]attr.Type {
+	return map[string]attr.Type{
+		"sequence_kind": types.StringType,
+		"skip_range": types.ObjectType{
+			AttrTypes: spannerSequenceSkipRange{}.attrTypes(),
+		},
+		"start_with_counter": types.Int64Type,
+	}
+}
+
+type spannerSequenceSkipRange struct {
+	Min types.Int64 `tfsdk:"min"`
+	Max types.Int64 `tfsdk:"max"`
+}
+
+func (o spannerSequenceSkipRange) attrTypes() map[string]attr.Type {
+	return map[string]attr.Type{
+		"min": types.Int64Type,
+		"max": types.Int64Type,
+	}
+}
+
+// Metadata returns the resource type name.
+func (r *databaseSequenceResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_google_spanner_database_sequence"
+}
+
+// Schema defines the schema for the resource.
+func (r *databaseSequenceResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+	resp.Schema = schema.Schema{
+		Attributes: map[string]schema.Attribute{
+			"project": schema.StringAttribute{
+				Required: true,
+				Description: "The Google Cloud project ID containing the Spanner instance and database.\n" +
+					"Changing this forces a new resource.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
+			},
+			"instance": schema.StringAttribute{
+				Required: true,
+				Description: "The Spanner instance ID that contains the database.\n" +
+					"Changing this forces a new resource.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
+			},
+			"database": schema.StringAttribute{
+				Required: true,
+				Description: "The Spanner database ID within the instance where sequence DDL is applied.\n" +
+					"Changing this forces a new resource.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
+			},
+			"sequence": schema.StringAttribute{
+				Required: true,
+				Description: "The sequence name within the database. Referenced in SQL when using the sequence (for example GET_NEXT_SEQUENCE_VALUE with Google-standard-SQL).\n" +
+					"Must satisfy Spanner sequence identifier naming rules. See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions\n" +
+					"Changing this forces a new resource.",
+				Validators: []validator.String{
+					validators.RegexMatches([]*regexp.Regexp{
+						regexp.MustCompile(utils.SpannerGoogleSqlSequenceIdRegex),
+						regexp.MustCompile(utils.SpannerPostgresSqlSequenceIdRegex),
+					}, "Name must be a valid Spanner Sequence ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions"),
+				},
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
+			},
+			"options": schema.SingleNestedAttribute{
+				Required: true,
+				Description: "DDL options for the sequence, equivalent to OPTIONS on CREATE SEQUENCE and SET OPTIONS on ALTER SEQUENCE for Google-standard-SQL.\n" +
+					"In Terraform configuration use object assignment (options = { ... }), not a nested options block. See https://cloud.google.com/spanner/docs/sequence-tasks",
+				Attributes: map[string]schema.Attribute{
+					"sequence_kind": schema.StringAttribute{
+						Required: true,
+						Description: "The sequence algorithm. Use bit_reversed_positive for bit-reversed positive sequences, which Spanner recommends for scalable surrogate primary keys.\n" +
+							"See https://cloud.google.com/spanner/docs/sequence-tasks",
+					},
+					"skip_range": schema.SingleNestedAttribute{
+						Optional: true,
+						Description: "Inclusive range of integers that the sequence must not assign to new values (skip_range_min and skip_range_max in Spanner DDL).\n" +
+							"When set, both min and max are required. See https://cloud.google.com/spanner/docs/sequence-tasks",
+						Attributes: map[string]schema.Attribute{
+							"min": schema.Int64Attribute{
+								Required:    true,
+								Description: "Start of the inclusive skip range; maps to skip_range_min in Spanner sequence OPTIONS.",
+							},
+							"max": schema.Int64Attribute{
+								Required:    true,
+								Description: "End of the inclusive skip range; maps to skip_range_max in Spanner sequence OPTIONS.",
+							},
+						},
+					},
+					"start_with_counter": schema.Int64Attribute{
+						Optional: true,
+						Description: "Sets the sequence counter (start_with_counter in Spanner OPTIONS). Changing this affects future generated values; review operational impact before updating.\n" +
+							"See https://cloud.google.com/spanner/docs/sequence-tasks",
+					},
+				},
+			},
+		},
+		Description: "Manages a Cloud Spanner database sequence using DDL. If the sequence does not exist it is created; if it already exists it is imported into Terraform state.\n" +
+			"Updates apply ALTER SEQUENCE ... SET OPTIONS for Google-standard-SQL. Binding a sequence to table columns (defaults) and dropping a sequence are separate DDL or console steps; see https://cloud.google.com/spanner/docs/sequence-tasks",
+	}
+}
+
+// Create a new resource.
+func (r *databaseSequenceResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	// Retrieve values from plan
+	var plan databaseSequenceModel
+	diags := req.Plan.Get(ctx, &plan)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Retrieve project, instance and database from state
+	project := plan.Project.ValueString()
+	instance := plan.Instance.ValueString()
+	databaseId := plan.Database.ValueString()
+	sequenceId := plan.Sequence.ValueString()
+
+	existingSequence, err := r.config.SpannerService.GetSpannerSequence(ctx,
+		fmt.Sprintf("projects/%s/instances/%s/databases/%s/sequences/%s", project, instance, databaseId, sequenceId),
+	)
+	if err != nil && status.Code(err) != codes.NotFound {
+		resp.Diagnostics.AddError(
+			"Error Creating Database Sequence",
+			"Could not read Sequence ("+sequenceId+") in Database ("+databaseId+"): "+err.Error(),
+		)
+		return
+	}
+	if existingSequence != nil {
+		// Set state to fully populated data
+		diags = resp.State.Set(ctx, plan)
+		resp.Diagnostics.Append(diags...)
+		return
+	}
+
+	// Create sequence from plan
+	sequence := &sequenceschema.SpannerSequence{
+		Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/sequences/%s", project, instance, databaseId, sequenceId),
+	}
+
+	// Populate options if any
+	if plan.Options != nil {
+		sequenceOptions := &sequenceschema.SpannerSequenceOptions{
+			SequenceKind: sequenceschema.SpannerSequenceKindBitReversedPositive,
+		}
+
+		if !plan.Options.SequenceKind.IsNull() {
+			sequenceOptions.SequenceKind = sequenceschema.SpannerSequenceKindFromString(plan.Options.SequenceKind.ValueString())
+		}
+
+		if plan.Options.SkipRange != nil {
+			sequenceOptions.SkipRange = &sequenceschema.SpannerSequenceSkipRange{}
+			if !plan.Options.SkipRange.Min.IsNull() {
+				sequenceOptions.SkipRange.Min = wrapperspb.Int64(plan.Options.SkipRange.Min.ValueInt64())
+			}
+			if !plan.Options.SkipRange.Max.IsNull() {
+				sequenceOptions.SkipRange.Max = wrapperspb.Int64(plan.Options.SkipRange.Max.ValueInt64())
+			}
+		}
+
+		if !plan.Options.StartWithCounter.IsNull() {
+			sequenceOptions.StartWithCounter = wrapperspb.Int64(plan.Options.StartWithCounter.ValueInt64())
+		}
+
+		sequence.Options = sequenceOptions
+	}
+
+	_, err = r.config.SpannerService.CreateSpannerSequence(ctx,
+		fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, databaseId),
+		sequence,
+	)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Error Creating Database Sequence",
+			"Could not read create Sequence ("+sequenceId+") in Database ("+databaseId+"): "+err.Error(),
+		)
+		return
+	}
+
+	// Set state to fully populated data
+	diags = resp.State.Set(ctx, plan)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+}
+
+// Read resource information.
+func (r *databaseSequenceResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	// Get current state
+	var state databaseSequenceModel
+	diags := req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Retrieve project, instance and database from state
+	project := state.Project.ValueString()
+	instance := state.Instance.ValueString()
+	databaseId := state.Database.ValueString()
+	sequenceId := state.Sequence.ValueString()
+
+	sequence, err := r.config.SpannerService.GetSpannerSequence(ctx,
+		fmt.Sprintf("projects/%s/instances/%s/databases/%s/sequences/%s", project, instance, databaseId, sequenceId),
+	)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			resp.State.RemoveResource(ctx)
+
+			return
+		}
+
+		resp.Diagnostics.AddError(
+			"Error Reading Database Sequence",
+			"Could not read Sequence ("+sequenceId+") in Database ("+databaseId+"): "+err.Error(),
+		)
+		return
+	}
+
+	// Populate state from sequence
+	state.Sequence = types.StringValue(sequenceId)
+
+	if sequence.Options != nil {
+		options := &spannerSequenceOptions{}
+
+		if sequence.Options.SequenceKind != sequenceschema.SpannerSequenceKindUnspecified {
+			options.SequenceKind = types.StringValue(sequence.Options.SequenceKind.String())
+		}
+
+		if sequence.Options.SkipRange != nil {
+			options.SkipRange = &spannerSequenceSkipRange{
+				Min: types.Int64Value(sequence.Options.SkipRange.Min.Value),
+				Max: types.Int64Value(sequence.Options.SkipRange.Max.Value),
+			}
+		}
+
+		if sequence.Options.StartWithCounter != nil {
+			options.StartWithCounter = types.Int64Value(sequence.Options.StartWithCounter.Value)
+		}
+
+		state.Options = options
+	}
+
+	// Set refreshed state
+	diags = resp.State.Set(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+}
+
+func (r *databaseSequenceResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	// Retrieve values from plan
+	var plan databaseSequenceModel
+	diags := req.Plan.Get(ctx, &plan)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Get project and instance name
+	project := plan.Project.ValueString()
+	instanceName := plan.Instance.ValueString()
+	databaseId := plan.Database.ValueString()
+	sequenceId := plan.Sequence.ValueString()
+
+	// Generate sequence from plan
+	sequence := &sequenceschema.SpannerSequence{
+		Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/sequences/%s", project, instanceName, databaseId, sequenceId),
+	}
+
+	// Populate options if any
+	if plan.Options != nil {
+		sequenceOptions := &sequenceschema.SpannerSequenceOptions{
+			SequenceKind: sequenceschema.SpannerSequenceKindBitReversedPositive,
+		}
+
+		if !plan.Options.SequenceKind.IsNull() {
+			sequenceOptions.SequenceKind = sequenceschema.SpannerSequenceKindFromString(plan.Options.SequenceKind.ValueString())
+		}
+
+		if plan.Options.SkipRange != nil {
+			sequenceOptions.SkipRange = &sequenceschema.SpannerSequenceSkipRange{}
+			if !plan.Options.SkipRange.Min.IsNull() {
+				sequenceOptions.SkipRange.Min = wrapperspb.Int64(plan.Options.SkipRange.Min.ValueInt64())
+			}
+			if !plan.Options.SkipRange.Max.IsNull() {
+				sequenceOptions.SkipRange.Max = wrapperspb.Int64(plan.Options.SkipRange.Max.ValueInt64())
+			}
+		}
+
+		if !plan.Options.StartWithCounter.IsNull() {
+			sequenceOptions.StartWithCounter = wrapperspb.Int64(plan.Options.StartWithCounter.ValueInt64())
+		}
+
+		sequence.Options = sequenceOptions
+	}
+
+	_, err := r.config.SpannerService.UpdateSpannerSequence(ctx, sequence)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Error Updating Database Sequence",
+			"Could not update Sequence ("+sequenceId+") in Database ("+databaseId+"): "+err.Error(),
+		)
+		return
+	}
+
+	// Map response body to schema and populate Computed attribute values
+	plan.Sequence = types.StringValue(sequenceId)
+
+	// Set state to fully populated data
+	diags = resp.State.Set(ctx, plan)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+}
+
+// Delete deletes the resource and removes the Terraform state on success.
+func (r *databaseSequenceResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	// Retrieve values from state
+	var state databaseSequenceModel
+	diags := req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Retrieve project, instance and database from state
+	project := state.Project.ValueString()
+	instance := state.Instance.ValueString()
+	database := state.Database.ValueString()
+	sequenceId := state.Sequence.ValueString()
+
+	err := r.config.SpannerService.DeleteSpannerSequence(ctx, fmt.Sprintf("projects/%s/instances/%s/databases/%s/sequences/%s", project, instance, database, sequenceId))
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Error Deleting Database Sequence",
+			"Could not delete Sequence ("+sequenceId+") in Database ("+database+"): "+err.Error(),
+		)
+		return
+	}
+}
+
+func (r *databaseSequenceResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	// Split import ID to get project, instance, and database id
+	// projects/{project}/instances/{instance}/databases/{database}/sequences/{sequence}
+	importIDParts := strings.Split(req.ID, "/")
+	if len(importIDParts) != 8 {
+		resp.Diagnostics.AddError(
+			"Invalid Import ID",
+			"Import ID must be in the format projects/{project}/instances/{instance}/databases/{database}/sequences/{sequence}",
+		)
+	}
+	project := importIDParts[1]
+	instanceName := importIDParts[3]
+	databaseName := importIDParts[5]
+	sequenceId := importIDParts[7]
+
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("project"), project)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("instance"), instanceName)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("database"), databaseName)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("sequence"), sequenceId)...)
+}
+
+// Configure adds the provider configured client to the resource.
+func (r *databaseSequenceResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+	if req.ProviderData == nil {
+		return
+	}
+
+	config, ok := req.ProviderData.(*internal.ProviderConfig)
+	if !ok {
+		resp.Diagnostics.AddError(
+			"Unexpected Resource Configure Type",
+			fmt.Sprintf("Expected *utils.ProviderConfig, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+		)
+
+		return
+	}
+
+	r.config = config
+}
+
+func (r *databaseSequenceResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {
+	return []resource.ConfigValidator{
+		//resourcevalidator.Conflicting(
+		//	path.MatchRoot("attribute_one"),
+		//	path.MatchRoot("attribute_two"),
+		//),
+	}
+}

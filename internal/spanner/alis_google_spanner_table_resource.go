@@ -219,9 +219,10 @@ func (r *spannerTableResource) Schema(_ context.Context, _ resource.SchemaReques
 								},
 								"default_value": schema.StringAttribute{
 									Optional: true,
-									Description: "The default value of the column.\n" +
-										"The default value must be compatible with the column type.\n" +
-										"For example, a default value of \"true\" is valid for a `BOOL` or `STRING` column, but not for an `INT64` column.",
+									Description: "Expression used as the column default in Spanner `DEFAULT (...)`.\n" +
+										"It must be valid for the column type: literals (e.g. `10.0` for `FLOAT64`, `\"true\"` for `BOOL` or `STRING`) or Spanner default expressions.\n" +
+										"Examples of expressions: `GENERATE_UUID()` for a `STRING` (or `BYTES`) primary key; `GET_NEXT_SEQUENCE_VALUE(SEQUENCE my_sequence)` for an `INT64` column when `my_sequence` exists in the same database.\n" +
+										"Do not wrap the value in an extra pair of parentheses; the provider emits `DEFAULT (<this value>)`.",
 								},
 								"proto_package": schema.StringAttribute{
 									Optional: true,

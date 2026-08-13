@@ -34,9 +34,14 @@ website/vendor
 # Keep windows files with windows line endings
 *.winfile eol=crlf
 
-
 local.env
 key-**.json
 **.tfvars
 internal/bigtable/templates/**.tf
 /testing/**/**
+
+conductor/*
+# Claude Code local overrides (per-developer, not committed)
+.claude/settings.local.json
+
+# Conductor artifacts under conductor/ are meant to be committed — do not ignore them.

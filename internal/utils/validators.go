@@ -51,6 +51,12 @@ var (
 
 	SpannerGoogleSqlConstraintIdRegex   = `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`
 	SpannerPostgresSqlConstraintIdRegex = `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`
+
+	SpannerGoogleSqlSequenceIdRegex   = `^[a-zA-Z0-9_]{1,64}$`
+	SpannerPostgresSqlSequenceIdRegex = `^[a-zA-Z0-9_]{1,64}$`
+
+	SpannerGoogleSqlSequenceNameRegex   = fmt.Sprintf(`^projects\/%s\/instances\/%s\/databases\/%s\/sequences\/[a-zA-Z0-9_]{1,64}$`, CutPrefixAndSuffix(ProjectIdRegex, "^", "$"), CutPrefixAndSuffix(InstanceIdRegex, "^", "$"), CutPrefixAndSuffix(SpannerGoogleSqlDatabaseIdRegex, "^", "$"))
+	SpannerPostgresSqlSequenceNameRegex = fmt.Sprintf(`^projects\/%s\/instances\/%s\/databases\/%s\/sequences\/[a-zA-Z0-9_]{1,64}$`, CutPrefixAndSuffix(ProjectIdRegex, "^", "$"), CutPrefixAndSuffix(InstanceIdRegex, "^", "$"), CutPrefixAndSuffix(SpannerGoogleSqlDatabaseIdRegex, "^", "$"))
 )
 
 // Discovery Engine regex

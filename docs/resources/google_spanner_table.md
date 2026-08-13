@@ -151,9 +151,10 @@ This is only applicable to columns where `is_computed` is true.
 The expression must be a valid SQL expression that generates a value for the column.
 Example: `column1 + column2`, or `proto_column.field`.
 **Changing this value will cause a table replace**.
-- `default_value` (String) The default value of the column.
-The default value must be compatible with the column type.
-For example, a default value of "true" is valid for a `BOOL` or `STRING` column, but not for an `INT64` column.
+- `default_value` (String) Expression used as the column default in Spanner `DEFAULT (...)`.
+It must be valid for the column type: literals (e.g. `10.0` for `FLOAT64`, `"true"` for `BOOL` or `STRING`) or Spanner default expressions.
+Examples of expressions: `GENERATE_UUID()` for a `STRING` (or `BYTES`) primary key; `GET_NEXT_SEQUENCE_VALUE(SEQUENCE my_sequence)` for an `INT64` column when `my_sequence` exists in the same database.
+Do not wrap the value in an extra pair of parentheses; the provider emits `DEFAULT (<this value>)`.
 - `file_descriptor` (String) The url/path to the file descriptor set of the column.
 The file descriptor set must be a valid file descriptor set containing the specified `proto_package`.
 The path must point to a valid `.pb` file.

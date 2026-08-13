@@ -3,17 +3,17 @@ package services
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"reflect"
 	"testing"
+
+	"terraform-provider-alis/internal/spanner/schema"
 
 	"cloud.google.com/go/spanner/admin/database/apiv1/databasepb"
 	googleoauth "golang.org/x/oauth2/google"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
-	"terraform-provider-alis/internal/spanner/schema"
 )
 
 var (
@@ -28,18 +28,30 @@ func init() {
 	TestProject = os.Getenv("ALIS_OS_PROJECT")
 	TestInstance = os.Getenv("ALIS_OS_INSTANCE")
 
+	// Fall back to placeholders so the package compiles and runs without a live
+	// project; every test in this package is an integration test and skips via
+	// skipIfNoIntegrationEnv when the environment is not configured.
 	if TestProject == "" {
-		log.Fatalf("ALIS_OS_PROJECT must be set for integration tests")
+		TestProject = "test-project"
 	}
 
 	if TestInstance == "" {
-		log.Fatalf("ALIS_OS_INSTANCE must be set for integration tests")
+		TestInstance = "test-instance"
 	}
 
 	service = NewSpannerService(nil)
 }
 
+// skipIfNoIntegrationEnv skips tests that need a live Spanner instance when the
+// ALIS_OS_PROJECT/ALIS_OS_INSTANCE environment variables are not set.
+func skipIfNoIntegrationEnv(t *testing.T) {
+	if os.Getenv("ALIS_OS_PROJECT") == "" || os.Getenv("ALIS_OS_INSTANCE") == "" {
+		t.Skip("ALIS_OS_PROJECT and ALIS_OS_INSTANCE must be set for integration tests")
+	}
+}
+
 func TestSpannerService_CreateDatabaseRole(t *testing.T) {
+	skipIfNoIntegrationEnv(t)
 	type fields struct {
 		GoogleCredentials *googleoauth.Credentials
 	}
@@ -84,7 +96,9 @@ func TestSpannerService_CreateDatabaseRole(t *testing.T) {
 		})
 	}
 }
+
 func TestSpannerService_GetDatabaseRole(t *testing.T) {
+	skipIfNoIntegrationEnv(t)
 	type fields struct {
 		GoogleCredentials *googleoauth.Credentials
 	}
@@ -129,6 +143,7 @@ func TestSpannerService_GetDatabaseRole(t *testing.T) {
 }
 
 func TestCreateSpannerTable(t *testing.T) {
+	skipIfNoIntegrationEnv(t)
 	type args struct {
 		ctx     context.Context
 		parent  string
@@ -237,7 +252,9 @@ func TestCreateSpannerTable(t *testing.T) {
 		})
 	}
 }
+
 func TestGetSpannerTable(t *testing.T) {
+	skipIfNoIntegrationEnv(t)
 	type args struct {
 		ctx  context.Context
 		name string
@@ -271,7 +288,9 @@ func TestGetSpannerTable(t *testing.T) {
 		})
 	}
 }
+
 func TestUpdateSpannerTable(t *testing.T) {
+	skipIfNoIntegrationEnv(t)
 	type args struct {
 		ctx          context.Context
 		table        *schema.SpannerTable
@@ -291,7 +310,6 @@ func TestUpdateSpannerTable(t *testing.T) {
 				table: &schema.SpannerTable{
 					Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "play-np", "tf_test"),
 					Schema: &schema.SpannerTableSchema{
-
 						Columns: []*schema.SpannerTableColumn{
 							{
 								Name:         "id",
@@ -385,7 +403,9 @@ func TestUpdateSpannerTable(t *testing.T) {
 		})
 	}
 }
+
 func TestDeleteSpannerTable(t *testing.T) {
+	skipIfNoIntegrationEnv(t)
 	type args struct {
 		ctx  context.Context
 		name string
@@ -419,8 +439,8 @@ func TestDeleteSpannerTable(t *testing.T) {
 }
 
 func TestSpannerService_CreateSpannerTableIndex(t *testing.T) {
-	type fields struct {
-	}
+	skipIfNoIntegrationEnv(t)
+	type fields struct{}
 	type args struct {
 		ctx    context.Context
 		parent string
@@ -475,8 +495,8 @@ func TestSpannerService_CreateSpannerTableIndex(t *testing.T) {
 }
 
 func TestSpannerService_GetSpannerTableIndex(t *testing.T) {
-	type fields struct {
-	}
+	skipIfNoIntegrationEnv(t)
+	type fields struct{}
 	type args struct {
 		ctx    context.Context
 		parent string
@@ -502,7 +522,6 @@ func TestSpannerService_GetSpannerTableIndex(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-
 			got, err := service.GetSpannerTableIndex(tt.args.ctx, tt.args.parent, tt.args.name)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GetSpannerTableIndex() error = %v, wantErr %v", err, tt.wantErr)
@@ -516,8 +535,8 @@ func TestSpannerService_GetSpannerTableIndex(t *testing.T) {
 }
 
 func TestSpannerService_ListSpannerTableIndices(t *testing.T) {
-	type fields struct {
-	}
+	skipIfNoIntegrationEnv(t)
+	type fields struct{}
 	type args struct {
 		ctx    context.Context
 		parent string
@@ -541,7 +560,6 @@ func TestSpannerService_ListSpannerTableIndices(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-
 			got, err := service.ListSpannerTableIndices(tt.args.ctx, tt.args.parent)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ListSpannerTableIndices() error = %v, wantErr %v", err, tt.wantErr)
@@ -555,6 +573,7 @@ func TestSpannerService_ListSpannerTableIndices(t *testing.T) {
 }
 
 func TestSpannerService_DeleteIndex(t *testing.T) {
+	skipIfNoIntegrationEnv(t)
 	type fields struct {
 		GoogleCredentials *googleoauth.Credentials
 	}
@@ -599,6 +618,7 @@ func TestSpannerService_DeleteIndex(t *testing.T) {
 }
 
 func TestSpannerService_SetTableIamBinding(t *testing.T) {
+	skipIfNoIntegrationEnv(t)
 	type fields struct {
 		GoogleCredentials *googleoauth.Credentials
 	}
@@ -649,6 +669,7 @@ func TestSpannerService_SetTableIamBinding(t *testing.T) {
 }
 
 func TestSpannerService_GetTableIamBinding(t *testing.T) {
+	skipIfNoIntegrationEnv(t)
 	type fields struct {
 		GoogleCredentials *googleoauth.Credentials
 	}
@@ -693,6 +714,7 @@ func TestSpannerService_GetTableIamBinding(t *testing.T) {
 }
 
 func TestSpannerService_DeleteTableIamBinding(t *testing.T) {
+	skipIfNoIntegrationEnv(t)
 	type fields struct {
 		GoogleCredentials *googleoauth.Credentials
 	}
@@ -730,6 +752,7 @@ func TestSpannerService_DeleteTableIamBinding(t *testing.T) {
 }
 
 func TestSpannerService_ListDatabaseRoles(t *testing.T) {
+	skipIfNoIntegrationEnv(t)
 	type fields struct {
 		GoogleCredentials *googleoauth.Credentials
 	}
@@ -781,6 +804,7 @@ func TestSpannerService_ListDatabaseRoles(t *testing.T) {
 }
 
 func TestSpannerService_DeleteDatabaseRole(t *testing.T) {
+	skipIfNoIntegrationEnv(t)
 	type fields struct {
 		GoogleCredentials *googleoauth.Credentials
 	}
@@ -816,6 +840,7 @@ func TestSpannerService_DeleteDatabaseRole(t *testing.T) {
 }
 
 func TestCreateProtoBundle(t *testing.T) {
+	skipIfNoIntegrationEnv(t)
 	type args struct {
 		ctx              context.Context
 		databaseName     string
@@ -846,6 +871,7 @@ func TestCreateProtoBundle(t *testing.T) {
 }
 
 func TestSpannerService_CreateSpannerTableForeignKeyConstraint(t *testing.T) {
+	skipIfNoIntegrationEnv(t)
 	type fields struct {
 		GoogleCredentials *googleoauth.Credentials
 	}
@@ -893,6 +919,7 @@ func TestSpannerService_CreateSpannerTableForeignKeyConstraint(t *testing.T) {
 }
 
 func TestSpannerService_GetSpannerTableForeignKeyConstraint(t *testing.T) {
+	skipIfNoIntegrationEnv(t)
 	type fields struct {
 		GoogleCredentials *googleoauth.Credentials
 	}
@@ -934,6 +961,7 @@ func TestSpannerService_GetSpannerTableForeignKeyConstraint(t *testing.T) {
 }
 
 func TestSpannerService_CreateSpannerTableRowDeletionPolicy(t *testing.T) {
+	skipIfNoIntegrationEnv(t)
 	type fields struct {
 		GoogleCredentials *googleoauth.Credentials
 	}
@@ -979,6 +1007,7 @@ func TestSpannerService_CreateSpannerTableRowDeletionPolicy(t *testing.T) {
 }
 
 func TestSpannerService_GetSpannerTableRowDeletionPolicy(t *testing.T) {
+	skipIfNoIntegrationEnv(t)
 	type fields struct {
 		GoogleCredentials *googleoauth.Credentials
 	}
@@ -1021,6 +1050,7 @@ func TestSpannerService_GetSpannerTableRowDeletionPolicy(t *testing.T) {
 }
 
 func TestSpannerService_UpdateSpannerTableRowDeletionPolicy(t *testing.T) {
+	skipIfNoIntegrationEnv(t)
 	type fields struct {
 		GoogleCredentials *googleoauth.Credentials
 	}
@@ -1068,6 +1098,7 @@ func TestSpannerService_UpdateSpannerTableRowDeletionPolicy(t *testing.T) {
 }
 
 func TestSpannerService_DeleteSpannerTableRowDeletionPolicy(t *testing.T) {
+	skipIfNoIntegrationEnv(t)
 	type fields struct {
 		GoogleCredentials *googleoauth.Credentials
 	}
@@ -1097,6 +1128,162 @@ func TestSpannerService_DeleteSpannerTableRowDeletionPolicy(t *testing.T) {
 			}
 			if err := s.DeleteSpannerTableRowDeletionPolicy(tt.args.ctx, tt.args.parent); (err != nil) != tt.wantErr {
 				t.Errorf("DeleteSpannerTableRowDeletionPolicy() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestSpannerService_CreateSpannerSequence(t *testing.T) {
+	skipIfNoIntegrationEnv(t)
+	type fields struct {
+		GoogleCredentials *googleoauth.Credentials
+	}
+	type args struct {
+		ctx      context.Context
+		parent   string
+		sequence *schema.SpannerSequence
+	}
+
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    *schema.SpannerSequence
+		wantErr bool
+	}{
+		{
+			name: "Test_CreateSpannerSequence",
+			args: args{
+				ctx:    context.Background(),
+				parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s", TestProject, TestInstance, "play-np"),
+				sequence: &schema.SpannerSequence{
+					Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/sequences/%s", TestProject, TestInstance, "play-np", "test_sequence"),
+					Options: &schema.SpannerSequenceOptions{
+						SequenceKind: schema.SpannerSequenceKindBitReversedPositive,
+					},
+				},
+			},
+			want: &schema.SpannerSequence{
+				Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/sequences/%s", TestProject, TestInstance, "play-np", "test_sequence"),
+				Options: &schema.SpannerSequenceOptions{
+					SequenceKind: schema.SpannerSequenceKindBitReversedPositive,
+				},
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &SpannerService{
+				GoogleCredentials: tt.fields.GoogleCredentials,
+			}
+			got, err := s.CreateSpannerSequence(tt.args.ctx, tt.args.parent, tt.args.sequence)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("CreateSpannerSequence() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("CreateSpannerSequence() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSpannerService_UpdateSpannerSequence(t *testing.T) {
+	skipIfNoIntegrationEnv(t)
+	type fields struct {
+		GoogleCredentials *googleoauth.Credentials
+	}
+	type args struct {
+		ctx      context.Context
+		sequence *schema.SpannerSequence
+	}
+
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    *schema.SpannerSequence
+		wantErr bool
+	}{
+		{
+			name: "Test_UpdateSpannerSequence",
+			args: args{
+				ctx: context.Background(),
+				sequence: &schema.SpannerSequence{
+					Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/sequences/%s", TestProject, TestInstance, "play-np", "test_sequence"),
+					Options: &schema.SpannerSequenceOptions{
+						SequenceKind: schema.SpannerSequenceKindBitReversedPositive,
+						SkipRange: &schema.SpannerSequenceSkipRange{
+							Min: wrapperspb.Int64(1000),
+							Max: wrapperspb.Int64(5000000),
+						},
+					},
+				},
+			},
+			want: &schema.SpannerSequence{
+				Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/sequences/%s", TestProject, TestInstance, "play-np", "test_sequence"),
+				Options: &schema.SpannerSequenceOptions{
+					SequenceKind: schema.SpannerSequenceKindBitReversedPositive,
+					SkipRange: &schema.SpannerSequenceSkipRange{
+						Min: wrapperspb.Int64(1000),
+						Max: wrapperspb.Int64(5000000),
+					},
+				},
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &SpannerService{
+				GoogleCredentials: tt.fields.GoogleCredentials,
+			}
+			got, err := s.UpdateSpannerSequence(tt.args.ctx, tt.args.sequence)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("UpdateSpannerSequence() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("UpdateSpannerSequence() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSpannerService_GetSpannerSequence(t *testing.T) {
+	skipIfNoIntegrationEnv(t)
+	type fields struct {
+		GoogleCredentials *googleoauth.Credentials
+	}
+	type args struct {
+		ctx  context.Context
+		name string
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    *schema.SpannerSequence
+		wantErr bool
+	}{
+		{
+			name: "Test_GetSpannerSequence",
+			args: args{
+				ctx:  context.Background(),
+				name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/sequences/%s", TestProject, TestInstance, "play-np", "test_sequence"),
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &SpannerService{
+				GoogleCredentials: tt.fields.GoogleCredentials,
+			}
+			got, err := s.GetSpannerSequence(tt.args.ctx, tt.args.name)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("GetSpannerSequence() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("GetSpannerSequence() got = %v, want %v", got, tt.want)
 			}
 		})
 	}

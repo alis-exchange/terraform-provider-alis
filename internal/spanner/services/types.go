@@ -183,3 +183,15 @@ type SpannerTableRowDeletionPolicy struct {
 	// The duration after which a row is deleted in days
 	Duration *wrapperspb.Int64Value
 }
+
+type SequenceRow struct {
+	Catalog      string `gorm:"column:CATALOG"`
+	Schema       string `gorm:"column:SCHEMA"`
+	SequenceName string `gorm:"column:SEQUENCE_NAME"`
+	DataType     string `gorm:"column:DATA_TYPE"`
+
+	// Pointers handle the potential NULLs from the LEFT JOIN
+	OptionName  *string `gorm:"column:OPTION_NAME"`
+	OptionValue *string `gorm:"column:OPTION_VALUE"`
+	OptionType  *string `gorm:"column:OPTION_TYPE"`
+}
