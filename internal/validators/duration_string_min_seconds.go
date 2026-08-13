@@ -12,7 +12,10 @@ import (
 
 var _ validator.String = durationStringMinSeconds{}
 
-// durationStringMaxSeconds validates that duration string is at least a certain number of seconds.
+// durationStringMinSeconds validates that a duration string is at least a
+// certain number of seconds. The whole number of seconds preceding the first
+// "s" is compared (e.g. "300s"); values that do not start with an integer are
+// rejected.
 type durationStringMinSeconds struct {
 	minDuration int
 }

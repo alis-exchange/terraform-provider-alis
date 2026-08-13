@@ -163,7 +163,9 @@ func (r *databaseSequenceResource) Schema(_ context.Context, _ resource.SchemaRe
 	}
 }
 
-// Create a new resource.
+// Create ensures the sequence exists: a sequence already present in the
+// database is adopted into state as-is rather than treated as a conflict;
+// otherwise CREATE SEQUENCE DDL is issued with the planned options.
 func (r *databaseSequenceResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	// Retrieve values from plan
 	var plan databaseSequenceModel

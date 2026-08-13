@@ -14,6 +14,10 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
+// CreateSpannerTableRowDeletionPolicy adds a row deletion (TTL) policy to the
+// table named by parent. ttl.Duration is the number of days past ttl.Column
+// after which rows become eligible for deletion. The parent table must exist;
+// Spanner allows at most one policy per table.
 func (s *SpannerService) CreateSpannerTableRowDeletionPolicy(ctx context.Context, parent string, ttl *SpannerTableRowDeletionPolicy) (*SpannerTableRowDeletionPolicy, error) {
 	// Validate parent
 	googleSqlParentValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlTableNameRegex)
@@ -64,6 +68,10 @@ func (s *SpannerService) CreateSpannerTableRowDeletionPolicy(ctx context.Context
 	return ttl, nil
 }
 
+// GetSpannerTableRowDeletionPolicy reads the table's row deletion policy by
+// parsing the OLDER_THAN(column, INTERVAL n DAY) expression from
+// INFORMATION_SCHEMA.TABLES. codes.NotFound is returned when the table has no
+// policy.
 func (s *SpannerService) GetSpannerTableRowDeletionPolicy(ctx context.Context, parent string) (*SpannerTableRowDeletionPolicy, error) {
 	// Validate parent
 	googleSqlParentValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlTableNameRegex)
@@ -123,6 +131,8 @@ func (s *SpannerService) GetSpannerTableRowDeletionPolicy(ctx context.Context, p
 	}, nil
 }
 
+// UpdateSpannerTableRowDeletionPolicy replaces the table's existing row
+// deletion policy via ALTER TABLE ... REPLACE ROW DELETION POLICY.
 func (s *SpannerService) UpdateSpannerTableRowDeletionPolicy(ctx context.Context, parent string, ttl *SpannerTableRowDeletionPolicy) (*SpannerTableRowDeletionPolicy, error) {
 	// Validate parent
 	googleSqlParentValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlTableNameRegex)
@@ -173,6 +183,7 @@ func (s *SpannerService) UpdateSpannerTableRowDeletionPolicy(ctx context.Context
 	return ttl, nil
 }
 
+// DeleteSpannerTableRowDeletionPolicy drops the table's row deletion policy.
 func (s *SpannerService) DeleteSpannerTableRowDeletionPolicy(ctx context.Context, parent string) error {
 	// Validate parent
 	googleSqlParentValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlTableNameRegex)

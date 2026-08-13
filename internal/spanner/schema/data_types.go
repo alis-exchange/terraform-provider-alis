@@ -19,6 +19,8 @@ const (
 	SpannerTableDataTypeFloat64Array
 )
 
+// String returns the DDL spelling of the type. It is defined only for the
+// declared constants; the zero value is invalid.
 func (t SpannerTableDataType) String() string {
 	return [...]string{"BOOL", "INT64", "FLOAT64", "STRING", "BYTES", "DATE", "TIMESTAMP", "JSON", "PROTO",
 		"ARRAY<STRING>", "ARRAY<INT64>", "ARRAY<FLOAT32>", "ARRAY<FLOAT64>"}[t-1]

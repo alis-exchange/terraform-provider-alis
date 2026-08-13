@@ -28,6 +28,8 @@ type tableIamBindingDataSource struct {
 	config *internal.ProviderConfig
 }
 
+// tableIamBindingModel is shared by the table IAM binding resource and data
+// source: the resource requires Permissions while the data source computes it.
 type tableIamBindingModel struct {
 	Project     types.String   `tfsdk:"project"`
 	Instance    types.String   `tfsdk:"instance"`

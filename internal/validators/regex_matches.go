@@ -40,7 +40,10 @@ func (v regexMatchesValidator) ValidateString(ctx context.Context, request valid
 
 	atLeastOneValid := false
 	for _, r := range v.regexps {
-		atLeastOneValid = r.MatchString(value)
+		if r.MatchString(value) {
+			atLeastOneValid = true
+			break
+		}
 	}
 
 	if !atLeastOneValid {

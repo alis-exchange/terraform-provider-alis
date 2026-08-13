@@ -15,6 +15,10 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
+// CreateSpannerSequence creates a sequence in the parent database via CREATE
+// SEQUENCE DDL, applying the options carried on sequence. The database's
+// existence is verified first so a missing database surfaces as its own error
+// rather than a DDL failure.
 func (s *SpannerService) CreateSpannerSequence(ctx context.Context, parent string, sequence *schema.SpannerSequence) (*schema.SpannerSequence, error) {
 	// Validate arguments
 	// Validate parent
@@ -49,6 +53,10 @@ func (s *SpannerService) CreateSpannerSequence(ctx context.Context, parent strin
 	}, nil
 }
 
+// GetSpannerSequence reads a sequence and its options (sequence_kind,
+// skip_range, start_with_counter) back from INFORMATION_SCHEMA.SEQUENCES and
+// SEQUENCE_OPTIONS. codes.NotFound is returned when the sequence does not
+// exist; Options is nil when the sequence has no options set.
 func (s *SpannerService) GetSpannerSequence(ctx context.Context, name string) (*schema.SpannerSequence, error) {
 	// Validate arguments
 	// Validate parent
@@ -157,6 +165,8 @@ func (s *SpannerService) GetSpannerSequence(ctx context.Context, name string) (*
 	}, nil
 }
 
+// UpdateSpannerSequence applies the sequence's options in place via ALTER
+// SEQUENCE ... SET OPTIONS.
 func (s *SpannerService) UpdateSpannerSequence(ctx context.Context, sequence *schema.SpannerSequence) (*schema.SpannerSequence, error) {
 	// Ensure sequence is provided
 	if sequence.GetName() == "" {
@@ -193,6 +203,7 @@ func (s *SpannerService) UpdateSpannerSequence(ctx context.Context, sequence *sc
 	return sequence, nil
 }
 
+// DeleteSpannerSequence drops the sequence via DROP SEQUENCE DDL.
 func (s *SpannerService) DeleteSpannerSequence(ctx context.Context, name string) error {
 	// Validate arguments
 	// Validate name

@@ -10,6 +10,10 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
+// GetIndexes returns the secondary indexes of a table, reconstructed from the
+// INFORMATION_SCHEMA indexes/index_columns join. The per-column rows are
+// merged into one SpannerTableIndex each, with columns sorted by ordinal
+// position; the PRIMARY_KEY pseudo-index is excluded.
 func GetIndexes(ctx context.Context, cn conn.Connection, database string, tableName string) ([]*SpannerTableIndex, error) {
 	// Get the indexes for the table. "" is Spanner's default schema.
 	var results []*Index

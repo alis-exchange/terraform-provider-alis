@@ -15,20 +15,23 @@ import (
 )
 
 var (
-	// Discard tfLogger will print any log to io.Discard
+	// Discard sends every log message to io.Discard.
 	Discard = New(log.New(io.Discard, "", log.LstdFlags), logger.Config{})
-	// Default Default tfLogger
+	// Default writes to stdout at Warn level, with color and a 200ms
+	// slow-SQL threshold.
 	Default = New(log.New(os.Stdout, "\r\n", log.LstdFlags), logger.Config{
 		SlowThreshold:             200 * time.Millisecond,
 		LogLevel:                  logger.Warn,
 		IgnoreRecordNotFoundError: false,
 		Colorful:                  true,
 	})
-	// Recorder tfLogger records running SQL into a recorder instance
+	// Recorder captures the most recent traced SQL statement instead of
+	// printing it, delegating all other logging to Default.
 	Recorder = traceRecorder{Interface: Default, BeginAt: time.Now()}
 )
 
-// New initialize tfLogger
+// New builds a gorm logger that writes formatted messages via writer and
+// mirrors each one to tflog. config.Colorful selects ANSI-colored formats.
 func New(writer logger.Writer, config logger.Config) logger.Interface {
 	var (
 		infoStr      = "%s\n[info] "
@@ -60,6 +63,8 @@ func New(writer logger.Writer, config logger.Config) logger.Interface {
 	}
 }
 
+// tfLogger implements gorm's logger.Interface, pairing gorm's standard
+// formatting (via the embedded Writer) with a tflog mirror of each message.
 type tfLogger struct {
 	logger.Writer
 	logger.Config
@@ -67,14 +72,15 @@ type tfLogger struct {
 	traceStr, traceErrStr, traceWarnStr string
 }
 
-// LogMode log mode
+// LogMode returns a copy of the logger at the given level; the receiver is
+// unchanged.
 func (l *tfLogger) LogMode(level logger.LogLevel) logger.Interface {
 	newlogger := *l
 	newlogger.LogLevel = level
 	return &newlogger
 }
 
-// Info print info
+// Info logs an info-level message to the writer and mirrors it to tflog.
 func (l *tfLogger) Info(ctx context.Context, msg string, data ...interface{}) {
 	if l.LogLevel >= logger.Info {
 		tflog.Info(ctx, l.infoStr+msg)
@@ -82,7 +88,7 @@ func (l *tfLogger) Info(ctx context.Context, msg string, data ...interface{}) {
 	}
 }
 
-// Warn print warn messages
+// Warn logs a warn-level message to the writer and mirrors it to tflog.
 func (l *tfLogger) Warn(ctx context.Context, msg string, data ...interface{}) {
 	if l.LogLevel >= logger.Warn {
 		tflog.Warn(ctx, l.warnStr+msg)
@@ -90,7 +96,7 @@ func (l *tfLogger) Warn(ctx context.Context, msg string, data ...interface{}) {
 	}
 }
 
-// Error print error messages
+// Error logs an error-level message to the writer and mirrors it to tflog.
 func (l *tfLogger) Error(ctx context.Context, msg string, data ...interface{}) {
 	if l.LogLevel >= logger.Error {
 		tflog.Error(ctx, l.errStr+msg)
@@ -98,7 +104,9 @@ func (l *tfLogger) Error(ctx context.Context, msg string, data ...interface{}) {
 	}
 }
 
-// Trace print sql message
+// Trace logs a completed SQL statement with its duration and row count,
+// picking the error, slow-query, or info format, and mirrors the entry to
+// tflog with structured fields.
 //
 //nolint:cyclop
 func (l *tfLogger) Trace(ctx context.Context, begin time.Time, fc func() (string, int64), err error) {
@@ -147,7 +155,9 @@ func (l *tfLogger) Trace(ctx context.Context, begin time.Time, fc func() (string
 	}
 }
 
-// ParamsFilter filter params
+// ParamsFilter implements gorm's params-filter hook: with
+// ParameterizedQueries set it strips the bound params so parameter values
+// never reach log output.
 func (l *tfLogger) ParamsFilter(ctx context.Context, sql string, params ...interface{}) (string, []interface{}) {
 	if l.Config.ParameterizedQueries {
 		return sql, nil
@@ -155,6 +165,9 @@ func (l *tfLogger) ParamsFilter(ctx context.Context, sql string, params ...inter
 	return sql, params
 }
 
+// traceRecorder overrides Trace to capture the last SQL statement, row count,
+// and error for inspection instead of printing them; every other method
+// delegates to the embedded Interface.
 type traceRecorder struct {
 	logger.Interface
 	BeginAt      time.Time
@@ -163,12 +176,13 @@ type traceRecorder struct {
 	Err          error
 }
 
-// New trace recorder
+// New returns a fresh recorder with the same delegate Interface and no
+// captured trace.
 func (l *traceRecorder) New() *traceRecorder {
 	return &traceRecorder{Interface: l.Interface, BeginAt: time.Now()}
 }
 
-// Trace implement tfLogger interface
+// Trace records the statement, row count, and error rather than logging them.
 func (l *traceRecorder) Trace(ctx context.Context, begin time.Time, fc func() (string, int64), err error) {
 	l.BeginAt = begin
 	l.SQL, l.RowsAffected = fc()

@@ -41,6 +41,11 @@ func NewSpannerTableResource() resource.Resource {
 	return &spannerTableResource{}
 }
 
+// spannerTableResource manages the schema of a Spanner table
+// (alis_google_spanner_table). Only schema.columns can change in place;
+// identifying attributes carry RequiresReplace plan modifiers, and column
+// changes that DDL cannot apply in place force a replace via
+// tableColumnsRequireReplace.
 type spannerTableResource struct {
 	config *internal.ProviderConfig
 }
@@ -59,6 +64,10 @@ type spannerTableSchema struct {
 	Columns types.List `tfsdk:"columns"`
 }
 
+// spannerTableColumn is the Terraform model of one table column. Null
+// attributes mean "not configured"; tableColumnsToSchema maps them to nil
+// wrappers so the schema layer can tell unset apart from an explicit
+// false/zero, and tableColumnsToModel maps nil back to null.
 type spannerTableColumn struct {
 	Name           types.String `tfsdk:"name"`
 	IsPrimaryKey   types.Bool   `tfsdk:"is_primary_key"`
@@ -73,6 +82,8 @@ type spannerTableColumn struct {
 	ProtoPackage   types.String `tfsdk:"proto_package"`
 }
 
+// attrTypes returns the attribute types of the column object, used to build
+// the typed columns list.
 func (o spannerTableColumn) attrTypes() map[string]attr.Type {
 	return map[string]attr.Type{
 		"name":             types.StringType,
@@ -436,7 +447,10 @@ func (r *spannerTableResource) Read(ctx context.Context, req resource.ReadReques
 	}
 }
 
-// Update updates the resource and updates the Terraform state on success.
+// Update applies in-place schema changes and updates the Terraform state on
+// success. Only schema.columns can be altered in place (the field mask passed
+// below); every other attribute carries a RequiresReplace plan modifier, so
+// any other change replaces the table instead of reaching this method.
 func (r *spannerTableResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	// Retrieve values from plan
 	var plan spannerTableModel
@@ -573,6 +587,10 @@ func (r *spannerTableResource) Configure(_ context.Context, req resource.Configu
 	r.config = config
 }
 
+// ValidateConfig emits warnings (not errors) for incomplete column
+// configuration: a missing schema or columns block, PROTO columns without
+// proto_package, and computed columns without computation_ddl. Warnings keep
+// configs with unknown values plannable while still flagging likely mistakes.
 func (r *spannerTableResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
 	var data spannerTableModel
 

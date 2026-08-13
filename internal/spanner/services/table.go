@@ -138,6 +138,7 @@ func (s *SpannerService) GetSpannerTable(ctx context.Context, name string) (*sch
 // Params:
 //   - ctx: context.Context - The context to use for RPCs.
 //   - table: *SpannerTable - Required. The table to update.
+//   - updateMask: *fieldmaskpb.FieldMask - The fields to update. Only `schema.columns` is supported; required when the table already exists.
 //   - allowMissing: bool - If true and the table does not exist, a new table will be created. Default is false.
 //
 // Returns: *SpannerTable

@@ -7,6 +7,7 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
+// SpannerSequenceKind is the algorithm a sequence uses to generate values.
 type SpannerSequenceKind int64
 
 const (
@@ -22,6 +23,8 @@ func (s SpannerSequenceKind) ddl() string {
 	return fmt.Sprintf("sequence_kind = '%s'", s.String())
 }
 
+// SpannerSequenceKindFromString parses a sequence kind. Any unrecognized
+// input maps to BitReversedPositive, the only kind Spanner supports.
 func SpannerSequenceKindFromString(s string) SpannerSequenceKind {
 	switch s {
 	case "bit_reversed_positive":
@@ -31,6 +34,8 @@ func SpannerSequenceKindFromString(s string) SpannerSequenceKind {
 	}
 }
 
+// SpannerSequenceSkipRange is a range of values the sequence must not
+// produce; both bounds are required together.
 type SpannerSequenceSkipRange struct {
 	// The starting integer of a range you want the sequence to exclude.
 	Min *wrapperspb.Int64Value
@@ -61,6 +66,7 @@ func (s *SpannerSequenceSkipRange) ddl() []string {
 	}
 }
 
+// SpannerSequenceOptions holds the OPTIONS clause settings for a sequence.
 type SpannerSequenceOptions struct {
 	// Defines the algorithm used to generate the numbers.
 	SequenceKind SpannerSequenceKind
@@ -70,6 +76,8 @@ type SpannerSequenceOptions struct {
 	StartWithCounter *wrapperspb.Int64Value
 }
 
+// GetSequenceKind returns the sequence kind, defaulting to
+// BitReversedPositive when options are unset.
 func (o *SpannerSequenceOptions) GetSequenceKind() SpannerSequenceKind {
 	if o == nil {
 		return SpannerSequenceKindBitReversedPositive
@@ -94,6 +102,7 @@ func (o *SpannerSequenceOptions) GetStartWithCounter() *wrapperspb.Int64Value {
 	return o.StartWithCounter
 }
 
+// SpannerSequence represents a Spanner sequence.
 type SpannerSequence struct {
 	// The name of the sequence.
 	Name string
@@ -117,6 +126,9 @@ func (s *SpannerSequence) GetOptions() *SpannerSequenceOptions {
 	return s.Options
 }
 
+// CreateDdl renders the CREATE SEQUENCE statement. Name may be a fully
+// qualified resource name; only its final segment is used as the sequence
+// id. A skip range with only one bound set is an error.
 func (s *SpannerSequence) CreateDdl() (string, error) {
 	if s == nil {
 		return "", nil
@@ -153,6 +165,8 @@ func (s *SpannerSequence) CreateDdl() (string, error) {
 	return fmt.Sprintf("CREATE SEQUENCE `%s` OPTIONS (%s)", name, strings.Join(options, ", ")), nil
 }
 
+// AlterDdl renders the ALTER SEQUENCE ... SET OPTIONS statement, with the
+// same name handling and skip-range validation as CreateDdl.
 func (s *SpannerSequence) AlterDdl() (string, error) {
 	if s == nil {
 		return "", nil
@@ -189,6 +203,8 @@ func (s *SpannerSequence) AlterDdl() (string, error) {
 	return fmt.Sprintf("ALTER SEQUENCE `%s` SET OPTIONS (%s)", name, strings.Join(options, ", ")), nil
 }
 
+// DropDdl renders the DROP SEQUENCE statement, using the final segment of
+// Name as the sequence id.
 func (s *SpannerSequence) DropDdl() (string, error) {
 	if s == nil {
 		return "", nil

@@ -6,6 +6,8 @@ import (
 	_ "github.com/googleapis/go-sql-spanner"
 )
 
+// Database dialect, state, and encryption values as reported by the Spanner
+// Database Admin API.
 const (
 	DatabaseDialect_GoogleStandardSQL = "GOOGLE_STANDARD_SQL"
 	DatabaseDialect_PostgreSQL        = "POSTGRESQL"
@@ -24,6 +26,8 @@ type SpannerService struct {
 	conn conn.Connection
 }
 
+// NewSpannerService returns a SpannerService that performs all Spanner work
+// over cn.
 func NewSpannerService(cn conn.Connection) *SpannerService {
 	return &SpannerService{conn: cn}
 }

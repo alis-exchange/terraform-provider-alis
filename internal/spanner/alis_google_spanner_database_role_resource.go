@@ -79,7 +79,9 @@ func (r *databaseRoleResource) Schema(_ context.Context, _ resource.SchemaReques
 	}
 }
 
-// Create a new resource.
+// Create ensures the role exists: a role already present in the database is
+// adopted into state as-is rather than treated as a conflict; otherwise
+// CREATE ROLE DDL is issued.
 func (r *databaseRoleResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	// Retrieve values from plan
 	var plan databaseRoleModel

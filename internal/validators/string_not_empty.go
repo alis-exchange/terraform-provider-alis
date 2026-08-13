@@ -10,7 +10,8 @@ import (
 // String not empty Validator
 var _ validator.String = stringNotEmptyValidator{}
 
-// Non Empty String Validator
+// stringNotEmptyValidator validates that a configured string value is not the
+// empty string.
 type stringNotEmptyValidator struct {
 }
 
@@ -37,6 +38,9 @@ func (v stringNotEmptyValidator) ValidateString(ctx context.Context, request val
 	}
 }
 
+// StringNotEmpty returns a validator which ensures that any configured string
+// value is not the empty string. Null (unconfigured) and unknown (known after
+// apply) values are skipped.
 func StringNotEmpty() validator.String {
 	return stringNotEmptyValidator{}
 }

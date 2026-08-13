@@ -43,6 +43,10 @@ func (v googleCredentialsValidator) ValidateString(ctx context.Context, request 
 	}
 }
 
+// GoogleCredentialsValidator returns a validator which ensures that a
+// configured credentials string is either a path to an existing file (assumed
+// to hold credentials) or raw JSON that parses as Google credentials. Null
+// (unconfigured) and unknown (known after apply) values are skipped.
 func GoogleCredentialsValidator() validator.String {
 	return googleCredentialsValidator{}
 }

@@ -11,6 +11,9 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// CreateSpannerTableForeignKeyConstraint adds a foreign key constraint to the
+// table named by parent via ALTER TABLE ... ADD CONSTRAINT. Every constraint
+// field is validated up front; DDL failures surface as codes.Internal.
 func (s *SpannerService) CreateSpannerTableForeignKeyConstraint(ctx context.Context, parent string, constraint *schema.SpannerTableForeignKeyConstraint) (*schema.SpannerTableForeignKeyConstraint, error) {
 	// Validate parent
 	googleSqlParentValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlTableNameRegex)
@@ -74,6 +77,10 @@ func (s *SpannerService) CreateSpannerTableForeignKeyConstraint(ctx context.Cont
 	return constraint, nil
 }
 
+// GetSpannerTableForeignKeyConstraint reconstructs a foreign key constraint
+// from the INFORMATION_SCHEMA constraint tables. parent is the constrained
+// table's resource name and name the bare constraint ID; codes.NotFound is
+// returned when the table has no FOREIGN KEY constraint by that name.
 func (s *SpannerService) GetSpannerTableForeignKeyConstraint(ctx context.Context, parent string, name string) (*schema.SpannerTableForeignKeyConstraint, error) {
 	// Validate parent
 	googleSqlParentValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlTableNameRegex)
@@ -145,6 +152,8 @@ func (s *SpannerService) GetSpannerTableForeignKeyConstraint(ctx context.Context
 	return constaint, nil
 }
 
+// DeleteSpannerTableForeignKeyConstraint drops the named foreign key
+// constraint from the table via ALTER TABLE ... DROP CONSTRAINT.
 func (s *SpannerService) DeleteSpannerTableForeignKeyConstraint(ctx context.Context, parent string, name string) error {
 	// Validate parent
 	googleSqlParentValid := utils.ValidateArgument(parent, utils.SpannerGoogleSqlTableNameRegex)

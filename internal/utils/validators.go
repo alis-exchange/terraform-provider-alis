@@ -66,7 +66,9 @@ var (
 	DiscoveryEngineDatastoreSchemaNameRegex = fmt.Sprintf(`^projects\/%s\/locations\/[a-zA-Z0-9-]*\/collections\/[a-zA-Z0-9-_]*\/dataStores\/[a-z0-9-_]*\/schemas\/%s$`, CutPrefixAndSuffix(ProjectIdRegex, "^", "$"), CutPrefixAndSuffix(DiscoveryEngineDatastoreSchemaIdRegex, "^", "$"))
 )
 
-// ValidateArgument validates an argument against the provided regex and returns either true or false
+// ValidateArgument reports whether value matches the given regular expression.
+// The pattern is compiled with regexp.MustCompile, so an invalid pattern
+// panics; callers pass the pre-defined patterns declared in this package.
 func ValidateArgument(value string, regex string) bool {
 	// Validate the value field using regex
 	validateName := regexp.MustCompile(regex)

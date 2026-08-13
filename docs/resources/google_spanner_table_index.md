@@ -40,7 +40,8 @@ resource "alis_google_spanner_table_index" "test" {
 ### Required
 
 - `columns` (Attributes List) The columns that make up the index.
-The order of the columns is significant. (see [below for nested schema](#nestedatt--columns))
+The order of the columns is significant.
+**Changing any column will destroy and recreate the index**: Spanner indexes cannot be altered in place. (see [below for nested schema](#nestedatt--columns))
 - `database` (String) The name of the parent database.
 - `instance` (String) The name of the Spanner instance.
 - `name` (String) The name of the index.
@@ -52,6 +53,7 @@ The name must satisfy the expression `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`
 ### Optional
 
 - `unique` (Boolean) Indicates if the index is unique.
+**Changing this value will destroy and recreate the index**: Spanner indexes cannot be altered in place.
 
 <a id="nestedatt--columns"></a>
 ### Nested Schema for `columns`

@@ -19,10 +19,13 @@ import (
 	"context"
 )
 
+// OpKind identifies which Connection method a recorded Op captures.
 type OpKind string
 
 const (
-	OpDialect       OpKind = "Dialect"
+	OpDialect OpKind = "Dialect"
+	// OpExecuteDDL covers both ExecuteDDL and ExecuteDDLWithDescriptors; the
+	// recorded ProtoDescriptors distinguish the two.
 	OpExecuteDDL    OpKind = "ExecuteDDL"
 	OpExec          OpKind = "Exec"
 	OpQuery         OpKind = "Query"
@@ -49,7 +52,8 @@ type failure struct {
 	err error
 }
 
-// Fake implements conn.Connection.
+// Fake implements conn.Connection entirely in memory. Construct with New;
+// safe for concurrent use.
 type Fake struct {
 	mu       sync.Mutex
 	ops      []Op
@@ -61,6 +65,7 @@ type Fake struct {
 
 var _ conn.Connection = (*Fake)(nil)
 
+// New returns an empty Fake ready for seeding; the zero value is not usable.
 func New() *Fake {
 	return &Fake{
 		dialects: map[string]conn.Dialect{},
@@ -78,6 +83,8 @@ func (f *Fake) SetDatabaseRoles(database string, names []string) {
 
 // --- Seeding ---
 
+// SetDialect seeds the dialect reported for database; unseeded databases
+// report DialectGoogleSQL.
 func (f *Fake) SetDialect(database string, d conn.Dialect) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -105,7 +112,9 @@ func (f *Fake) OnQueryFunc(pred func(Op) bool, fill func(dest any) error) {
 
 // --- Error injection ---
 
-// FailNext makes the next n ops of kind fail with err, then recover.
+// FailNext makes the next n ops of kind fail with err, then recover. Failing
+// calls are still recorded in Ops, so attempt counts stay observable. A second
+// call for the same kind replaces any remaining budget.
 func (f *Fake) FailNext(kind OpKind, n int, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -114,6 +123,7 @@ func (f *Fake) FailNext(kind OpKind, n int, err error) {
 
 // --- Recording & assertions ---
 
+// Ops returns a copy of every recorded call, in arrival order.
 func (f *Fake) Ops() []Op {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -122,6 +132,7 @@ func (f *Fake) Ops() []Op {
 	return out
 }
 
+// OpsOf returns the recorded calls of one kind, in arrival order.
 func (f *Fake) OpsOf(kind OpKind) []Op {
 	var out []Op
 	for _, op := range f.Ops() {

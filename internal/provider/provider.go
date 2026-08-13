@@ -96,7 +96,12 @@ func (p *googleProvider) Schema(_ context.Context, _ provider.SchemaRequest, res
 	}
 }
 
-// Configure prepares a HashiCups API client for data sources and resources.
+// Configure resolves Google credentials and builds the shared ProviderConfig
+// that every resource and data source receives via ProviderData. Credentials
+// are resolved exactly once here — from the credentials attribute, the
+// access_token attribute, or Application Default Credentials, in that order
+// (utils.GetGoogleCredentials) — and reach every Spanner client through
+// conn.New, the provider's single credential path.
 func (p *googleProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
 	tflog.Info(ctx, "Configuring DB client")
 

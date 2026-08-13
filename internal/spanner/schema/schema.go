@@ -16,6 +16,8 @@ func (s *SpannerTableSchema) GetColumns() []*SpannerTableColumn {
 	return s.Columns
 }
 
+// GetPrimaryKeyColumns returns the backtick-quoted names of the primary-key
+// columns in declaration order, ready for a PRIMARY KEY (...) clause.
 func (s *SpannerTableSchema) GetPrimaryKeyColumns() []string {
 	if s == nil {
 		return nil

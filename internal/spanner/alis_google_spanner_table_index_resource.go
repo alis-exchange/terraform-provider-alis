@@ -16,6 +16,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -155,11 +157,19 @@ func (r *spannerTableIndexResource) Schema(_ context.Context, _ resource.SchemaR
 					},
 				},
 				Description: "The columns that make up the index.\n" +
-					"The order of the columns is significant.",
+					"The order of the columns is significant.\n" +
+					"**Changing any column will destroy and recreate the index**: Spanner indexes cannot be altered in place.",
+				PlanModifiers: []planmodifier.List{
+					listplanmodifier.RequiresReplace(),
+				},
 			},
 			"unique": schema.BoolAttribute{
-				Optional:    true,
-				Description: "Indicates if the index is unique.",
+				Optional: true,
+				Description: "Indicates if the index is unique.\n" +
+					"**Changing this value will destroy and recreate the index**: Spanner indexes cannot be altered in place.",
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.RequiresReplace(),
+				},
 			},
 		},
 		Description: "A Google Cloud Spanner table index resource.\n" +
@@ -319,6 +329,10 @@ func (r *spannerTableIndexResource) Read(ctx context.Context, req resource.ReadR
 	}
 }
 
+// Update exists to satisfy the resource interface but is effectively
+// unreachable: a secondary index cannot be altered in place, so every
+// attribute carries a RequiresReplace plan modifier and any change plans as
+// a destroy-and-recreate instead of an update.
 func (r *spannerTableIndexResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	// Retrieve values from plan
 	var plan spannerTableIndexModel

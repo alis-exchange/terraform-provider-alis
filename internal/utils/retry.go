@@ -34,6 +34,9 @@ func Retry[R interface{}](attempts int, initialSleep time.Duration, f func() (R,
 	}
 }
 
+// Stop wraps an error to signal Retry that it must not retry; Retry unwraps
+// it and returns the original error to the caller. Construct it with
+// NonRetryableError.
 type Stop struct {
 	error
 }

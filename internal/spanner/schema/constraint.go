@@ -2,6 +2,8 @@ package schema
 
 import "fmt"
 
+// SpannerTableForeignKeyConstraint represents a single-column foreign key:
+// Column references ReferencedColumn on ReferencedTable.
 type SpannerTableForeignKeyConstraint struct {
 	// The name of the constraint
 	Name string
@@ -15,6 +17,8 @@ type SpannerTableForeignKeyConstraint struct {
 	OnDelete SpannerTableConstraintAction
 }
 
+// SpannerTableConstraintAction is the referential action a constraint or
+// interleave applies ON DELETE.
 type SpannerTableConstraintAction int64
 
 const (
@@ -23,10 +27,13 @@ const (
 	SpannerTableConstraintNoAction
 )
 
+// String returns the DDL keyword for the action; Unspecified renders as "".
 func (a SpannerTableConstraintAction) String() string {
 	return [...]string{"", "CASCADE", "NO ACTION"}[a]
 }
 
+// SpannerTableConstraintActionFromString parses a DDL keyword ("CASCADE",
+// "NO ACTION"), returning Unspecified for anything else.
 func SpannerTableConstraintActionFromString(s string) SpannerTableConstraintAction {
 	switch s {
 	case "CASCADE":
@@ -38,6 +45,8 @@ func SpannerTableConstraintActionFromString(s string) SpannerTableConstraintActi
 	}
 }
 
+// SpannerTableConstraintActions lists the actions accepted in configuration
+// (Unspecified is excluded).
 var SpannerTableConstraintActions = []string{
 	SpannerTableConstraintActionCascade.String(),
 	SpannerTableConstraintNoAction.String(),

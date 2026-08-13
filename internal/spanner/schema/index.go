@@ -7,6 +7,7 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
+// SpannerTableIndexColumnOrder is the sort order of a column within an index.
 type SpannerTableIndexColumnOrder int64
 
 const (
@@ -15,15 +16,20 @@ const (
 	SpannerTableIndexColumnOrder_DESC
 )
 
+// String returns the lowercase configuration spelling; CreateDdl upper-cases
+// it for DDL.
 func (s SpannerTableIndexColumnOrder) String() string {
 	return [...]string{"unspecified", "asc", "desc"}[s]
 }
 
+// SpannerTableIndexColumnOrders lists the orders accepted in configuration
+// (UNSPECIFIED is excluded).
 var SpannerTableIndexColumnOrders = []string{
 	SpannerTableIndexColumnOrder_ASC.String(),
 	SpannerTableIndexColumnOrder_DESC.String(),
 }
 
+// SpannerTableIndexColumn is a single column entry in an index.
 type SpannerTableIndexColumn struct {
 	// The name of the column
 	Name string

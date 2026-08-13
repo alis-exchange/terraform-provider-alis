@@ -11,6 +11,9 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// SetTableIamBinding grants the binding's permissions to its role on the
+// table named by parent via GRANT DDL. Grants are additive: permissions the
+// role already holds that are absent from binding are not revoked here.
 func (s *SpannerService) SetTableIamBinding(ctx context.Context, parent string, binding *TablePolicyBinding) (*TablePolicyBinding, error) {
 	// Validate arguments
 	// Validate parent
@@ -59,6 +62,9 @@ func (s *SpannerService) SetTableIamBinding(ctx context.Context, parent string, 
 	return binding, nil
 }
 
+// GetTableIamBinding reads the permissions currently granted to role on the
+// table from INFORMATION_SCHEMA.TABLE_PRIVILEGES. codes.NotFound is returned
+// when the role holds no privileges on the table.
 func (s *SpannerService) GetTableIamBinding(ctx context.Context, parent string, role string) (*TablePolicyBinding, error) {
 	// Validate arguments
 	// Validate parent
@@ -104,6 +110,9 @@ func (s *SpannerService) GetTableIamBinding(ctx context.Context, parent string, 
 	return binding, nil
 }
 
+// DeleteTableIamBinding revokes every permission the role currently holds on
+// the table; the existing grants are read first so the REVOKE covers exactly
+// what is present.
 func (s *SpannerService) DeleteTableIamBinding(ctx context.Context, parent string, role string) error {
 	// Validate arguments
 	// Validate parent

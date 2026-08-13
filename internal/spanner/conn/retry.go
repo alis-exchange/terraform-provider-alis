@@ -33,7 +33,8 @@ func DefaultRetryable(err error) bool {
 }
 
 // WithRetry wraps any Connection — including the fake — with the uniform
-// retry policy.
+// retry policy. Zero fields in p take the defaults (5 attempts, 5s initial
+// backoff, DefaultRetryable). Close passes through without retry.
 func WithRetry(inner Connection, p RetryPolicy) Connection {
 	return &retryConn{inner: inner, policy: p.withDefaults()}
 }
@@ -56,6 +57,9 @@ type retryConn struct {
 	policy RetryPolicy
 }
 
+// do runs op under the policy: backoff doubles per attempt with up to 50%
+// jitter added. When ctx is cancelled mid-backoff, do returns the last
+// operation error (not ctx.Err()) so callers still see a meaningful gRPC code.
 func (r *retryConn) do(ctx context.Context, op func() error) error {
 	backoff := r.policy.InitialBackoff
 	var err error

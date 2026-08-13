@@ -7,7 +7,6 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
-// SpannerTableColumn represents a Spanner table column.
 // PreserveUnsetBooleans collapses hydrated boolean attributes back to unset
 // where the prior state left them unset and hydration answered "false".
 // INFORMATION_SCHEMA always answers explicitly, but an explicit false and an
@@ -40,6 +39,7 @@ func PreserveUnsetBooleans(prior, hydrated []*SpannerTableColumn) {
 	}
 }
 
+// SpannerTableColumn represents a Spanner table column.
 type SpannerTableColumn struct {
 	// The name of the column.
 	//
@@ -172,6 +172,11 @@ func (c *SpannerTableColumn) PrimaryKey() bool {
 	return c.GetIsPrimaryKey() != nil && c.GetIsPrimaryKey().GetValue()
 }
 
+// ddl renders the column definition fragment shared by CREATE TABLE and ADD
+// COLUMN: name, type, size, NOT NULL, generation expression, DEFAULT, and
+// OPTIONS. Proto columns render the backticked fully-qualified message name
+// and error without a ProtoPackage; computed columns error without a
+// ComputationDdl.
 func (c *SpannerTableColumn) ddl() (string, error) {
 
 	// Create DDL
@@ -255,13 +260,13 @@ func (c *SpannerTableColumn) ddl() (string, error) {
 	return ddl, nil
 }
 
+// alterDdl renders the ALTER COLUMN fragments needed to move existingColumn
+// to this column's shape. Only size, nullability, and the default value can
+// change in place — anything else requires a table replace (see
+// ClassifyColumnChange). The type/NOT NULL form and the SET/DROP DEFAULT form
+// are distinct ALTER COLUMN productions in Spanner DDL, so default-value
+// changes render as a separate fragment.
 func (c *SpannerTableColumn) alterDdl(existingColumn *SpannerTableColumn) ([]string, error) {
-	// There's only a handful of things that can be altered
-	// 1. Nullable
-	// 2. Default Value
-	// 3. Size
-	// These are the only ones that we'll check for
-
 	var ddls []string
 
 	{
@@ -389,6 +394,9 @@ func (c *SpannerTableColumn) alterDdl(existingColumn *SpannerTableColumn) ([]str
 	return ddls, nil
 }
 
+// compare reports whether two columns are semantically identical. Wrapper
+// fields are compared by value, so an unset boolean equals an explicit false
+// — the two shapes produce identical DDL.
 func (c *SpannerTableColumn) compare(other *SpannerTableColumn) bool {
 	if c == nil && other == nil {
 		return true

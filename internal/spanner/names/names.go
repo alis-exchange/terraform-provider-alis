@@ -35,6 +35,8 @@ func parseSegments(name string, collections ...string) ([]string, error) {
 	return ids, nil
 }
 
+// format renders the expected shape for error messages, e.g.
+// "projects/{project}/instances/{instance}".
 func format(collections []string) string {
 	segments := make([]string, 0, len(collections))
 	for _, c := range collections {
@@ -50,6 +52,7 @@ type DatabaseName struct {
 	Database string
 }
 
+// ParseDatabase parses a DatabaseName; failures wrap ErrInvalidName.
 func ParseDatabase(name string) (DatabaseName, error) {
 	ids, err := parseSegments(name, "projects", "instances", "databases")
 	if err != nil {
@@ -70,6 +73,7 @@ type TableName struct {
 	Table    string
 }
 
+// ParseTable parses a TableName; failures wrap ErrInvalidName.
 func ParseTable(name string) (TableName, error) {
 	ids, err := parseSegments(name, "projects", "instances", "databases", "tables")
 	if err != nil {
@@ -82,6 +86,7 @@ func (n TableName) String() string {
 	return fmt.Sprintf("%s/tables/%s", n.DatabaseName().String(), n.Table)
 }
 
+// DatabaseName returns the parent database's name.
 func (n TableName) DatabaseName() DatabaseName {
 	return DatabaseName{Project: n.Project, Instance: n.Instance, Database: n.Database}
 }
@@ -94,6 +99,7 @@ type SequenceName struct {
 	Sequence string
 }
 
+// ParseSequence parses a SequenceName; failures wrap ErrInvalidName.
 func ParseSequence(name string) (SequenceName, error) {
 	ids, err := parseSegments(name, "projects", "instances", "databases", "sequences")
 	if err != nil {
@@ -106,6 +112,7 @@ func (n SequenceName) String() string {
 	return fmt.Sprintf("%s/sequences/%s", n.DatabaseName().String(), n.Sequence)
 }
 
+// DatabaseName returns the parent database's name.
 func (n SequenceName) DatabaseName() DatabaseName {
 	return DatabaseName{Project: n.Project, Instance: n.Instance, Database: n.Database}
 }
@@ -118,6 +125,7 @@ type DatabaseRoleName struct {
 	Role     string
 }
 
+// ParseDatabaseRole parses a DatabaseRoleName; failures wrap ErrInvalidName.
 func ParseDatabaseRole(name string) (DatabaseRoleName, error) {
 	ids, err := parseSegments(name, "projects", "instances", "databases", "databaseRoles")
 	if err != nil {
@@ -130,6 +138,7 @@ func (n DatabaseRoleName) String() string {
 	return fmt.Sprintf("%s/databaseRoles/%s", n.DatabaseName().String(), n.Role)
 }
 
+// DatabaseName returns the parent database's name.
 func (n DatabaseRoleName) DatabaseName() DatabaseName {
 	return DatabaseName{Project: n.Project, Instance: n.Instance, Database: n.Database}
 }
@@ -143,6 +152,7 @@ type IndexName struct {
 	Index    string
 }
 
+// ParseIndex parses an IndexName; failures wrap ErrInvalidName.
 func ParseIndex(name string) (IndexName, error) {
 	ids, err := parseSegments(name, "projects", "instances", "databases", "tables", "indexes")
 	if err != nil {
@@ -155,6 +165,7 @@ func (n IndexName) String() string {
 	return fmt.Sprintf("%s/indexes/%s", n.TableName().String(), n.Index)
 }
 
+// TableName returns the parent table's name.
 func (n IndexName) TableName() TableName {
 	return TableName{Project: n.Project, Instance: n.Instance, Database: n.Database, Table: n.Table}
 }
@@ -169,6 +180,7 @@ type TableRoleName struct {
 	Role     string
 }
 
+// ParseTableRole parses a TableRoleName; failures wrap ErrInvalidName.
 func ParseTableRole(name string) (TableRoleName, error) {
 	ids, err := parseSegments(name, "projects", "instances", "databases", "tables", "tableRoles")
 	if err != nil {
@@ -181,6 +193,7 @@ func (n TableRoleName) String() string {
 	return fmt.Sprintf("%s/tableRoles/%s", n.TableName().String(), n.Role)
 }
 
+// TableName returns the parent table's name.
 func (n TableRoleName) TableName() TableName {
 	return TableName{Project: n.Project, Instance: n.Instance, Database: n.Database, Table: n.Table}
 }
@@ -195,6 +208,7 @@ type ForeignKeyName struct {
 	Constraint string
 }
 
+// ParseForeignKey parses a ForeignKeyName; failures wrap ErrInvalidName.
 func ParseForeignKey(name string) (ForeignKeyName, error) {
 	ids, err := parseSegments(name, "projects", "instances", "databases", "tables", "constraints")
 	if err != nil {
@@ -207,6 +221,7 @@ func (n ForeignKeyName) String() string {
 	return fmt.Sprintf("%s/constraints/%s", n.TableName().String(), n.Constraint)
 }
 
+// TableName returns the parent table's name.
 func (n ForeignKeyName) TableName() TableName {
 	return TableName{Project: n.Project, Instance: n.Instance, Database: n.Database, Table: n.Table}
 }

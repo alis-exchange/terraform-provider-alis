@@ -28,6 +28,9 @@ func (i *SpannerTableInterleave) GetOnDelete() SpannerTableConstraintAction {
 	return i.OnDelete
 }
 
+// ddl renders the interleave clause. An ON DELETE action of CASCADE selects
+// the INTERLEAVE IN PARENT form with its ON DELETE clause; unspecified or
+// NO ACTION renders the plain INTERLEAVE IN form.
 func (i *SpannerTableInterleave) ddl() (string, error) {
 	if i == nil {
 		return "", nil

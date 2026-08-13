@@ -47,6 +47,12 @@ func defaultGormLogger() gormlogger.Interface {
 	)
 }
 
+// gcpConn is the production adapter: it implements Connection over the real
+// Google clients — the database admin client for DDL and metadata, and gorm
+// (over go-sql-spanner) for DML and queries. The admin client is created once
+// per adapter; gorm sessions and dialect lookups are cached per database.
+// SPANNER_EMULATOR_HOST is captured at construction time, so the adapter must
+// be built after the variable is set.
 type gcpConn struct {
 	opts         Options
 	emulatorHost string
@@ -84,6 +90,9 @@ func splitDatabase(database string) (project, instance, db string, err error) {
 	return parts[1], parts[3], parts[5], nil
 }
 
+// adminClient returns the shared database admin client, creating it on first
+// use. A creation failure is sticky: the error is cached and returned to every
+// subsequent caller for the adapter's lifetime.
 func (g *gcpConn) adminClient(ctx context.Context) (*spannerAdmin.DatabaseAdminClient, error) {
 	g.adminOnce.Do(func() {
 		g.admin, g.adminErr = spannerAdmin.NewDatabaseAdminClient(ctx,
@@ -249,7 +258,8 @@ func (g *gcpConn) DatabaseRoles(ctx context.Context, database string, pageSize i
 
 		names = append(names, r.GetName())
 
-		// Check if page size is reached
+		// The iterator streams across server pages, so enforce pageSize
+		// manually and surface the token the caller needs to resume.
 		if pageSize > 0 && len(names) >= int(pageSize) {
 			nextPageToken = it.PageInfo().Token
 			break

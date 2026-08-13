@@ -37,6 +37,8 @@ func (t *SpannerTable) GetProject() string {
 	return fmt.Sprintf("projects/%s", n.Project)
 }
 
+// GetProjectId returns the project id segment, or "" when the table name is
+// unset or malformed.
 func (t *SpannerTable) GetProjectId() string {
 	n, err := names.ParseTable(t.GetName())
 	if err != nil {
@@ -45,6 +47,8 @@ func (t *SpannerTable) GetProjectId() string {
 	return n.Project
 }
 
+// GetInstance returns "projects/{p}/instances/{i}", or "" when the table
+// name is unset or malformed.
 func (t *SpannerTable) GetInstance() string {
 	n, err := names.ParseTable(t.GetName())
 	if err != nil {
@@ -53,6 +57,8 @@ func (t *SpannerTable) GetInstance() string {
 	return fmt.Sprintf("projects/%s/instances/%s", n.Project, n.Instance)
 }
 
+// GetInstanceId returns the instance id segment, or "" when the table name
+// is unset or malformed.
 func (t *SpannerTable) GetInstanceId() string {
 	n, err := names.ParseTable(t.GetName())
 	if err != nil {
@@ -61,6 +67,8 @@ func (t *SpannerTable) GetInstanceId() string {
 	return n.Instance
 }
 
+// GetDatabase returns the fully qualified database name, or "" when the
+// table name is unset or malformed.
 func (t *SpannerTable) GetDatabase() string {
 	n, err := names.ParseTable(t.GetName())
 	if err != nil {
@@ -69,6 +77,8 @@ func (t *SpannerTable) GetDatabase() string {
 	return n.DatabaseName().String()
 }
 
+// GetDatabaseId returns the database id segment, or "" when the table name
+// is unset or malformed.
 func (t *SpannerTable) GetDatabaseId() string {
 	n, err := names.ParseTable(t.GetName())
 	if err != nil {
@@ -77,6 +87,8 @@ func (t *SpannerTable) GetDatabaseId() string {
 	return n.Database
 }
 
+// GetTableId returns the table id segment, or "" when the table name is
+// unset or malformed.
 func (t *SpannerTable) GetTableId() string {
 	n, err := names.ParseTable(t.GetName())
 	if err != nil {
@@ -261,9 +273,9 @@ func (t *SpannerTable) Create(ctx context.Context, cn conn.Connection) (*Spanner
 	return t, nil
 }
 
-// tableInfoRow, informationSchemaColumnRow, and primaryKeyRow mirror the
-// INFORMATION_SCHEMA result shapes; sql.NullString distinguishes NULL from
-// empty strings.
+// tableInfoRow, informationSchemaColumnRow, primaryKeyRow, and
+// columnOptionRow mirror the INFORMATION_SCHEMA result shapes;
+// sql.NullString distinguishes NULL from empty strings.
 type tableInfoRow struct {
 	TableName       sql.NullString `gorm:"column:TABLE_NAME"`
 	ParentTableName sql.NullString `gorm:"column:PARENT_TABLE_NAME"`
@@ -291,6 +303,13 @@ type columnOptionRow struct {
 	OptionValue sql.NullString `gorm:"column:OPTION_VALUE"`
 }
 
+// Get hydrates the table from the database's INFORMATION_SCHEMA (TABLES,
+// COLUMNS, INDEX_COLUMNS, and COLUMN_OPTIONS), returning ErrTableNotFound
+// when the table does not exist. name must be the fully qualified table
+// name; it is adopted when the receiver is nil or unnamed. Proto columns
+// surface as Type "PROTO" with ProtoPackage carrying the fully-qualified
+// message name, and an allow_commit_timestamp column option maps to
+// AutoUpdateTime.
 func (t *SpannerTable) Get(ctx context.Context, cn conn.Connection, name string) (*SpannerTable, error) {
 	// If table is nil, initialize it.
 	if t == nil || t.GetName() == "" {
@@ -457,6 +476,9 @@ func (t *SpannerTable) Get(ctx context.Context, cn conn.Connection, name string)
 	return t, nil
 }
 
+// Update diffs the table against existingTable and applies the resulting
+// ALTER statements (see AlterDdl). It is a no-op when the tables are
+// identical or the diff yields no statements.
 func (t *SpannerTable) Update(ctx context.Context, cn conn.Connection, existingTable *SpannerTable) (*SpannerTable, error) {
 	// If table is nil, return gracefully.
 	if t == nil {
@@ -493,6 +515,7 @@ func (t *SpannerTable) Update(ctx context.Context, cn conn.Connection, existingT
 	return t, nil
 }
 
+// Delete drops the table from the database.
 func (t *SpannerTable) Delete(ctx context.Context, cn conn.Connection) error {
 	// If table is nil, return gracefully.
 	if t == nil {
@@ -513,6 +536,9 @@ func (t *SpannerTable) Delete(ctx context.Context, cn conn.Connection) error {
 	return nil
 }
 
+// compare reports whether two tables are identical in name, columns, and
+// interleave. Columns are compared positionally, so a reorder counts as a
+// difference.
 func (t *SpannerTable) compare(other *SpannerTable) (bool, error) {
 	// If tables are nil, return gracefully.
 	if t == nil && other == nil {
@@ -568,6 +594,12 @@ func (t *SpannerTable) compare(other *SpannerTable) (bool, error) {
 	return true, nil
 }
 
+// parseSpannerType normalizes a SPANNER_TYPE value from INFORMATION_SCHEMA
+// to the provider's type keywords. Accepted shapes: bare scalars ("INT64"),
+// sized STRING(n)/BYTES(n), ARRAY<...> of STRING/INT64/FLOAT32/FLOAT64,
+// PROTO<...> and ENUM<...>, and a bare or backticked fully-qualified message
+// name — the shape proto columns actually arrive in — all of which map to
+// "PROTO". Anything else passes through unchanged.
 func parseSpannerType(columnType string) string {
 	// Handle String types
 	if strings.HasPrefix(columnType, "STRING") {
@@ -621,6 +653,9 @@ func parseSpannerType(columnType string) string {
 	return columnType
 }
 
+// parseSpannerSize extracts the declared length from STRING(n), BYTES(n),
+// or ARRAY<STRING(n)> types; the result may be "MAX", and is "" for types
+// that carry no size.
 func parseSpannerSize(columnType string) string {
 	// Handle String types
 	if strings.HasPrefix(columnType, "STRING") {
@@ -652,6 +687,9 @@ func parseSpannerSize(columnType string) string {
 	return ""
 }
 
+// parseSpannerProtoPackage extracts the fully-qualified message or enum name
+// from a proto column's SPANNER_TYPE: PROTO<...>, ENUM<...>, a backticked
+// name, or a bare dotted name. It returns "" for non-proto types.
 func parseSpannerProtoPackage(columnType string) string {
 	// Handle PROTO types
 	if strings.HasPrefix(columnType, "PROTO") {

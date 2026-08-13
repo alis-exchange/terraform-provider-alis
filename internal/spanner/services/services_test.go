@@ -2,1254 +2,401 @@ package services
 
 import (
 	"context"
-	"fmt"
-	"os"
-	"reflect"
 	"testing"
 
 	"terraform-provider-alis/internal/spanner/conn"
+	"terraform-provider-alis/internal/spanner/conn/conntest"
 	"terraform-provider-alis/internal/spanner/schema"
 
-	"cloud.google.com/go/spanner/admin/database/apiv1/databasepb"
-	"google.golang.org/protobuf/types/known/emptypb"
+	"github.com/stretchr/testify/suite"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protodesc"
+	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
-var (
-	// TestProject is the project used for testing.
-	TestProject string
-	// TestInstance is the instance used for testing.
-	TestInstance string
-	service      *SpannerService
-)
+// IntegrationSuite runs full lifecycles (create → read → mutate → delete)
+// for every Spanner resource the provider manages, against the backend
+// resolved once by conntest.Target: an emulator by default, falling back to
+// live Spanner when no emulator is available and ALIS_OS_PROJECT /
+// ALIS_OS_INSTANCE are set. Each test creates the objects it needs under
+// distinct tftest_-prefixed names and removes them afterwards, so a shared
+// live database is left as it was found.
+type IntegrationSuite struct {
+	suite.Suite
 
-func init() {
-	TestProject = os.Getenv("ALIS_OS_PROJECT")
-	TestInstance = os.Getenv("ALIS_OS_INSTANCE")
-
-	// Fall back to placeholders so the package compiles and runs without a live
-	// project; every test in this package is an integration test and skips via
-	// skipIfNoIntegrationEnv when the environment is not configured.
-	if TestProject == "" {
-		TestProject = "test-project"
-	}
-
-	if TestInstance == "" {
-		TestInstance = "test-instance"
-	}
-
-	service = NewSpannerService(conn.New(conn.Options{}))
+	ctx     context.Context
+	service *SpannerService
+	cn      conn.Connection
+	db      string
+	live    bool
 }
 
-// skipIfNoIntegrationEnv skips tests that need a live Spanner instance when the
-// ALIS_OS_PROJECT/ALIS_OS_INSTANCE environment variables are not set.
-func skipIfNoIntegrationEnv(t *testing.T) {
-	if os.Getenv("ALIS_OS_PROJECT") == "" || os.Getenv("ALIS_OS_INSTANCE") == "" {
-		t.Skip("ALIS_OS_PROJECT and ALIS_OS_INSTANCE must be set for integration tests")
+func TestIntegrationSuite(t *testing.T) {
+	suite.Run(t, new(IntegrationSuite))
+}
+
+func (s *IntegrationSuite) SetupSuite() {
+	s.ctx = context.Background()
+	// Target registers its cleanups (connection close, emulator database
+	// drop) on the suite-level T, so they run after the last test.
+	s.cn, s.db, s.live = conntest.Target(s.T())
+	s.service = NewSpannerService(s.cn)
+}
+
+// createTable creates a table as a lifecycle prerequisite and registers a
+// cleanup on the current test that drops it.
+func (s *IntegrationSuite) createTable(tableID string, columns []*schema.SpannerTableColumn) {
+	s.T().Helper()
+	_, err := s.service.CreateSpannerTable(s.ctx, s.db, tableID, &schema.SpannerTable{
+		Schema: &schema.SpannerTableSchema{Columns: columns},
+	})
+	s.Require().NoError(err, "create table %s", tableID)
+	s.T().Cleanup(func() {
+		_, _ = s.service.DeleteSpannerTable(context.Background(), s.db+"/tables/"+tableID)
+	})
+}
+
+// ensureBoolValueBundle provisions a proto bundle for the compiled-in
+// google.protobuf.BoolValue message so emulator runs can host PROTO columns
+// without external descriptor files.
+func (s *IntegrationSuite) ensureBoolValueBundle() {
+	s.T().Helper()
+	fd := protodesc.ToFileDescriptorProto(wrapperspb.Bool(true).ProtoReflect().Descriptor().ParentFile())
+	fds, err := proto.Marshal(&descriptorpb.FileDescriptorSet{File: []*descriptorpb.FileDescriptorProto{fd}})
+	s.Require().NoError(err, "marshal descriptor set")
+	s.Require().NoError(
+		s.cn.ExecuteDDLWithDescriptors(s.ctx, s.db, fds, "CREATE PROTO BUNDLE (`google.protobuf.BoolValue`)"),
+		"create proto bundle")
+}
+
+func idColumn() *schema.SpannerTableColumn {
+	return &schema.SpannerTableColumn{
+		Name:         "id",
+		Type:         "INT64",
+		IsPrimaryKey: wrapperspb.Bool(true),
+		Required:     wrapperspb.Bool(true),
 	}
 }
 
-func TestSpannerService_CreateDatabaseRole(t *testing.T) {
-	skipIfNoIntegrationEnv(t)
-	type fields struct {
-		Conn conn.Connection
+func (s *IntegrationSuite) TestDatabaseRoleLifecycle() {
+	roleID := "tftest_admin"
+	roleName := s.db + "/databaseRoles/" + roleID
+
+	role, err := s.service.CreateDatabaseRole(s.ctx, s.db, roleID)
+	s.Require().NoError(err, "CreateDatabaseRole")
+	s.T().Cleanup(func() { _ = s.service.DeleteDatabaseRole(context.Background(), roleName) })
+	s.Equal(roleName, role.GetName())
+
+	// Role reads go through the ListDatabaseRoles admin API, which the
+	// emulator does not implement; DDL-side create/delete is still covered.
+	readable := true
+	got, err := s.service.GetDatabaseRole(s.ctx, roleName)
+	if !s.live && status.Code(err) == codes.Unimplemented {
+		readable = false
+		s.T().Log("emulator does not implement the ListDatabaseRoles admin API; skipping read-back assertions")
+	} else {
+		s.Require().NoError(err, "GetDatabaseRole")
+		s.Equal(roleName, got.GetName())
 	}
-	type args struct {
-		ctx    context.Context
-		parent string
-		roleId string
+
+	if readable {
+		roles, _, err := s.service.ListDatabaseRoles(s.ctx, s.db, 0, "")
+		s.Require().NoError(err, "ListDatabaseRoles")
+		names := make([]string, 0, len(roles))
+		for _, r := range roles {
+			names = append(names, r.GetName())
+		}
+		s.Contains(names, roleName)
 	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    *databasepb.DatabaseRole
-		wantErr bool
-	}{
-		{
-			name: "Test_CreateDatabaseRole",
-			args: args{
-				ctx:    context.Background(),
-				parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s", TestProject, TestInstance, "tf-test"),
-				roleId: "admin",
-			},
-			want: &databasepb.DatabaseRole{
-				Name: "admin",
-			},
-			wantErr: false,
-		},
+
+	s.Require().NoError(s.service.DeleteDatabaseRole(s.ctx, roleName), "DeleteDatabaseRole")
+	if readable {
+		_, err := s.service.GetDatabaseRole(s.ctx, roleName)
+		s.Equal(codes.NotFound, status.Code(err), "GetDatabaseRole after delete")
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			s := &SpannerService{
-				conn: tt.fields.Conn,
-			}
-			got, err := s.CreateDatabaseRole(tt.args.ctx, tt.args.parent, tt.args.roleId)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("CreateDatabaseRole() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("CreateDatabaseRole() got = %v, want %v", got, tt.want)
-			}
+}
+
+func (s *IntegrationSuite) TestTableLifecycle() {
+	tableID := "tftest_table"
+	tableName := s.db + "/tables/" + tableID
+
+	columns := []*schema.SpannerTableColumn{
+		idColumn(),
+		{Name: "display_name", Type: "STRING", Size: wrapperspb.Int64(255)},
+		{Name: "is_active", Type: "BOOL"},
+		{Name: "latest_return", Type: "FLOAT64", DefaultValue: wrapperspb.String("0.0")},
+		{Name: "update_time", Type: "TIMESTAMP", AutoUpdateTime: wrapperspb.Bool(true)},
+		{Name: "metadata", Type: "JSON"},
+		{Name: "data", Type: "BYTES"},
+		{Name: "tags", Type: "ARRAY<STRING>"},
+	}
+	// The emulator database is provisioned from scratch, so the test can
+	// guarantee a proto bundle and cover a PROTO column; a live database's
+	// bundles are unknown, so live runs skip that column.
+	if !s.live {
+		s.ensureBoolValueBundle()
+		columns = append(columns, &schema.SpannerTableColumn{
+			Name:         "pb",
+			Type:         "PROTO",
+			ProtoPackage: wrapperspb.String("google.protobuf.BoolValue"),
 		})
 	}
-}
 
-func TestSpannerService_GetDatabaseRole(t *testing.T) {
-	skipIfNoIntegrationEnv(t)
-	type fields struct {
-		Conn conn.Connection
+	s.createTable(tableID, columns)
+
+	got, err := s.service.GetSpannerTable(s.ctx, tableName)
+	s.Require().NoError(err, "GetSpannerTable")
+	byName := map[string]*schema.SpannerTableColumn{}
+	for _, c := range got.GetSchema().GetColumns() {
+		byName[c.Name] = c
 	}
-	type args struct {
-		ctx  context.Context
-		name string
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    *databasepb.DatabaseRole
-		wantErr bool
+	s.Len(byName, len(columns))
+
+	hydration := []struct {
+		name  string
+		check func(c *schema.SpannerTableColumn)
 	}{
-		{
-			name: "Test_GetDatabaseRole",
-			args: args{
-				ctx:  context.Background(),
-				name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/databaseRoles/%s", TestProject, TestInstance, "tf-test", "admin"),
-			},
-			want: &databasepb.DatabaseRole{
-				Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/databaseRoles/%s", TestProject, TestInstance, "tf-test", "admin"),
-			},
-			wantErr: false,
-		},
+		{name: "id", check: func(c *schema.SpannerTableColumn) {
+			s.True(c.GetIsPrimaryKey().GetValue(), "primary key")
+			s.True(c.GetRequired().GetValue(), "required")
+		}},
+		{name: "display_name", check: func(c *schema.SpannerTableColumn) {
+			s.Equal("STRING", c.GetType())
+			s.EqualValues(255, c.GetSize().GetValue())
+		}},
+		{name: "latest_return", check: func(c *schema.SpannerTableColumn) {
+			s.Equal("0.0", c.GetDefaultValue().GetValue())
+		}},
+		{name: "update_time", check: func(c *schema.SpannerTableColumn) {
+			s.True(c.GetAutoUpdateTime().GetValue(), "auto_update_time")
+		}},
+		{name: "tags", check: func(c *schema.SpannerTableColumn) {
+			s.Equal("ARRAY<STRING>", c.GetType())
+		}},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			s := &SpannerService{
-				conn: tt.fields.Conn,
-			}
-			got, err := s.GetDatabaseRole(tt.args.ctx, tt.args.name)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("GetDatabaseRole() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("GetDatabaseRole() got = %v, want %v", got, tt.want)
-			}
+	if !s.live {
+		hydration = append(hydration, struct {
+			name  string
+			check func(c *schema.SpannerTableColumn)
+		}{name: "pb", check: func(c *schema.SpannerTableColumn) {
+			s.Equal("PROTO", c.GetType())
+			s.Equal("google.protobuf.BoolValue", c.GetProtoPackage().GetValue())
+		}})
+	}
+	for _, tc := range hydration {
+		s.Run("hydrates "+tc.name, func() {
+			c, ok := byName[tc.name]
+			s.Require().True(ok, "column %s missing", tc.name)
+			tc.check(c)
 		})
 	}
+
+	// Update: widen display_name and add a column through the schema.columns
+	// field mask.
+	updated := make([]*schema.SpannerTableColumn, len(columns))
+	copy(updated, columns)
+	for i, c := range updated {
+		if c.Name == "display_name" {
+			updated[i] = &schema.SpannerTableColumn{Name: "display_name", Type: "STRING", Size: wrapperspb.Int64(500)}
+		}
+	}
+	updated = append(updated, &schema.SpannerTableColumn{Name: "notes", Type: "STRING", Size: wrapperspb.Int64(100)})
+
+	_, err = s.service.UpdateSpannerTable(s.ctx,
+		&schema.SpannerTable{Name: tableName, Schema: &schema.SpannerTableSchema{Columns: updated}},
+		&fieldmaskpb.FieldMask{Paths: []string{"schema.columns"}}, false)
+	s.Require().NoError(err, "UpdateSpannerTable")
+
+	got, err = s.service.GetSpannerTable(s.ctx, tableName)
+	s.Require().NoError(err, "GetSpannerTable after update")
+	byName = map[string]*schema.SpannerTableColumn{}
+	for _, c := range got.GetSchema().GetColumns() {
+		byName[c.Name] = c
+	}
+	s.Require().Contains(byName, "notes", "added column missing after update")
+	s.EqualValues(500, byName["display_name"].GetSize().GetValue(), "display_name size after update")
+
+	_, err = s.service.DeleteSpannerTable(s.ctx, tableName)
+	s.Require().NoError(err, "DeleteSpannerTable")
+	_, err = s.service.GetSpannerTable(s.ctx, tableName)
+	s.Equal(codes.NotFound, status.Code(err), "GetSpannerTable after delete")
 }
 
-func TestCreateSpannerTable(t *testing.T) {
-	skipIfNoIntegrationEnv(t)
-	type args struct {
-		ctx     context.Context
-		parent  string
-		tableId string
-		table   *schema.SpannerTable
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    *schema.SpannerTable
-		wantErr bool
-	}{
-		{
-			name: "Test_CreateSpannerTable",
-			args: args{
-				ctx:     context.Background(),
-				parent:  fmt.Sprintf("projects/%s/instances/%s/databases/%s", TestProject, TestInstance, "play-np"),
-				tableId: "tf_test",
-				table: &schema.SpannerTable{
-					Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "play-np", "tf_test"),
-					Schema: &schema.SpannerTableSchema{
-						Columns: []*schema.SpannerTableColumn{
-							{
-								Name:         "id",
-								IsPrimaryKey: wrapperspb.Bool(true),
-								Type:         "INT64",
-								Required:     wrapperspb.Bool(true),
-							},
-							{
-								Name: "display_name",
-								Type: "STRING",
-								Size: wrapperspb.Int64(200),
-							},
-							{
-								Name: "is_active",
-								Type: "BOOL",
-							},
-							{
-								Name:         "latest_return",
-								Type:         "FLOAT64",
-								DefaultValue: wrapperspb.String("10.0"),
-							},
-							{
-								Name: "inception_date",
-								Type: "DATE",
-							},
-							{
-								Name: "last_refreshed_at",
-								Type: "TIMESTAMP",
-							},
-							{
-								Name: "metadata",
-								Type: "JSON",
-							},
-							{
-								Name: "data",
-								Type: "BYTES",
-							},
-							{
-								Name:         "User",
-								Type:         "PROTO",
-								ProtoPackage: wrapperspb.String("alis.open.iam.v1.User"),
-							},
-							{
-								Name:           "user_name",
-								IsComputed:     wrapperspb.Bool(true),
-								ComputationDdl: wrapperspb.String("User.name"),
-								IsStored:       wrapperspb.Bool(true),
-								Type:           "STRING",
-							},
-							{
-								Name: "tags",
-								Type: "ARRAY<STRING>",
-								Size: wrapperspb.Int64(255),
-							},
-							{
-								Name: "ids",
-								Type: "ARRAY<INT64>",
-							},
-							{
-								Name: "prices",
-								Type: "ARRAY<FLOAT64>",
-							},
-							{
-								Name: "discounts",
-								Type: "ARRAY<FLOAT32>",
-							},
-						},
-					},
-				},
-			},
+func (s *IntegrationSuite) TestTableIndexLifecycle() {
+	tableID := "tftest_idx"
+	tableName := s.db + "/tables/" + tableID
+	indexName := "tftest_idx_by_name"
+
+	s.createTable(tableID, []*schema.SpannerTableColumn{
+		idColumn(),
+		{Name: "display_name", Type: "STRING", Size: wrapperspb.Int64(255)},
+	})
+
+	_, err := s.service.CreateSpannerTableIndex(s.ctx, tableName, &SpannerTableIndex{
+		Name: indexName,
+		Columns: []*SpannerTableIndexColumn{
+			{Name: "display_name", Order: SpannerTableIndexColumnOrder_DESC},
 		},
+		Unique: wrapperspb.Bool(true),
+	})
+	s.Require().NoError(err, "CreateSpannerTableIndex")
+
+	got, err := s.service.GetSpannerTableIndex(s.ctx, tableName, indexName)
+	s.Require().NoError(err, "GetSpannerTableIndex")
+	s.Require().Len(got.Columns, 1)
+	s.Equal("display_name", got.Columns[0].Name)
+	s.Equal(SpannerTableIndexColumnOrder_DESC, got.Columns[0].Order)
+	s.True(got.Unique.GetValue(), "unique")
+
+	indices, err := s.service.ListSpannerTableIndices(s.ctx, tableName)
+	s.Require().NoError(err, "ListSpannerTableIndices")
+	names := make([]string, 0, len(indices))
+	for _, idx := range indices {
+		names = append(names, idx.Name)
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := service.CreateSpannerTable(tt.args.ctx, tt.args.parent, tt.args.tableId, tt.args.table)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("CreateSpannerTable() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("CreateSpannerTable() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
+	s.Contains(names, indexName)
+
+	_, err = s.service.DeleteSpannerTableIndex(s.ctx, tableName, indexName)
+	s.Require().NoError(err, "DeleteSpannerTableIndex")
+	_, err = s.service.GetSpannerTableIndex(s.ctx, tableName, indexName)
+	s.Equal(codes.NotFound, status.Code(err), "GetSpannerTableIndex after delete")
 }
 
-func TestGetSpannerTable(t *testing.T) {
-	skipIfNoIntegrationEnv(t)
-	type args struct {
-		ctx  context.Context
-		name string
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    *schema.SpannerTable
-		wantErr bool
-	}{
-		{
-			name: "Test_GetSpannerTable",
-			args: args{
-				ctx:  context.Background(),
-				name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "mentenova-co", "mentenova_co_dev_62g_Maps"),
-			},
-			want:    &schema.SpannerTable{},
-			wantErr: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := service.GetSpannerTable(tt.args.ctx, tt.args.name)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("GetSpannerTable() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("GetSpannerTable() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
+func (s *IntegrationSuite) TestForeignKeyLifecycle() {
+	childName := s.db + "/tables/tftest_fk_orders"
+	constraintName := "FK_tftest_orders_user"
+
+	s.createTable("tftest_fk_users", []*schema.SpannerTableColumn{idColumn()})
+	s.createTable("tftest_fk_orders", []*schema.SpannerTableColumn{
+		idColumn(),
+		{Name: "user_id", Type: "INT64"},
+	})
+
+	_, err := s.service.CreateSpannerTableForeignKeyConstraint(s.ctx, childName, &schema.SpannerTableForeignKeyConstraint{
+		Name:             constraintName,
+		Column:           "user_id",
+		ReferencedTable:  "tftest_fk_users",
+		ReferencedColumn: "id",
+	})
+	s.Require().NoError(err, "CreateSpannerTableForeignKeyConstraint")
+	// The constraint must be dropped before the tables it links can be.
+	s.T().Cleanup(func() {
+		_ = s.service.DeleteSpannerTableForeignKeyConstraint(context.Background(), childName, constraintName)
+	})
+
+	got, err := s.service.GetSpannerTableForeignKeyConstraint(s.ctx, childName, constraintName)
+	s.Require().NoError(err, "GetSpannerTableForeignKeyConstraint")
+	s.Equal("user_id", got.Column)
+	s.Equal("tftest_fk_users", got.ReferencedTable)
+	s.Equal("id", got.ReferencedColumn)
+
+	s.Require().NoError(
+		s.service.DeleteSpannerTableForeignKeyConstraint(s.ctx, childName, constraintName),
+		"DeleteSpannerTableForeignKeyConstraint")
+	_, err = s.service.GetSpannerTableForeignKeyConstraint(s.ctx, childName, constraintName)
+	s.Equal(codes.NotFound, status.Code(err), "GetSpannerTableForeignKeyConstraint after delete")
 }
 
-func TestUpdateSpannerTable(t *testing.T) {
-	skipIfNoIntegrationEnv(t)
-	type args struct {
-		ctx          context.Context
-		table        *schema.SpannerTable
-		updateMask   *fieldmaskpb.FieldMask
-		allowMissing bool
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    *schema.SpannerTable
-		wantErr bool
-	}{
-		{
-			name: "Test_UpdateSpannerTable",
-			args: args{
-				ctx: context.Background(),
-				table: &schema.SpannerTable{
-					Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "play-np", "tf_test"),
-					Schema: &schema.SpannerTableSchema{
-						Columns: []*schema.SpannerTableColumn{
-							{
-								Name:         "id",
-								IsPrimaryKey: wrapperspb.Bool(true),
-								Type:         "INT64",
-								Required:     wrapperspb.Bool(true),
-							},
-							{
-								Name: "display_name",
-								Type: "STRING",
-								Size: wrapperspb.Int64(200),
-							},
-							{
-								Name: "is_active",
-								Type: "BOOL",
-							},
-							{
-								Name:         "latest_return",
-								Type:         "FLOAT64",
-								DefaultValue: wrapperspb.String("10.0"),
-							},
-							{
-								Name: "inception_date",
-								Type: "DATE",
-							},
-							{
-								Name: "last_refreshed_at",
-								Type: "TIMESTAMP",
-							},
-							{
-								Name: "metadata",
-								Type: "JSON",
-							},
-							{
-								Name: "data",
-								Type: "BYTES",
-							},
-							{
-								Name:         "User",
-								Type:         "PROTO",
-								ProtoPackage: wrapperspb.String("alis.open.iam.v1.User"),
-							},
-							{
-								Name:           "user_name",
-								IsComputed:     wrapperspb.Bool(true),
-								ComputationDdl: wrapperspb.String("User.name"),
-								IsStored:       wrapperspb.Bool(true),
-								Type:           "STRING",
-							},
-							{
-								Name: "tags",
-								Type: "ARRAY<STRING>",
-								Size: wrapperspb.Int64(255),
-							},
-							{
-								Name: "ids",
-								Type: "ARRAY<INT64>",
-							},
-							{
-								Name: "prices",
-								Type: "ARRAY<FLOAT64>",
-							},
-							{
-								Name: "discounts",
-								Type: "ARRAY<FLOAT32>",
-							},
-						},
-					},
-				},
-				updateMask: &fieldmaskpb.FieldMask{
-					Paths: []string{"schema.columns"},
-				},
-				allowMissing: false,
-			},
-			want:    &schema.SpannerTable{},
-			wantErr: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := service.UpdateSpannerTable(tt.args.ctx, tt.args.table, tt.args.updateMask, tt.args.allowMissing)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("UpdateSpannerTable() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("UpdateSpannerTable() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
+func (s *IntegrationSuite) TestRowDeletionPolicyLifecycle() {
+	tableID := "tftest_ttl"
+	tableName := s.db + "/tables/" + tableID
+
+	s.createTable(tableID, []*schema.SpannerTableColumn{
+		idColumn(),
+		{Name: "created_at", Type: "TIMESTAMP"},
+	})
+
+	_, err := s.service.CreateSpannerTableRowDeletionPolicy(s.ctx, tableName, &SpannerTableRowDeletionPolicy{
+		Column:   "created_at",
+		Duration: wrapperspb.Int64(30),
+	})
+	s.Require().NoError(err, "CreateSpannerTableRowDeletionPolicy")
+
+	got, err := s.service.GetSpannerTableRowDeletionPolicy(s.ctx, tableName)
+	s.Require().NoError(err, "GetSpannerTableRowDeletionPolicy")
+	s.Equal("created_at", got.Column)
+	s.EqualValues(30, got.Duration.GetValue())
+
+	_, err = s.service.UpdateSpannerTableRowDeletionPolicy(s.ctx, tableName, &SpannerTableRowDeletionPolicy{
+		Column:   "created_at",
+		Duration: wrapperspb.Int64(60),
+	})
+	s.Require().NoError(err, "UpdateSpannerTableRowDeletionPolicy")
+	got, err = s.service.GetSpannerTableRowDeletionPolicy(s.ctx, tableName)
+	s.Require().NoError(err, "GetSpannerTableRowDeletionPolicy after update")
+	s.EqualValues(60, got.Duration.GetValue())
+
+	s.Require().NoError(s.service.DeleteSpannerTableRowDeletionPolicy(s.ctx, tableName), "DeleteSpannerTableRowDeletionPolicy")
+	_, err = s.service.GetSpannerTableRowDeletionPolicy(s.ctx, tableName)
+	s.Error(err, "GetSpannerTableRowDeletionPolicy after delete should fail")
 }
 
-func TestDeleteSpannerTable(t *testing.T) {
-	skipIfNoIntegrationEnv(t)
-	type args struct {
-		ctx  context.Context
-		name string
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    *emptypb.Empty
-		wantErr bool
-	}{
-		{
-			name: "Test_DeleteSpannerTable",
-			args: args{
-				ctx:  context.Background(),
-				name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "alis-px", "tf_test"),
+func (s *IntegrationSuite) TestSequenceLifecycle() {
+	seqName := s.db + "/sequences/tftest_seq"
+
+	_, err := s.service.CreateSpannerSequence(s.ctx, s.db, &schema.SpannerSequence{
+		Name: seqName,
+		Options: &schema.SpannerSequenceOptions{
+			SequenceKind: schema.SpannerSequenceKindBitReversedPositive,
+		},
+	})
+	s.Require().NoError(err, "CreateSpannerSequence")
+	s.T().Cleanup(func() { _ = s.service.DeleteSpannerSequence(context.Background(), seqName) })
+
+	got, err := s.service.GetSpannerSequence(s.ctx, seqName)
+	s.Require().NoError(err, "GetSpannerSequence")
+	s.Equal(seqName, got.GetName())
+
+	_, err = s.service.UpdateSpannerSequence(s.ctx, &schema.SpannerSequence{
+		Name: seqName,
+		Options: &schema.SpannerSequenceOptions{
+			SequenceKind: schema.SpannerSequenceKindBitReversedPositive,
+			SkipRange: &schema.SpannerSequenceSkipRange{
+				Min: wrapperspb.Int64(1),
+				Max: wrapperspb.Int64(1000),
 			},
 		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := service.DeleteSpannerTable(tt.args.ctx, tt.args.name)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("DeleteSpannerTable() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("DeleteSpannerTable() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
+	})
+	s.Require().NoError(err, "UpdateSpannerSequence")
+	got, err = s.service.GetSpannerSequence(s.ctx, seqName)
+	s.Require().NoError(err, "GetSpannerSequence after update")
+	s.EqualValues(1, got.GetOptions().GetSkipRange().GetMin().GetValue())
+	s.EqualValues(1000, got.GetOptions().GetSkipRange().GetMax().GetValue())
+
+	s.Require().NoError(s.service.DeleteSpannerSequence(s.ctx, seqName), "DeleteSpannerSequence")
+	_, err = s.service.GetSpannerSequence(s.ctx, seqName)
+	s.Equal(codes.NotFound, status.Code(err), "GetSpannerSequence after delete")
 }
 
-func TestSpannerService_CreateSpannerTableIndex(t *testing.T) {
-	skipIfNoIntegrationEnv(t)
-	type fields struct{}
-	type args struct {
-		ctx    context.Context
-		parent string
-		index  *SpannerTableIndex
+func (s *IntegrationSuite) TestTableIamBindingLifecycle() {
+	if !s.live {
+		s.T().Skip("emulator does not surface INFORMATION_SCHEMA.TABLE_PRIVILEGES; IAM binding reads need live Spanner")
 	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    *SpannerTableIndex
-		wantErr bool
-	}{
-		{
-			name: "Test_CreateSpannerTableIndex",
-			args: args{
-				ctx:    context.Background(),
-				parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "tf-test", "tftest"),
-				index: &SpannerTableIndex{
-					Name: "test_idx",
-					Columns: []*SpannerTableIndexColumn{
-						{
-							Name: "name",
-						},
-						{
-							Name:  "display_name",
-							Order: SpannerTableIndexColumnOrder_DESC,
-						},
-						{
-							Name:  "state",
-							Order: SpannerTableIndexColumnOrder_ASC,
-						},
-					},
-					Unique: &wrapperspb.BoolValue{
-						Value: true,
-					},
-				},
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := service.CreateSpannerTableIndex(tt.args.ctx, tt.args.parent, tt.args.index)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("CreateSpannerTableIndex() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("CreateSpannerTableIndex() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
+	tableID := "tftest_iam"
+	tableName := s.db + "/tables/" + tableID
+	roleID := "tftest_reader"
+	roleName := s.db + "/databaseRoles/" + roleID
 
-func TestSpannerService_GetSpannerTableIndex(t *testing.T) {
-	skipIfNoIntegrationEnv(t)
-	type fields struct{}
-	type args struct {
-		ctx    context.Context
-		parent string
-		name   string
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    *SpannerTableIndex
-		wantErr bool
-	}{
-		{
-			name: "Test_GetSpannerTableIndex",
-			args: args{
-				ctx:    context.Background(),
-				parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "tf-test", "tftest"),
-				name:   "test_idx",
-			},
-			want:    &SpannerTableIndex{},
-			wantErr: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := service.GetSpannerTableIndex(tt.args.ctx, tt.args.parent, tt.args.name)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("GetSpannerTableIndex() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("GetSpannerTableIndex() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
+	s.createTable(tableID, []*schema.SpannerTableColumn{idColumn()})
+	_, err := s.service.CreateDatabaseRole(s.ctx, s.db, roleID)
+	s.Require().NoError(err, "CreateDatabaseRole")
+	s.T().Cleanup(func() { _ = s.service.DeleteDatabaseRole(context.Background(), roleName) })
 
-func TestSpannerService_ListSpannerTableIndices(t *testing.T) {
-	skipIfNoIntegrationEnv(t)
-	type fields struct{}
-	type args struct {
-		ctx    context.Context
-		parent string
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    []*SpannerTableIndex
-		wantErr bool
-	}{
-		{
-			name: "Test_ListSpannerTableIndices",
-			args: args{
-				ctx:    context.Background(),
-				parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "tf-test", "tftest"),
-			},
-			want:    []*SpannerTableIndex{},
-			wantErr: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := service.ListSpannerTableIndices(tt.args.ctx, tt.args.parent)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ListSpannerTableIndices() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("ListSpannerTableIndices() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
+	_, err = s.service.SetTableIamBinding(s.ctx, tableName, &TablePolicyBinding{
+		Role:        roleID,
+		Permissions: []TablePolicyBindingPermission{TablePolicyBindingPermission_SELECT},
+	})
+	s.Require().NoError(err, "SetTableIamBinding")
+	s.T().Cleanup(func() { _ = s.service.DeleteTableIamBinding(context.Background(), tableName, roleID) })
 
-func TestSpannerService_DeleteIndex(t *testing.T) {
-	skipIfNoIntegrationEnv(t)
-	type fields struct {
-		Conn conn.Connection
-	}
-	type args struct {
-		ctx       context.Context
-		parent    string
-		indexName string
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    *emptypb.Empty
-		wantErr bool
-	}{
-		{
-			name: "Test_DeleteSpannerTableIndex",
-			args: args{
-				ctx:       context.Background(),
-				parent:    fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "tf-test", "tftest"),
-				indexName: "test_idx",
-			},
-			want:    &emptypb.Empty{},
-			wantErr: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			s := &SpannerService{
-				conn: tt.fields.Conn,
-			}
-			got, err := s.DeleteSpannerTableIndex(tt.args.ctx, tt.args.parent, tt.args.indexName)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("DeleteSpannerTableIndex() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("DeleteSpannerTableIndex() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
+	got, err := s.service.GetTableIamBinding(s.ctx, tableName, roleID)
+	s.Require().NoError(err, "GetTableIamBinding")
+	s.Equal(roleID, got.Role)
+	s.Contains(got.Permissions, TablePolicyBindingPermission_SELECT)
 
-func TestSpannerService_SetTableIamBinding(t *testing.T) {
-	skipIfNoIntegrationEnv(t)
-	type fields struct {
-		Conn conn.Connection
-	}
-	type args struct {
-		ctx     context.Context
-		parent  string
-		binding *TablePolicyBinding
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    *TablePolicyBinding
-		wantErr bool
-	}{
-		{
-			name: "Test_SetTableIamBinding",
-			args: args{
-				ctx:    context.Background(),
-				parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "tf-test", "tftest"),
-				binding: &TablePolicyBinding{
-					Role: "admin",
-					Permissions: []TablePolicyBindingPermission{
-						TablePolicyBindingPermission_SELECT,
-						TablePolicyBindingPermission_INSERT,
-						TablePolicyBindingPermission_UPDATE,
-						TablePolicyBindingPermission_DELETE,
-					},
-				},
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			s := &SpannerService{
-				conn: tt.fields.Conn,
-			}
-			got, err := s.SetTableIamBinding(tt.args.ctx, tt.args.parent, tt.args.binding)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("SetTableIamBinding() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("SetTableIamBinding() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestSpannerService_GetTableIamBinding(t *testing.T) {
-	skipIfNoIntegrationEnv(t)
-	type fields struct {
-		Conn conn.Connection
-	}
-	type args struct {
-		ctx    context.Context
-		parent string
-		role   string
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    *TablePolicyBinding
-		wantErr bool
-	}{
-		{
-			name: "Test_GetTableIamBinding",
-			args: args{
-				ctx:    context.Background(),
-				parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "tf-test", "tftest"),
-				role:   "admin",
-			},
-			want:    &TablePolicyBinding{},
-			wantErr: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			s := &SpannerService{
-				conn: tt.fields.Conn,
-			}
-			got, err := s.GetTableIamBinding(tt.args.ctx, tt.args.parent, tt.args.role)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("GetTableIamBinding() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("GetTableIamBinding() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestSpannerService_DeleteTableIamBinding(t *testing.T) {
-	skipIfNoIntegrationEnv(t)
-	type fields struct {
-		Conn conn.Connection
-	}
-	type args struct {
-		ctx    context.Context
-		parent string
-		role   string
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		wantErr bool
-	}{
-		{
-			name: "Test_DeleteTableIamBinding",
-			args: args{
-				ctx:    context.Background(),
-				parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "tf-test", "tftest"),
-				role:   "admin",
-			},
-			wantErr: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			s := &SpannerService{
-				conn: tt.fields.Conn,
-			}
-			if err := s.DeleteTableIamBinding(tt.args.ctx, tt.args.parent, tt.args.role); (err != nil) != tt.wantErr {
-				t.Errorf("DeleteTableIamBinding() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
-func TestSpannerService_ListDatabaseRoles(t *testing.T) {
-	skipIfNoIntegrationEnv(t)
-	type fields struct {
-		Conn conn.Connection
-	}
-	type args struct {
-		ctx       context.Context
-		parent    string
-		pageSize  int32
-		pageToken string
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    []*databasepb.DatabaseRole
-		want1   string
-		wantErr bool
-	}{
-		{
-			name: "Test_ListDatabaseRoles",
-			args: args{
-				ctx:       context.Background(),
-				parent:    fmt.Sprintf("projects/%s/instances/%s/databases/%s", TestProject, TestInstance, "tf-test"),
-				pageSize:  100,
-				pageToken: "",
-			},
-			want:    []*databasepb.DatabaseRole{},
-			want1:   "",
-			wantErr: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			s := &SpannerService{
-				conn: tt.fields.Conn,
-			}
-			got, got1, err := s.ListDatabaseRoles(tt.args.ctx, tt.args.parent, tt.args.pageSize, tt.args.pageToken)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ListDatabaseRoles() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("ListDatabaseRoles() got = %v, want %v", got, tt.want)
-			}
-			if got1 != tt.want1 {
-				t.Errorf("ListDatabaseRoles() got1 = %v, want %v", got1, tt.want1)
-			}
-		})
-	}
-}
-
-func TestSpannerService_DeleteDatabaseRole(t *testing.T) {
-	skipIfNoIntegrationEnv(t)
-	type fields struct {
-		Conn conn.Connection
-	}
-	type args struct {
-		ctx  context.Context
-		name string
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		wantErr bool
-	}{
-		{
-			name: "Test_DeleteDatabaseRole",
-			args: args{
-				ctx:  context.Background(),
-				name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/databaseRoles/%s", TestProject, TestInstance, "tf-test", "admin"),
-			},
-			wantErr: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			s := &SpannerService{
-				conn: tt.fields.Conn,
-			}
-			if err := s.DeleteDatabaseRole(tt.args.ctx, tt.args.name); (err != nil) != tt.wantErr {
-				t.Errorf("DeleteDatabaseRole() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
-func TestSpannerService_CreateSpannerTableForeignKeyConstraint(t *testing.T) {
-	skipIfNoIntegrationEnv(t)
-	type fields struct {
-		Conn conn.Connection
-	}
-	type args struct {
-		ctx        context.Context
-		parent     string
-		constraint *schema.SpannerTableForeignKeyConstraint
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    *schema.SpannerTableForeignKeyConstraint
-		wantErr bool
-	}{
-		{
-			name: "Test_CreateSpannerTableForeignKeyConstraint",
-			args: args{
-				ctx:    context.Background(),
-				parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "alis_px_dev_cmk", "branches"),
-				constraint: &schema.SpannerTableForeignKeyConstraint{
-					Name:             "fk_branches_portfolio_id",
-					Column:           "parent",
-					ReferencedTable:  "portfolios",
-					ReferencedColumn: "portfolio_id",
-					OnDelete:         schema.SpannerTableConstraintActionCascade,
-				},
-			},
-			want:    &schema.SpannerTableForeignKeyConstraint{},
-			wantErr: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := service.CreateSpannerTableForeignKeyConstraint(tt.args.ctx, tt.args.parent, tt.args.constraint)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("CreateSpannerTableForeignKeyConstraint() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("CreateSpannerTableForeignKeyConstraint() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestSpannerService_GetSpannerTableForeignKeyConstraint(t *testing.T) {
-	skipIfNoIntegrationEnv(t)
-	type fields struct {
-		Conn conn.Connection
-	}
-	type args struct {
-		ctx    context.Context
-		parent string
-		name   string
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    *schema.SpannerTableForeignKeyConstraint
-		wantErr bool
-	}{
-		{
-			name: "Test_GetSpannerTableForeignKeyConstraint",
-			args: args{
-				ctx:    context.Background(),
-				parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "alis_px_dev_cmk", "branches"),
-				name:   "fk_branches_portfolio_id",
-			},
-			want:    &schema.SpannerTableForeignKeyConstraint{},
-			wantErr: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := service.GetSpannerTableForeignKeyConstraint(tt.args.ctx, tt.args.parent, tt.args.name)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("GetSpannerTableForeignKeyConstraint() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("GetSpannerTableForeignKeyConstraint() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestSpannerService_CreateSpannerTableRowDeletionPolicy(t *testing.T) {
-	skipIfNoIntegrationEnv(t)
-	type fields struct {
-		Conn conn.Connection
-	}
-	type args struct {
-		ctx    context.Context
-		parent string
-		ttl    *SpannerTableRowDeletionPolicy
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    *SpannerTableRowDeletionPolicy
-		wantErr bool
-	}{
-		{
-			name: "Test_CreateSpannerTableRowDeletionPolicy",
-			args: args{
-				ctx:    context.Background(),
-				parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "alis-px", "tf_test"),
-				ttl: &SpannerTableRowDeletionPolicy{
-					Column:   "updated_at",
-					Duration: wrapperspb.Int64(1),
-				},
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			s := &SpannerService{
-				conn: tt.fields.Conn,
-			}
-			got, err := s.CreateSpannerTableRowDeletionPolicy(tt.args.ctx, tt.args.parent, tt.args.ttl)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("CreateSpannerTableRowDeletionPolicy() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("CreateSpannerTableRowDeletionPolicy() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestSpannerService_GetSpannerTableRowDeletionPolicy(t *testing.T) {
-	skipIfNoIntegrationEnv(t)
-	type fields struct {
-		Conn conn.Connection
-	}
-	type args struct {
-		ctx    context.Context
-		parent string
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    *SpannerTableRowDeletionPolicy
-		wantErr bool
-	}{
-		{
-			name: "Test_GetSpannerTableRowDeletionPolicy",
-			args: args{
-				ctx:    context.Background(),
-				parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "alis-px", "tf_test"),
-			},
-			want:    &SpannerTableRowDeletionPolicy{},
-			wantErr: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			s := &SpannerService{
-				conn: tt.fields.Conn,
-			}
-			got, err := s.GetSpannerTableRowDeletionPolicy(tt.args.ctx, tt.args.parent)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("GetSpannerTableRowDeletionPolicy() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("GetSpannerTableRowDeletionPolicy() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestSpannerService_UpdateSpannerTableRowDeletionPolicy(t *testing.T) {
-	skipIfNoIntegrationEnv(t)
-	type fields struct {
-		Conn conn.Connection
-	}
-	type args struct {
-		ctx    context.Context
-		parent string
-		ttl    *SpannerTableRowDeletionPolicy
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    *SpannerTableRowDeletionPolicy
-		wantErr bool
-	}{
-		{
-			name: "Test_UpdateSpannerTableRowDeletionPolicy",
-			args: args{
-				ctx:    context.Background(),
-				parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "alis-px", "tf_test"),
-				ttl: &SpannerTableRowDeletionPolicy{
-					Column:   "updated_at",
-					Duration: wrapperspb.Int64(0),
-				},
-			},
-			want:    &SpannerTableRowDeletionPolicy{},
-			wantErr: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			s := &SpannerService{
-				conn: tt.fields.Conn,
-			}
-			got, err := s.UpdateSpannerTableRowDeletionPolicy(tt.args.ctx, tt.args.parent, tt.args.ttl)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("UpdateSpannerTableRowDeletionPolicy() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("UpdateSpannerTableRowDeletionPolicy() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestSpannerService_DeleteSpannerTableRowDeletionPolicy(t *testing.T) {
-	skipIfNoIntegrationEnv(t)
-	type fields struct {
-		Conn conn.Connection
-	}
-	type args struct {
-		ctx    context.Context
-		parent string
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		wantErr bool
-	}{
-		{
-			name: "Test_DeleteSpannerTableRowDeletionPolicy",
-			args: args{
-				ctx:    context.Background(),
-				parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s/tables/%s", TestProject, TestInstance, "alis-px", "tf_test"),
-			},
-			wantErr: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			s := &SpannerService{
-				conn: tt.fields.Conn,
-			}
-			if err := s.DeleteSpannerTableRowDeletionPolicy(tt.args.ctx, tt.args.parent); (err != nil) != tt.wantErr {
-				t.Errorf("DeleteSpannerTableRowDeletionPolicy() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
-func TestSpannerService_CreateSpannerSequence(t *testing.T) {
-	skipIfNoIntegrationEnv(t)
-	type fields struct {
-		Conn conn.Connection
-	}
-	type args struct {
-		ctx      context.Context
-		parent   string
-		sequence *schema.SpannerSequence
-	}
-
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    *schema.SpannerSequence
-		wantErr bool
-	}{
-		{
-			name: "Test_CreateSpannerSequence",
-			args: args{
-				ctx:    context.Background(),
-				parent: fmt.Sprintf("projects/%s/instances/%s/databases/%s", TestProject, TestInstance, "play-np"),
-				sequence: &schema.SpannerSequence{
-					Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/sequences/%s", TestProject, TestInstance, "play-np", "test_sequence"),
-					Options: &schema.SpannerSequenceOptions{
-						SequenceKind: schema.SpannerSequenceKindBitReversedPositive,
-					},
-				},
-			},
-			want: &schema.SpannerSequence{
-				Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/sequences/%s", TestProject, TestInstance, "play-np", "test_sequence"),
-				Options: &schema.SpannerSequenceOptions{
-					SequenceKind: schema.SpannerSequenceKindBitReversedPositive,
-				},
-			},
-			wantErr: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			s := &SpannerService{
-				conn: tt.fields.Conn,
-			}
-			got, err := s.CreateSpannerSequence(tt.args.ctx, tt.args.parent, tt.args.sequence)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("CreateSpannerSequence() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("CreateSpannerSequence() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestSpannerService_UpdateSpannerSequence(t *testing.T) {
-	skipIfNoIntegrationEnv(t)
-	type fields struct {
-		Conn conn.Connection
-	}
-	type args struct {
-		ctx      context.Context
-		sequence *schema.SpannerSequence
-	}
-
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    *schema.SpannerSequence
-		wantErr bool
-	}{
-		{
-			name: "Test_UpdateSpannerSequence",
-			args: args{
-				ctx: context.Background(),
-				sequence: &schema.SpannerSequence{
-					Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/sequences/%s", TestProject, TestInstance, "play-np", "test_sequence"),
-					Options: &schema.SpannerSequenceOptions{
-						SequenceKind: schema.SpannerSequenceKindBitReversedPositive,
-						SkipRange: &schema.SpannerSequenceSkipRange{
-							Min: wrapperspb.Int64(1000),
-							Max: wrapperspb.Int64(5000000),
-						},
-					},
-				},
-			},
-			want: &schema.SpannerSequence{
-				Name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/sequences/%s", TestProject, TestInstance, "play-np", "test_sequence"),
-				Options: &schema.SpannerSequenceOptions{
-					SequenceKind: schema.SpannerSequenceKindBitReversedPositive,
-					SkipRange: &schema.SpannerSequenceSkipRange{
-						Min: wrapperspb.Int64(1000),
-						Max: wrapperspb.Int64(5000000),
-					},
-				},
-			},
-			wantErr: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			s := &SpannerService{
-				conn: tt.fields.Conn,
-			}
-			got, err := s.UpdateSpannerSequence(tt.args.ctx, tt.args.sequence)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("UpdateSpannerSequence() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("UpdateSpannerSequence() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestSpannerService_GetSpannerSequence(t *testing.T) {
-	skipIfNoIntegrationEnv(t)
-	type fields struct {
-		Conn conn.Connection
-	}
-	type args struct {
-		ctx  context.Context
-		name string
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    *schema.SpannerSequence
-		wantErr bool
-	}{
-		{
-			name: "Test_GetSpannerSequence",
-			args: args{
-				ctx:  context.Background(),
-				name: fmt.Sprintf("projects/%s/instances/%s/databases/%s/sequences/%s", TestProject, TestInstance, "play-np", "test_sequence"),
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			s := &SpannerService{
-				conn: tt.fields.Conn,
-			}
-			got, err := s.GetSpannerSequence(tt.args.ctx, tt.args.name)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("GetSpannerSequence() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("GetSpannerSequence() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
+	s.Require().NoError(s.service.DeleteTableIamBinding(s.ctx, tableName, roleID), "DeleteTableIamBinding")
 }

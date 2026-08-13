@@ -4,8 +4,10 @@
 //
 // Resolution order: an already-set SPANNER_EMULATOR_HOST wins (CI service
 // container or a developer's own emulator); otherwise a container is started
-// via testcontainers-go when Docker is available; otherwise the test is
-// skipped. One emulator and one instance serve the whole test process; every
+// via testcontainers-go when Docker is available (image
+// gcr.io/cloud-spanner-emulator/emulator:latest, overridable via
+// SPANNER_EMULATOR_IMAGE); otherwise the test is skipped. One emulator and
+// one instance serve the whole test process; every
 // test gets a fresh randomized database dropped on cleanup, so tests stay
 // order-independent and parallelizable.
 package conntest
@@ -72,6 +74,8 @@ func ensureEmulator() error {
 	return setupErr
 }
 
+// ensureInstance creates the shared test instance on the emulator, treating
+// AlreadyExists as success so multiple test binaries can share one emulator.
 func ensureInstance(ctx context.Context) error {
 	ia, err := instanceadmin.NewInstanceAdminClient(ctx)
 	if err != nil {
@@ -134,6 +138,52 @@ func Setup(t *testing.T, dialect databasepb.DatabaseDialect) (conn.Connection, s
 	return cn, database
 }
 
+// Target resolves the Spanner backend for integration tests that exercise
+// full service lifecycles.
+//
+// Resolution order:
+//
+//  1. SPANNER_EMULATOR_HOST set — that emulator, with a fresh throwaway
+//     database.
+//  2. Docker available — a testcontainers-managed emulator, same fresh
+//     database semantics. Together with (1) this keeps CI and automated
+//     agents on the emulator by default.
+//  3. ALIS_OS_PROJECT and ALIS_OS_INSTANCE set — the live database named by
+//     ALIS_OS_DATABASE (default "tf-test") on that instance: the fallback
+//     for developers who want a real-Spanner run when no emulator is
+//     available. The database must already exist; tests create and remove
+//     their own objects inside it.
+//  4. Otherwise the test skips.
+//
+// live reports whether the returned database is real Spanner, for fixtures
+// only one backend can host (e.g. proto bundles the test provisions itself
+// on the emulator, or IAM reads the emulator does not surface).
+func Target(t *testing.T) (cn conn.Connection, database string, live bool) {
+	t.Helper()
+
+	if err := ensureEmulator(); err == nil {
+		cn, database = Setup(t, databasepb.DatabaseDialect_GOOGLE_STANDARD_SQL)
+		return cn, database, false
+	}
+
+	project, instance := os.Getenv("ALIS_OS_PROJECT"), os.Getenv("ALIS_OS_INSTANCE")
+	if project != "" && instance != "" {
+		dbID := os.Getenv("ALIS_OS_DATABASE")
+		if dbID == "" {
+			dbID = "tf-test"
+		}
+		cn := conn.New(conn.Options{})
+		t.Cleanup(func() { _ = cn.Close() })
+		return cn, fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, dbID), true
+	}
+
+	t.Skip("no Spanner backend: set SPANNER_EMULATOR_HOST, start Docker, or set ALIS_OS_PROJECT/ALIS_OS_INSTANCE")
+	return nil, "", false
+}
+
+// createDatabase creates a database in the given dialect and registers a
+// cleanup that drops it. The PID + per-process counter in the name keeps
+// concurrent test binaries sharing one emulator from colliding.
 func createDatabase(t *testing.T, dialect databasepb.DatabaseDialect) (string, error) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
@@ -145,7 +195,9 @@ func createDatabase(t *testing.T, dialect databasepb.DatabaseDialect) (string, e
 	}
 	defer da.Close()
 
-	dbID := fmt.Sprintf("tftest-%d-%d", os.Getpid()%10000, dbCounter.Add(1))
+	// The two-digit counter keeps the name compliant with the provider's
+	// database-name validation, which requires two trailing alphanumerics.
+	dbID := fmt.Sprintf("tftest-%d-%02d", os.Getpid()%10000, dbCounter.Add(1))
 	stmt := fmt.Sprintf("CREATE DATABASE `%s`", dbID)
 	if dialect == databasepb.DatabaseDialect_POSTGRESQL {
 		stmt = fmt.Sprintf("CREATE DATABASE %q", dbID)

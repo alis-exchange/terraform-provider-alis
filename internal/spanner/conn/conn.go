@@ -13,7 +13,8 @@ import (
 	"google.golang.org/api/option"
 )
 
-// Dialect is owned by this module so callers and fakes never import databasepb.
+// Dialect identifies a database's SQL dialect. It is owned by this module so
+// callers and fakes never import databasepb.
 type Dialect int
 
 const (
@@ -99,8 +100,9 @@ type RetryPolicy struct {
 	// InitialBackoff is doubled per attempt with jitter. Zero means 5s.
 	InitialBackoff time.Duration
 	// Retryable reports whether err warrants another attempt. nil means the
-	// default classifier: codes.Aborted, codes.Unavailable, and the
-	// FailedPrecondition concurrent-schema-change family.
+	// default classifier: codes.Aborted, codes.Unavailable,
+	// codes.ResourceExhausted, and the FailedPrecondition
+	// concurrent-schema-change family.
 	Retryable func(error) bool
 }
 
