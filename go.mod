@@ -3,7 +3,7 @@ module terraform-provider-alis
 // The patch version is load-bearing, not incidental: CI and GoReleaser both
 // resolve their toolchain from this line, so it decides which standard library
 // the released binaries embed. Raise it when govulncheck reports stdlib fixes.
-go 1.26.5
+go 1.26.6
 
 require (
 	cloud.google.com/go/spanner v1.94.0
@@ -103,7 +103,7 @@ require (
 	github.com/imdario/mergo v0.3.15 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
-	github.com/klauspost/compress v1.18.6 // indirect
+	github.com/klauspost/compress v1.18.7 // indirect
 	github.com/lufia/plan9stats v0.0.0-20260330125221-c963978e514e // indirect
 	github.com/magiconair/properties v1.8.10 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
