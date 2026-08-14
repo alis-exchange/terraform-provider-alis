@@ -1,4 +1,6 @@
-# [](https://github.com/alis-exchange/terraform-provider-alis/compare/v2.0.0-beta4...v) (2026-08-14)
+# [](https://github.com/alis-exchange/terraform-provider-alis/compare/v2.0.0-beta5...v) (2026-08-14)
+
+# [2.0.0-beta5](https://github.com/alis-exchange/terraform-provider-alis/compare/v2.0.0-beta4...v2.0.0-beta5) (2026-08-14)
 
 # [2.0.0-beta4](https://github.com/alis-exchange/terraform-provider-alis/compare/v2.0.0-beta3...v2.0.0-beta4) (2026-08-14)
 
