@@ -70,24 +70,32 @@ func (r *tableIamBindingResource) Schema(ctx context.Context, _ resource.SchemaR
 		Attributes: map[string]schema.Attribute{
 			"project": schema.StringAttribute{
 				Required: true,
+				MarkdownDescription: "The Google Cloud project ID containing the Spanner instance and database.\n" +
+					"Changing this forces a new resource.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"instance": schema.StringAttribute{
 				Required: true,
+				MarkdownDescription: "The Spanner instance ID that contains the database.\n" +
+					"Changing this forces a new resource.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"database": schema.StringAttribute{
 				Required: true,
+				MarkdownDescription: "The Spanner database ID that contains the table.\n" +
+					"Changing this forces a new resource.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"table": schema.StringAttribute{
 				Required: true,
+				MarkdownDescription: "The table the role and permissions are granted on.\n" +
+					"Changing this forces a new resource.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
@@ -103,7 +111,7 @@ func (r *tableIamBindingResource) Schema(ctx context.Context, _ resource.SchemaR
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
-				Description: "The role that should be granted to the table.\n" +
+				MarkdownDescription: "The role that should be granted to the table.\n" +
 					"The role must satisfy the expression `^[a-zA-Z0-9_]{1,64}$`.",
 			},
 			"permissions": schema.SetAttribute{
@@ -112,11 +120,11 @@ func (r *tableIamBindingResource) Schema(ctx context.Context, _ resource.SchemaR
 				Validators: []validator.Set{
 					setvalidator.ValueStringsAre(stringvalidator.OneOf(services.SpannerTablePolicyBindingPermissions...)),
 				},
-				Description: "The permissions that should be granted to the role.\n" +
+				MarkdownDescription: "The permissions that should be granted to the role.\n" +
 					"Valid permissions are: `SELECT`, `INSERT`, `UPDATE`, `DELETE`.",
 			},
 		},
-		Description: "Authoritative for a given role. Updates the table IAM policy to grant a role along with permissions.\n" +
+		MarkdownDescription: "Authoritative for a given role. Updates the table IAM policy to grant a role along with permissions.\n" +
 			"Other roles and permissions within the IAM policy for the table are preserved.",
 	}
 }

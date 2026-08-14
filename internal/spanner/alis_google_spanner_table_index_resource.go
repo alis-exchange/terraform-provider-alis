@@ -84,7 +84,7 @@ func (r *spannerTableIndexResource) Schema(ctx context.Context, _ resource.Schem
 		Attributes: map[string]schema.Attribute{
 			"name": schema.StringAttribute{
 				Required: true,
-				Description: "The name of the index.\n" +
+				MarkdownDescription: "The name of the index.\n" +
 					"The name must contain only letters (a-z, A-Z), numbers (0-9), or hyphens (-), and must start with a letter and not end in a hyphen.",
 				Validators: []validator.String{
 					validators.RegexMatches([]*regexp.Regexp{
@@ -97,29 +97,29 @@ func (r *spannerTableIndexResource) Schema(ctx context.Context, _ resource.Schem
 				},
 			},
 			"project": schema.StringAttribute{
-				Required:    true,
-				Description: "The Google Cloud project ID in which the table belongs.",
+				Required:            true,
+				MarkdownDescription: "The Google Cloud project ID in which the table belongs.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"instance": schema.StringAttribute{
-				Required:    true,
-				Description: "The name of the Spanner instance.",
+				Required:            true,
+				MarkdownDescription: "The name of the Spanner instance.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"database": schema.StringAttribute{
-				Required:    true,
-				Description: "The name of the parent database.",
+				Required:            true,
+				MarkdownDescription: "The name of the parent database.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"table": schema.StringAttribute{
 				Required: true,
-				Description: "The name of the table.\n" +
+				MarkdownDescription: "The name of the table.\n" +
 					"The name must satisfy the expression `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`",
 				Validators: []validator.String{
 					validators.RegexMatches([]*regexp.Regexp{
@@ -141,8 +141,8 @@ func (r *spannerTableIndexResource) Schema(ctx context.Context, _ resource.Schem
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"name": schema.StringAttribute{
-							Required:    true,
-							Description: "The name of the column that makes up the index.",
+							Required:            true,
+							MarkdownDescription: "The name of the column that makes up the index.",
 							Validators: []validator.String{
 								validators.RegexMatches([]*regexp.Regexp{
 									utils.Pattern(utils.SpannerGoogleSqlColumnIdRegex),
@@ -155,7 +155,7 @@ func (r *spannerTableIndexResource) Schema(ctx context.Context, _ resource.Schem
 						},
 						"order": schema.StringAttribute{
 							Optional: true,
-							Description: "The sorting order of the column in the index.\n" +
+							MarkdownDescription: "The sorting order of the column in the index.\n" +
 								"Valid values are: `asc` or `desc`. If not specified the default is `asc`.",
 							Validators: []validator.String{
 								stringvalidator.OneOf(services.SpannerTableIndexColumnOrders...),
@@ -163,7 +163,7 @@ func (r *spannerTableIndexResource) Schema(ctx context.Context, _ resource.Schem
 						},
 					},
 				},
-				Description: "The columns that make up the index.\n" +
+				MarkdownDescription: "The columns that make up the index.\n" +
 					"The order of the columns is significant.\n" +
 					"**Changing any column will destroy and recreate the index**: Spanner indexes cannot be altered in place.",
 				PlanModifiers: []planmodifier.List{
@@ -172,14 +172,14 @@ func (r *spannerTableIndexResource) Schema(ctx context.Context, _ resource.Schem
 			},
 			"unique": schema.BoolAttribute{
 				Optional: true,
-				Description: "Indicates if the index is unique.\n" +
+				MarkdownDescription: "Indicates if the index is unique.\n" +
 					"**Changing this value will destroy and recreate the index**: Spanner indexes cannot be altered in place.",
 				PlanModifiers: []planmodifier.Bool{
 					boolplanmodifier.RequiresReplace(),
 				},
 			},
 		},
-		Description: "A Google Cloud Spanner table index resource.\n" +
+		MarkdownDescription: "A Google Cloud Spanner table index resource.\n" +
 			"This resource manages the indexes on a table in a Google Cloud Spanner database.",
 	}
 }

@@ -49,29 +49,33 @@ func (r *tableIamBindingDataSource) Schema(_ context.Context, _ datasource.Schem
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"project": schema.StringAttribute{
-				Required: true,
+				Required:            true,
+				MarkdownDescription: "The Google Cloud project ID containing the Spanner instance and database.",
 			},
 			"instance": schema.StringAttribute{
-				Required: true,
+				Required:            true,
+				MarkdownDescription: "The Spanner instance ID that contains the database.",
 			},
 			"database": schema.StringAttribute{
-				Required: true,
+				Required:            true,
+				MarkdownDescription: "The Spanner database ID that contains the table.",
 			},
 			"table": schema.StringAttribute{
-				Required: true,
+				Required:            true,
+				MarkdownDescription: "The table whose IAM policy binding is read.",
 			},
 			"role": schema.StringAttribute{
-				Required:    true,
-				Description: "The role that should be granted to the table.",
+				Required:            true,
+				MarkdownDescription: "The role that should be granted to the table.",
 			},
 			"permissions": schema.SetAttribute{
 				Computed:    true,
 				ElementType: types.StringType,
-				Description: "The permissions that should be granted to the role.\n" +
+				MarkdownDescription: "The permissions that should be granted to the role.\n" +
 					"Valid permissions are: `SELECT`, `INSERT`, `UPDATE`, `DELETE`.",
 			},
 		},
-		Description: "Authoritative for a given role. Updates the table IAM policy to grant a role along with permissions.\n" +
+		MarkdownDescription: "Authoritative for a given role. Updates the table IAM policy to grant a role along with permissions.\n" +
 			"Other roles and permissions within the IAM policy for the table are preserved.",
 	}
 }

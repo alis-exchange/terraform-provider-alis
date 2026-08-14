@@ -69,29 +69,29 @@ func (r *spannerTableForeignKeyResource) Schema(ctx context.Context, _ resource.
 		},
 		Attributes: map[string]schema.Attribute{
 			"project": schema.StringAttribute{
-				Required:    true,
-				Description: "The Google Cloud project ID in which the table belongs.",
+				Required:            true,
+				MarkdownDescription: "The Google Cloud project ID in which the table belongs.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"instance": schema.StringAttribute{
-				Required:    true,
-				Description: "The name of the Spanner instance.",
+				Required:            true,
+				MarkdownDescription: "The name of the Spanner instance.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"database": schema.StringAttribute{
-				Required:    true,
-				Description: "The name of the parent database.",
+				Required:            true,
+				MarkdownDescription: "The name of the parent database.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"table": schema.StringAttribute{
 				Required: true,
-				Description: "The name of the constrained/referencing table.\n" +
+				MarkdownDescription: "The name of the constrained/referencing table.\n" +
 					"The name must satisfy the expression `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`",
 				Validators: []validator.String{
 					validators.RegexMatches([]*regexp.Regexp{
@@ -105,7 +105,7 @@ func (r *spannerTableForeignKeyResource) Schema(ctx context.Context, _ resource.
 			},
 			"name": schema.StringAttribute{
 				Required: true,
-				Description: "The name of the foreign key constraint.\n" +
+				MarkdownDescription: "The name of the foreign key constraint.\n" +
 					"The name must satisfy the expression `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`.\n" +
 					"The **FK_** prefix is recommended but not required.",
 				Validators: []validator.String{
@@ -120,7 +120,7 @@ func (r *spannerTableForeignKeyResource) Schema(ctx context.Context, _ resource.
 			},
 			"referenced_table": schema.StringAttribute{
 				Required: true,
-				Description: "The name of the referenced table.\n" +
+				MarkdownDescription: "The name of the referenced table.\n" +
 					"The name must satisfy the expression `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`",
 				Validators: []validator.String{
 					validators.RegexMatches([]*regexp.Regexp{
@@ -134,7 +134,7 @@ func (r *spannerTableForeignKeyResource) Schema(ctx context.Context, _ resource.
 			},
 			"column": schema.StringAttribute{
 				Required: true,
-				Description: "The name of the constrained/referencing column.\n" +
+				MarkdownDescription: "The name of the constrained/referencing column.\n" +
 					"See https://cloud.google.com/spanner/docs/foreign-keys/overview",
 				Validators: []validator.String{
 					validators.RegexMatches([]*regexp.Regexp{
@@ -148,7 +148,7 @@ func (r *spannerTableForeignKeyResource) Schema(ctx context.Context, _ resource.
 			},
 			"referenced_column": schema.StringAttribute{
 				Required: true,
-				Description: "The name of the referenced column.\n" +
+				MarkdownDescription: "The name of the referenced column.\n" +
 					"See https://cloud.google.com/spanner/docs/foreign-keys/overview",
 				Validators: []validator.String{
 					validators.RegexMatches([]*regexp.Regexp{
@@ -162,7 +162,7 @@ func (r *spannerTableForeignKeyResource) Schema(ctx context.Context, _ resource.
 			},
 			"on_delete": schema.StringAttribute{
 				Required: true,
-				Description: "The action to take when the referenced row is deleted.\n" +
+				MarkdownDescription: "The action to take when the referenced row is deleted.\n" +
 					"Supported values are `CASCADE`, `NO_ACTION`.\n" +
 					"See https://cloud.google.com/spanner/docs/foreign-keys/overview#how-to-define-foreign-key-action",
 				Validators: []validator.String{
@@ -173,7 +173,7 @@ func (r *spannerTableForeignKeyResource) Schema(ctx context.Context, _ resource.
 				},
 			},
 		},
-		Description: "A Spanner Table Foreign Key resource. See https://cloud.google.com/spanner/docs/foreign-keys/overview",
+		MarkdownDescription: "A Spanner Table Foreign Key resource. See https://cloud.google.com/spanner/docs/foreign-keys/overview",
 	}
 }
 

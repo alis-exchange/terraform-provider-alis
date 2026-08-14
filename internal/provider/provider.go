@@ -139,10 +139,12 @@ func (p *googleProvider) Schema(_ context.Context, _ provider.SchemaRequest, res
 					validators.GoogleCredentialsValidator(),
 					validators.StringNotEmpty(),
 				},
-				Description: "A JSON string of Google Cloud credentials.",
+				MarkdownDescription: "A JSON string of Google Cloud credentials.",
 			},
 			"access_token": schema.StringAttribute{
 				Optional: true,
+				MarkdownDescription: "An OAuth2 access token used to authenticate to Google Cloud instead of `credentials`.\n" +
+					"Requires `project` to be set and conflicts with `credentials`.",
 				Validators: []validator.String{
 					stringvalidator.AlsoRequires(
 						path.Expressions{
@@ -156,11 +158,11 @@ func (p *googleProvider) Schema(_ context.Context, _ provider.SchemaRequest, res
 				},
 			},
 			"project": schema.StringAttribute{
-				Optional:    true,
-				Description: "The Google Cloud project ID.",
+				Optional:            true,
+				MarkdownDescription: "The Google Cloud project ID.",
 			},
 		},
-		Description: "Custom terraform provider for managing various google resources used in ALIS.",
+		MarkdownDescription: "Custom terraform provider for managing various google resources used in ALIS.",
 	}
 }
 

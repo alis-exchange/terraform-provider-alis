@@ -67,29 +67,29 @@ func (r *spannerTableTtlPolicyResource) Schema(ctx context.Context, _ resource.S
 		},
 		Attributes: map[string]schema.Attribute{
 			"project": schema.StringAttribute{
-				Required:    true,
-				Description: "The Google Cloud project ID in which the table belongs.",
+				Required:            true,
+				MarkdownDescription: "The Google Cloud project ID in which the table belongs.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"instance": schema.StringAttribute{
-				Required:    true,
-				Description: "The name of the Spanner instance.",
+				Required:            true,
+				MarkdownDescription: "The name of the Spanner instance.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"database": schema.StringAttribute{
-				Required:    true,
-				Description: "The name of the parent database.",
+				Required:            true,
+				MarkdownDescription: "The name of the parent database.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"table": schema.StringAttribute{
 				Required: true,
-				Description: "The name of the table.\n" +
+				MarkdownDescription: "The name of the table.\n" +
 					"The name must satisfy the expression `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`",
 				Validators: []validator.String{
 					validators.RegexMatches([]*regexp.Regexp{
@@ -103,7 +103,7 @@ func (r *spannerTableTtlPolicyResource) Schema(ctx context.Context, _ resource.S
 			},
 			"column": schema.StringAttribute{
 				Required: true,
-				Description: "The name of the column to use as the TTL column.\n" +
+				MarkdownDescription: "The name of the column to use as the TTL column.\n" +
 					"The column must be of type `TIMESTAMP`. See https://cloud.google.com/spanner/docs/ttl/working-with-ttl",
 				Validators: []validator.String{
 					validators.RegexMatches([]*regexp.Regexp{
@@ -114,14 +114,14 @@ func (r *spannerTableTtlPolicyResource) Schema(ctx context.Context, _ resource.S
 			},
 			"ttl": schema.Int64Attribute{
 				Required: true,
-				Description: "The number of days past the timestamp in `column` in which the row is marked for deletion.\n" +
+				MarkdownDescription: "The number of days past the timestamp in `column` in which the row is marked for deletion.\n" +
 					"Must be a positive integer.",
 				Validators: []validator.Int64{
 					int64validator.AtLeast(0),
 				},
 			},
 		},
-		Description: "A Spanner Table TTL Policy resource. See https://cloud.google.com/spanner/docs/ttl",
+		MarkdownDescription: "A Spanner Table TTL Policy resource. See https://cloud.google.com/spanner/docs/ttl",
 	}
 }
 

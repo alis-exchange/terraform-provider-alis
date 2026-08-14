@@ -38,14 +38,18 @@ resource "alis_google_spanner_table_iam_binding" "editor" {
 
 ### Required
 
-- `database` (String)
-- `instance` (String)
+- `database` (String) The Spanner database ID that contains the table.
+Changing this forces a new resource.
+- `instance` (String) The Spanner instance ID that contains the database.
+Changing this forces a new resource.
 - `permissions` (Set of String) The permissions that should be granted to the role.
 Valid permissions are: `SELECT`, `INSERT`, `UPDATE`, `DELETE`.
-- `project` (String)
+- `project` (String) The Google Cloud project ID containing the Spanner instance and database.
+Changing this forces a new resource.
 - `role` (String) The role that should be granted to the table.
 The role must satisfy the expression `^[a-zA-Z0-9_]{1,64}$`.
-- `table` (String)
+- `table` (String) The table the role and permissions are granted on.
+Changing this forces a new resource.
 
 ### Optional
 
@@ -76,9 +80,9 @@ import {
 The terraform import command can also be used:
 
 ```terraform
-# Table can be imported by specifying the fully qualified name of the table
+# Binding can be imported by specifying the fully qualified name of the table role binding
 # projects/{project}/instances/{instance}/databases/{database}/tables/{table}/tableRoles/{role}
-terraform import alis_google_spanner_table.table "projects/{project}/instances/{instance}/databases/{database}/tables/{table}/tableRoles/{role}"
+terraform import alis_google_spanner_table_iam_binding.binding "projects/{project}/instances/{instance}/databases/{database}/tables/{table}/tableRoles/{role}"
 ```
 
 

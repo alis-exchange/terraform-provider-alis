@@ -31,9 +31,12 @@ resource "alis_google_spanner_database_role" "admin_role" {
 
 ### Required
 
-- `database` (String)
-- `instance` (String)
-- `project` (String)
+- `database` (String) The Spanner database ID within the instance where the role is created.
+Changing this forces a new resource.
+- `instance` (String) The Spanner instance ID that contains the database.
+Changing this forces a new resource.
+- `project` (String) The Google Cloud project ID containing the Spanner instance and database.
+Changing this forces a new resource.
 - `role` (String) The role that should be applied.
 The role must satisfy the expression `^[a-zA-Z0-9_]{1,64}$`.
 

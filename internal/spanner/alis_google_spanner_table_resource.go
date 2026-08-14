@@ -123,7 +123,7 @@ func (r *spannerTableResource) Schema(ctx context.Context, _ resource.SchemaRequ
 		Attributes: map[string]schema.Attribute{
 			"name": schema.StringAttribute{
 				Required: true,
-				Description: "The name of the table.\n" +
+				MarkdownDescription: "The name of the table.\n" +
 					"The name must satisfy the expression `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`",
 				Validators: []validator.String{
 					validators.RegexMatches([]*regexp.Regexp{
@@ -136,22 +136,22 @@ func (r *spannerTableResource) Schema(ctx context.Context, _ resource.SchemaRequ
 				},
 			},
 			"project": schema.StringAttribute{
-				Required:    true,
-				Description: "The Google Cloud project ID in which the table belongs.",
+				Required:            true,
+				MarkdownDescription: "The Google Cloud project ID in which the table belongs.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"instance": schema.StringAttribute{
-				Required:    true,
-				Description: "The name of the Spanner instance.",
+				Required:            true,
+				MarkdownDescription: "The name of the Spanner instance.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"database": schema.StringAttribute{
-				Required:    true,
-				Description: "The name of the parent database.",
+				Required:            true,
+				MarkdownDescription: "The name of the parent database.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
@@ -170,7 +170,7 @@ func (r *spannerTableResource) Schema(ctx context.Context, _ resource.SchemaRequ
 							Attributes: map[string]schema.Attribute{
 								"name": schema.StringAttribute{
 									Required: true,
-									Description: "The name of the column.\n" +
+									MarkdownDescription: "The name of the column.\n" +
 										"The name must contain only letters (a-z, A-Z), numbers (0-9), or underscores (_), and must start with a letter and not end in an underscore.\n" +
 										"The maximum length is 128 characters.",
 									Validators: []validator.String{
@@ -182,14 +182,14 @@ func (r *spannerTableResource) Schema(ctx context.Context, _ resource.SchemaRequ
 								},
 								"is_primary_key": schema.BoolAttribute{
 									Optional: true,
-									Description: "Indicates if the column is part of the primary key.\n" +
+									MarkdownDescription: "Indicates if the column is part of the primary key.\n" +
 										"Multiple columns can be specified as primary keys to create a composite primary key.\n" +
 										"Primary key columns must be non-null.\n" +
 										"**Changing this value will cause a table replace**.",
 								},
 								"is_computed": schema.BoolAttribute{
 									Optional: true,
-									Description: "Indicates if the column is a computed column.\n" +
+									MarkdownDescription: "Indicates if the column is a computed column.\n" +
 										"Computed columns are generated values based on other columns in the table.\n" +
 										"A common use case is to generate a column from a PROTO column field.\n" +
 										"This should be accompanied by a `computation_ddl` field.\n" +
@@ -197,7 +197,7 @@ func (r *spannerTableResource) Schema(ctx context.Context, _ resource.SchemaRequ
 								},
 								"computation_ddl": schema.StringAttribute{
 									Optional: true,
-									Description: "The DDL expression for the computed column.\n" +
+									MarkdownDescription: "The DDL expression for the computed column.\n" +
 										"This is only applicable to columns where `is_computed` is true.\n" +
 										"The expression must be a valid SQL expression that generates a value for the column.\n" +
 										"Example: `column1 + column2`, or `proto_column.field`.\n" +
@@ -205,7 +205,7 @@ func (r *spannerTableResource) Schema(ctx context.Context, _ resource.SchemaRequ
 								},
 								"is_stored": schema.BoolAttribute{
 									Optional: true,
-									Description: "Indicates if the generated column is stored.\n" +
+									MarkdownDescription: "Indicates if the generated column is stored.\n" +
 										"This is only applicable to columns where `is_computed` is true.\n" +
 										"Stored columns are physically stored in the table and can be indexed.\n" +
 										"Non-stored columns are not physically stored in the table and are computed on the fly.\n" +
@@ -213,7 +213,7 @@ func (r *spannerTableResource) Schema(ctx context.Context, _ resource.SchemaRequ
 								},
 								"auto_update_time": schema.BoolAttribute{
 									Optional: true,
-									Description: "Indicates if the column auto populates on row update.\n" +
+									MarkdownDescription: "Indicates if the column auto populates on row update.\n" +
 										"The column must be of type `TIMESTAMP`.",
 								},
 								"type": schema.StringAttribute{
@@ -221,35 +221,35 @@ func (r *spannerTableResource) Schema(ctx context.Context, _ resource.SchemaRequ
 									Validators: []validator.String{
 										stringvalidator.OneOf(tableschema.SpannerTableDataTypes...),
 									},
-									Description: "The data type of the column.\n" +
+									MarkdownDescription: "The data type of the column.\n" +
 										"Valid types are: `BOOL`, `INT64`, `FLOAT64`, `STRING`, `BYTES`, `DATE`, `TIMESTAMP`, `JSON`, `PROTO`, `ARRAY<STRING>`, `ARRAY<INT64>`, `ARRAY<FLOAT32>`, `ARRAY<FLOAT64>`.\n" +
 										"**Changing this value will cause a table replace**.",
 								},
 								"size": schema.Int64Attribute{
-									Optional:    true,
-									Description: "The maximum size of the column.",
+									Optional:            true,
+									MarkdownDescription: "The maximum size of the column.",
 								},
 								"required": schema.BoolAttribute{
-									Optional:    true,
-									Description: "Indicates if the column is required.",
+									Optional:            true,
+									MarkdownDescription: "Indicates if the column is required.",
 								},
 								"default_value": schema.StringAttribute{
 									Optional: true,
-									Description: "Expression used as the column default in Spanner `DEFAULT (...)`.\n" +
+									MarkdownDescription: "Expression used as the column default in Spanner `DEFAULT (...)`.\n" +
 										"It must be valid for the column type: literals (e.g. `10.0` for `FLOAT64`, `\"true\"` for `BOOL` or `STRING`) or Spanner default expressions.\n" +
 										"Examples of expressions: `GENERATE_UUID()` for a `STRING` (or `BYTES`) primary key; `GET_NEXT_SEQUENCE_VALUE(SEQUENCE my_sequence)` for an `INT64` column when `my_sequence` exists in the same database.\n" +
 										"Do not wrap the value in an extra pair of parentheses; the provider emits `DEFAULT (<this value>)`.",
 								},
 								"proto_package": schema.StringAttribute{
 									Optional: true,
-									Description: "The full name of the proto message to be used in the column.\n" +
+									MarkdownDescription: "The full name of the proto message to be used in the column.\n" +
 										"The name must be a valid package name including the message name.\n" +
 										"This field is only required for columns of type `PROTO`\n" +
 										"Example: \"com.example.Message\", where `com.example` is the package name and `Message` is the message name.",
 								},
 							},
 						},
-						Description: "The columns of the table.",
+						MarkdownDescription: "The columns of the table.",
 						PlanModifiers: []planmodifier.List{
 							listplanmodifier.RequiresReplaceIf(
 								tableColumnsRequireReplace,
@@ -259,14 +259,14 @@ func (r *spannerTableResource) Schema(ctx context.Context, _ resource.SchemaRequ
 						},
 					},
 				},
-				Description: "The schema of the table.",
+				MarkdownDescription: "The schema of the table.",
 			},
 			"interleave": schema.SingleNestedAttribute{
 				Optional: true,
 				Attributes: map[string]schema.Attribute{
 					"parent_table": schema.StringAttribute{
 						Required: true,
-						Description: "The name of the parent table to interleave in.\n" +
+						MarkdownDescription: "The name of the parent table to interleave in.\n" +
 							"The parent table must be in the same database.\n" +
 							"**Changing this value will cause a table replace**.",
 						PlanModifiers: []planmodifier.String{
@@ -275,7 +275,7 @@ func (r *spannerTableResource) Schema(ctx context.Context, _ resource.SchemaRequ
 					},
 					"on_delete": schema.StringAttribute{
 						Optional: true,
-						Description: "The action to take on delete.\n" +
+						MarkdownDescription: "The action to take on delete.\n" +
 							"Supported values are `CASCADE`, `NO_ACTION`.\n" +
 							"Setting this value to `CASCADE` signifies that when a row from the parent table is deleted, its child rows are automatically deleted as well.\n" +
 							"The default value is `NO_ACTION`.\n" +
@@ -288,7 +288,7 @@ func (r *spannerTableResource) Schema(ctx context.Context, _ resource.SchemaRequ
 						},
 					},
 				},
-				Description: "The interleave configuration of the table.",
+				MarkdownDescription: "The interleave configuration of the table.",
 				PlanModifiers: []planmodifier.Object{
 					objectplanmodifier.RequiresReplace(),
 				},
@@ -296,12 +296,12 @@ func (r *spannerTableResource) Schema(ctx context.Context, _ resource.SchemaRequ
 			"prevent_destroy": schema.BoolAttribute{
 				Optional: true,
 				Computed: true,
-				Description: "Prevent the table from being destroyed.\n" +
+				MarkdownDescription: "Prevent the table from being destroyed.\n" +
 					"**This only applies to the terraform state and does not prevent the actual table from being deleted via another source.**",
 				Default: booldefault.StaticBool(true),
 			},
 		},
-		Description: "A Google Cloud Spanner table resource.\n" +
+		MarkdownDescription: "A Google Cloud Spanner table resource.\n" +
 			"This resource manages the schema of a table in a Google Cloud Spanner database.",
 	}
 }

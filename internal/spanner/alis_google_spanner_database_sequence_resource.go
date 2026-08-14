@@ -77,7 +77,7 @@ func (r *databaseSequenceResource) Schema(ctx context.Context, _ resource.Schema
 		Attributes: map[string]schema.Attribute{
 			"project": schema.StringAttribute{
 				Required: true,
-				Description: "The Google Cloud project ID containing the Spanner instance and database.\n" +
+				MarkdownDescription: "The Google Cloud project ID containing the Spanner instance and database.\n" +
 					"Changing this forces a new resource.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
@@ -85,7 +85,7 @@ func (r *databaseSequenceResource) Schema(ctx context.Context, _ resource.Schema
 			},
 			"instance": schema.StringAttribute{
 				Required: true,
-				Description: "The Spanner instance ID that contains the database.\n" +
+				MarkdownDescription: "The Spanner instance ID that contains the database.\n" +
 					"Changing this forces a new resource.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
@@ -93,7 +93,7 @@ func (r *databaseSequenceResource) Schema(ctx context.Context, _ resource.Schema
 			},
 			"database": schema.StringAttribute{
 				Required: true,
-				Description: "The Spanner database ID within the instance where sequence DDL is applied.\n" +
+				MarkdownDescription: "The Spanner database ID within the instance where sequence DDL is applied.\n" +
 					"Changing this forces a new resource.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
@@ -101,7 +101,7 @@ func (r *databaseSequenceResource) Schema(ctx context.Context, _ resource.Schema
 			},
 			"sequence": schema.StringAttribute{
 				Required: true,
-				Description: "The sequence name within the database. Referenced in SQL when using the sequence (for example GET_NEXT_SEQUENCE_VALUE with Google-standard-SQL).\n" +
+				MarkdownDescription: "The sequence name within the database. Referenced in SQL when using the sequence (for example GET_NEXT_SEQUENCE_VALUE with Google-standard-SQL).\n" +
 					"Must satisfy Spanner sequence identifier naming rules. See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions\n" +
 					"Changing this forces a new resource.",
 				Validators: []validator.String{
@@ -116,38 +116,38 @@ func (r *databaseSequenceResource) Schema(ctx context.Context, _ resource.Schema
 			},
 			"options": schema.SingleNestedAttribute{
 				Required: true,
-				Description: "DDL options for the sequence, equivalent to OPTIONS on CREATE SEQUENCE and SET OPTIONS on ALTER SEQUENCE for Google-standard-SQL.\n" +
+				MarkdownDescription: "DDL options for the sequence, equivalent to OPTIONS on CREATE SEQUENCE and SET OPTIONS on ALTER SEQUENCE for Google-standard-SQL.\n" +
 					"In Terraform configuration use object assignment (options = { ... }), not a nested options block. See https://cloud.google.com/spanner/docs/sequence-tasks",
 				Attributes: map[string]schema.Attribute{
 					"sequence_kind": schema.StringAttribute{
 						Required: true,
-						Description: "The sequence algorithm. Use bit_reversed_positive for bit-reversed positive sequences, which Spanner recommends for scalable surrogate primary keys.\n" +
+						MarkdownDescription: "The sequence algorithm. Use bit_reversed_positive for bit-reversed positive sequences, which Spanner recommends for scalable surrogate primary keys.\n" +
 							"See https://cloud.google.com/spanner/docs/sequence-tasks",
 					},
 					"skip_range": schema.SingleNestedAttribute{
 						Optional: true,
-						Description: "Inclusive range of integers that the sequence must not assign to new values (skip_range_min and skip_range_max in Spanner DDL).\n" +
+						MarkdownDescription: "Inclusive range of integers that the sequence must not assign to new values (skip_range_min and skip_range_max in Spanner DDL).\n" +
 							"When set, both min and max are required. See https://cloud.google.com/spanner/docs/sequence-tasks",
 						Attributes: map[string]schema.Attribute{
 							"min": schema.Int64Attribute{
-								Required:    true,
-								Description: "Start of the inclusive skip range; maps to skip_range_min in Spanner sequence OPTIONS.",
+								Required:            true,
+								MarkdownDescription: "Start of the inclusive skip range; maps to skip_range_min in Spanner sequence OPTIONS.",
 							},
 							"max": schema.Int64Attribute{
-								Required:    true,
-								Description: "End of the inclusive skip range; maps to skip_range_max in Spanner sequence OPTIONS.",
+								Required:            true,
+								MarkdownDescription: "End of the inclusive skip range; maps to skip_range_max in Spanner sequence OPTIONS.",
 							},
 						},
 					},
 					"start_with_counter": schema.Int64Attribute{
 						Optional: true,
-						Description: "Sets the sequence counter (start_with_counter in Spanner OPTIONS). Changing this affects future generated values; review operational impact before updating.\n" +
+						MarkdownDescription: "Sets the sequence counter (start_with_counter in Spanner OPTIONS). Changing this affects future generated values; review operational impact before updating.\n" +
 							"See https://cloud.google.com/spanner/docs/sequence-tasks",
 					},
 				},
 			},
 		},
-		Description: "Manages a Cloud Spanner database sequence using DDL. If the sequence does not exist it is created; if it already exists it is imported into Terraform state.\n" +
+		MarkdownDescription: "Manages a Cloud Spanner database sequence using DDL. If the sequence does not exist it is created; if it already exists it is imported into Terraform state.\n" +
 			"Updates apply ALTER SEQUENCE ... SET OPTIONS for Google-standard-SQL. Binding a sequence to table columns (defaults) and dropping a sequence are separate DDL or console steps; see https://cloud.google.com/spanner/docs/sequence-tasks",
 	}
 }

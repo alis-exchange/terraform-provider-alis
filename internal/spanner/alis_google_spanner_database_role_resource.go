@@ -63,18 +63,24 @@ func (r *databaseRoleResource) Schema(ctx context.Context, _ resource.SchemaRequ
 		Attributes: map[string]schema.Attribute{
 			"project": schema.StringAttribute{
 				Required: true,
+				MarkdownDescription: "The Google Cloud project ID containing the Spanner instance and database.\n" +
+					"Changing this forces a new resource.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"instance": schema.StringAttribute{
 				Required: true,
+				MarkdownDescription: "The Spanner instance ID that contains the database.\n" +
+					"Changing this forces a new resource.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"database": schema.StringAttribute{
 				Required: true,
+				MarkdownDescription: "The Spanner database ID within the instance where the role is created.\n" +
+					"Changing this forces a new resource.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
@@ -90,11 +96,11 @@ func (r *databaseRoleResource) Schema(ctx context.Context, _ resource.SchemaRequ
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
-				Description: "The role that should be applied.\n" +
+				MarkdownDescription: "The role that should be applied.\n" +
 					"The role must satisfy the expression `^[a-zA-Z0-9_]{1,64}$`.",
 			},
 		},
-		Description: "Creates a custom role in the database if it does not exist. If the role already exists, it will be imported into the state.\n" +
+		MarkdownDescription: "Creates a custom role in the database if it does not exist. If the role already exists, it will be imported into the state.\n" +
 			"Authoritative for a given role. Other roles within the database are preserved.",
 	}
 }

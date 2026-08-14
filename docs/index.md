@@ -36,6 +36,7 @@ provider "alis" {
 
 ### Optional
 
-- `access_token` (String)
+- `access_token` (String) An OAuth2 access token used to authenticate to Google Cloud instead of `credentials`.
+Requires `project` to be set and conflicts with `credentials`.
 - `credentials` (String) A JSON string of Google Cloud credentials.
 - `project` (String) The Google Cloud project ID.

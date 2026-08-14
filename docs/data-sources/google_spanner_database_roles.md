@@ -2,12 +2,12 @@
 page_title: "alis_google_spanner_database_roles Data Source - alis"
 subcategory: ""
 description: |-
-  
+  Lists the database roles defined in a Cloud Spanner database, including the built-in roles and any roles created with CREATE ROLE DDL (for example via the alis_google_spanner_database_role resource).
 ---
 
 # alis_google_spanner_database_roles (Data Source)
 
-
+Lists the database roles defined in a Cloud Spanner database, including the built-in roles and any roles created with `CREATE ROLE` DDL (for example via the `alis_google_spanner_database_role` resource).
 
 
 
@@ -28,10 +28,10 @@ data "alis_google_spanner_database_roles" "roles" {
 
 ### Required
 
-- `database` (String)
-- `instance` (String)
-- `project` (String)
+- `database` (String) The Spanner database ID whose roles are listed.
+- `instance` (String) The Spanner instance ID that contains the database.
+- `project` (String) The Google Cloud project ID containing the Spanner instance and database.
 
 ### Read-Only
 
-- `roles` (List of String)
+- `roles` (List of String) The names of all database roles in the database.

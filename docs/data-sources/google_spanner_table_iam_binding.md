@@ -32,11 +32,11 @@ data "alis_google_spanner_table_iam_binding" "admin_binding" {
 
 ### Required
 
-- `database` (String)
-- `instance` (String)
-- `project` (String)
+- `database` (String) The Spanner database ID that contains the table.
+- `instance` (String) The Spanner instance ID that contains the database.
+- `project` (String) The Google Cloud project ID containing the Spanner instance and database.
 - `role` (String) The role that should be granted to the table.
-- `table` (String)
+- `table` (String) The table whose IAM policy binding is read.
 
 ### Read-Only
 

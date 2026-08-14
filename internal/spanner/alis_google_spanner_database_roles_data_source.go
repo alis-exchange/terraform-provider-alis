@@ -42,19 +42,25 @@ func (d *databaseRolesDataSource) Metadata(_ context.Context, req datasource.Met
 // Schema defines the schema for the resource.
 func (d *databaseRolesDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		MarkdownDescription: "Lists the database roles defined in a Cloud Spanner database, including the built-in roles and any roles created with `CREATE ROLE` DDL " +
+			"(for example via the `alis_google_spanner_database_role` resource).",
 		Attributes: map[string]schema.Attribute{
 			"project": schema.StringAttribute{
-				Required: true,
+				Required:            true,
+				MarkdownDescription: "The Google Cloud project ID containing the Spanner instance and database.",
 			},
 			"instance": schema.StringAttribute{
-				Required: true,
+				Required:            true,
+				MarkdownDescription: "The Spanner instance ID that contains the database.",
 			},
 			"database": schema.StringAttribute{
-				Required: true,
+				Required:            true,
+				MarkdownDescription: "The Spanner database ID whose roles are listed.",
 			},
 			"roles": schema.ListAttribute{
-				Computed:    true,
-				ElementType: types.StringType,
+				Computed:            true,
+				ElementType:         types.StringType,
+				MarkdownDescription: "The names of all database roles in the database.",
 			},
 		},
 	}

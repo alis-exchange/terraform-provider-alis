@@ -66,3 +66,24 @@ Optional:
 - `update` (String) A string that can be [parsed as a duration](https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as "30s" or "2h45m". Valid time units are "s" (seconds), "m" (minutes), "h" (hours).
 
 
+
+## Import
+
+An [import block](https://developer.hashicorp.com/terraform/language/import) (Terraform v1.5.0 and later) can be used to import an existing resource into this resource.
+
+```tf
+import {
+    id = ""
+    to = alis_google_spanner_table_foreign_key.resource_name
+}
+```
+
+The terraform import command can also be used:
+
+```terraform
+# Foreign key can be imported by specifying the fully qualified name of the constraint
+# projects/{project}/instances/{instance}/databases/{database}/tables/{table}/constraints/{constraint}
+terraform import alis_google_spanner_table_foreign_key.foreign_key "projects/{project}/instances/{instance}/databases/{database}/tables/{table}/constraints/{constraint}"
+```
+
+
