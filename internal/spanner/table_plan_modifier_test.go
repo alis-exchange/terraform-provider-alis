@@ -23,6 +23,8 @@ func TestTableColumnsRequireReplace(t *testing.T) {
 	storedTrue := fullColumnModel()
 	storedNull := fullColumnModel()
 	storedNull.IsStored = types.BoolNull()
+	storedFalse := fullColumnModel()
+	storedFalse.IsStored = types.BoolValue(false)
 
 	typeChanged := minimalColumnModel()
 	typeChanged.Type = types.StringValue("INT64")
@@ -43,8 +45,20 @@ func TestTableColumnsRequireReplace(t *testing.T) {
 		}
 	})
 
-	t.Run("is_stored flip replaces with warning", func(t *testing.T) {
+	// An unset planned is_stored inherits the prior value (the attribute is
+	// Computed with UseStateForUnknown), so only an explicit flip replaces.
+	// v1.x state always carries is_stored=true for computed columns while
+	// v1.x configs cannot mention it; treating unset as false would force a
+	// table replace on every upgraded config.
+	t.Run("is_stored unset planned does not replace", func(t *testing.T) {
 		resp := runRequireReplace(t, []spannerTableColumn{storedTrue}, []spannerTableColumn{storedNull})
+		if resp.RequiresReplace || resp.Diagnostics.WarningsCount() != 0 {
+			t.Errorf("RequiresReplace=%v warnings=%d, want false/0", resp.RequiresReplace, resp.Diagnostics.WarningsCount())
+		}
+	})
+
+	t.Run("is_stored explicit flip replaces with warning", func(t *testing.T) {
+		resp := runRequireReplace(t, []spannerTableColumn{storedTrue}, []spannerTableColumn{storedFalse})
 		if !resp.RequiresReplace {
 			t.Fatal("RequiresReplace = false, want true")
 		}

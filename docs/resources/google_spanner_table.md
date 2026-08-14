@@ -169,7 +169,8 @@ Primary key columns must be non-null.
 This is only applicable to columns where `is_computed` is true.
 Stored columns are physically stored in the table and can be indexed.
 Non-stored columns are not physically stored in the table and are computed on the fly.
-**Changing this value will cause a table replace**.
+When omitted, the column's current storedness in the database is kept.
+**Changing this value explicitly will cause a table replace**.
 - `proto_package` (String) The full name of the proto message to be used in the column.
 The name must be a valid package name including the message name.
 This field is only required for columns of type `PROTO`

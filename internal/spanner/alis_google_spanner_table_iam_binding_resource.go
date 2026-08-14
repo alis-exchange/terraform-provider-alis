@@ -60,6 +60,7 @@ func (r *tableIamBindingResource) Metadata(_ context.Context, req resource.Metad
 // Schema defines the schema for the resource.
 func (r *tableIamBindingResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Version: resourceSchemaVersion,
 		Blocks: map[string]schema.Block{
 			"timeouts": timeouts.Block(ctx, timeouts.Opts{
 				Create: true,

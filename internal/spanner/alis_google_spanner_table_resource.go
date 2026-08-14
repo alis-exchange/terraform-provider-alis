@@ -17,6 +17,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -113,6 +114,7 @@ func (r *spannerTableResource) Metadata(_ context.Context, req resource.Metadata
 // Schema defines the schema for the resource.
 func (r *spannerTableResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Version: resourceSchemaVersion,
 		Blocks: map[string]schema.Block{
 			"timeouts": timeouts.Block(ctx, timeouts.Opts{
 				Create: true,
@@ -207,11 +209,21 @@ func (r *spannerTableResource) Schema(ctx context.Context, _ resource.SchemaRequ
 								},
 								"is_stored": schema.BoolAttribute{
 									Optional: true,
+									// Computed with UseStateForUnknown: an omitted value inherits
+									// the column's actual storedness instead of reading as "not
+									// stored" — provider v1.x always created computed columns
+									// STORED with no is_stored attribute, so unset-means-false
+									// would force a table replace on every upgraded config.
+									Computed: true,
+									PlanModifiers: []planmodifier.Bool{
+										boolplanmodifier.UseStateForUnknown(),
+									},
 									MarkdownDescription: "Indicates if the generated column is stored.\n" +
 										"This is only applicable to columns where `is_computed` is true.\n" +
 										"Stored columns are physically stored in the table and can be indexed.\n" +
 										"Non-stored columns are not physically stored in the table and are computed on the fly.\n" +
-										"**Changing this value will cause a table replace**.",
+										"When omitted, the column's current storedness in the database is kept.\n" +
+										"**Changing this value explicitly will cause a table replace**.",
 								},
 								"auto_update_time": schema.BoolAttribute{
 									Optional: true,
@@ -373,6 +385,14 @@ func (r *spannerTableResource) Create(ctx context.Context, req resource.CreateRe
 
 	// Map response body to schema and populate Computed attribute values
 	plan.Name = types.StringValue(tableId)
+	if plan.Schema != nil {
+		columns, d := resolveUnknownIsStored(ctx, plan.Schema.Columns)
+		resp.Diagnostics.Append(d...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		plan.Schema.Columns = columns
+	}
 
 	// Set state to fully populated data
 	diags = resp.State.Set(ctx, plan)
@@ -525,6 +545,14 @@ func (r *spannerTableResource) Update(ctx context.Context, req resource.UpdateRe
 
 	// Map response body to schema and populate Computed attribute values
 	plan.Name = types.StringValue(tableId)
+	if plan.Schema != nil {
+		columns, d := resolveUnknownIsStored(ctx, plan.Schema.Columns)
+		resp.Diagnostics.Append(d...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		plan.Schema.Columns = columns
+	}
 
 	// Set state to fully populated data
 	diags = resp.State.Set(ctx, plan)

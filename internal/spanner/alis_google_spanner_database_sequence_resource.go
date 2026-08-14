@@ -67,6 +67,7 @@ func (r *databaseSequenceResource) Metadata(_ context.Context, req resource.Meta
 // Schema defines the schema for the resource.
 func (r *databaseSequenceResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Version: resourceSchemaVersion,
 		Blocks: map[string]schema.Block{
 			"timeouts": timeouts.Block(ctx, timeouts.Opts{
 				Create: true,

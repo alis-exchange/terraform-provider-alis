@@ -26,6 +26,10 @@ func resetConnections(t *testing.T) {
 func TestConnectionKey_SeparatesEveryInput(t *testing.T) {
 	adc := &googleoauth.Credentials{ProjectID: "my-project", JSON: []byte(`{"client_email":"first@example.com"}`)}
 
+	// The key includes the ambient emulator host; pin it so the base key is
+	// stable even when the test process runs with SPANNER_EMULATOR_HOST set
+	// (as the emulator-backed acceptance suite does).
+	t.Setenv("SPANNER_EMULATOR_HOST", "")
 	base := connectionKey("my-project", "", "", adc)
 
 	tests := []struct {

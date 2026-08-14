@@ -42,7 +42,10 @@ func tableColumnsToSchema(ctx context.Context, list types.List) ([]*tableschema.
 		if !column.ComputationDdl.IsNull() {
 			col.ComputationDdl = wrapperspb.String(column.ComputationDdl.ValueString())
 		}
-		if !column.IsStored.IsNull() {
+		// is_stored is Computed: during plan modification an omitted value is
+		// still unknown, which must read as unset — a set-false wrapper against
+		// a stored prior column would force a table replace.
+		if !column.IsStored.IsNull() && !column.IsStored.IsUnknown() {
 			col.IsStored = wrapperspb.Bool(column.IsStored.ValueBool())
 		}
 		if !column.AutoUpdateTime.IsNull() {
@@ -160,4 +163,33 @@ func tableInterleaveToModel(interleave *tableschema.SpannerTableInterleave) *spa
 		out.OnDelete = types.StringValue(interleave.OnDelete.String())
 	}
 	return out
+}
+
+// resolveUnknownIsStored replaces unknown is_stored values with null before a
+// plan is persisted as state. is_stored is Computed, so an omitted value plans
+// as unknown, and a brand-new column has no prior state for UseStateForUnknown
+// to inherit — but unknown values cannot be stored. Null matches how Read
+// collapses hydrated booleans the config never set.
+func resolveUnknownIsStored(ctx context.Context, list types.List) (types.List, diag.Diagnostics) {
+	var diags diag.Diagnostics
+
+	if list.IsNull() || list.IsUnknown() {
+		return list, diags
+	}
+
+	columns := make([]spannerTableColumn, 0, len(list.Elements()))
+	diags.Append(list.ElementsAs(ctx, &columns, false)...)
+	if diags.HasError() {
+		return list, diags
+	}
+
+	for i := range columns {
+		if columns[i].IsStored.IsUnknown() {
+			columns[i].IsStored = types.BoolNull()
+		}
+	}
+
+	resolved, d := types.ListValueFrom(ctx, types.ObjectType{AttrTypes: spannerTableColumn{}.attrTypes()}, columns)
+	diags.Append(d...)
+	return resolved, diags
 }

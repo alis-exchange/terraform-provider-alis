@@ -1,0 +1,98 @@
+{
+ "database": "test-database",
+ "instance": "test-instance",
+ "interleave": {
+  "on_delete": "CASCADE",
+  "parent_table": "tftest_parent"
+ },
+ "name": "tftest_upgrade",
+ "prevent_destroy": true,
+ "project": "test-project",
+ "schema": {
+  "columns": [
+   {
+    "auto_update_time": null,
+    "computation_ddl": null,
+    "default_value": null,
+    "is_computed": null,
+    "is_primary_key": true,
+    "is_stored": null,
+    "name": "id",
+    "proto_package": null,
+    "required": null,
+    "size": null,
+    "type": "INT64"
+   },
+   {
+    "auto_update_time": null,
+    "computation_ddl": null,
+    "default_value": null,
+    "is_computed": null,
+    "is_primary_key": null,
+    "is_stored": null,
+    "name": "display_name",
+    "proto_package": null,
+    "required": true,
+    "size": 255,
+    "type": "STRING"
+   },
+   {
+    "auto_update_time": null,
+    "computation_ddl": null,
+    "default_value": null,
+    "is_computed": null,
+    "is_primary_key": null,
+    "is_stored": null,
+    "name": "email",
+    "proto_package": null,
+    "required": null,
+    "size": 255,
+    "type": "STRING"
+   },
+   {
+    "auto_update_time": null,
+    "computation_ddl": "id + 1",
+    "default_value": null,
+    "is_computed": true,
+    "is_primary_key": null,
+    "is_stored": true,
+    "name": "score",
+    "proto_package": null,
+    "required": null,
+    "size": null,
+    "type": "FLOAT64"
+   },
+   {
+    "auto_update_time": null,
+    "computation_ddl": null,
+    "default_value": "true",
+    "is_computed": null,
+    "is_primary_key": null,
+    "is_stored": null,
+    "name": "is_active",
+    "proto_package": null,
+    "required": null,
+    "size": null,
+    "type": "BOOL"
+   },
+   {
+    "auto_update_time": true,
+    "computation_ddl": null,
+    "default_value": null,
+    "is_computed": null,
+    "is_primary_key": null,
+    "is_stored": null,
+    "name": "updated_at",
+    "proto_package": null,
+    "required": null,
+    "size": null,
+    "type": "TIMESTAMP"
+   }
+  ]
+ },
+ "timeouts": {
+  "create": "10m",
+  "delete": null,
+  "update": null
+ }
+}

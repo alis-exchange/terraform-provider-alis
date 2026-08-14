@@ -61,7 +61,8 @@ The name must satisfy the expression `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`
 
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 - `unique` (Boolean) Indicates if the index is unique.
-**Changing this value will destroy and recreate the index**: Spanner indexes cannot be altered in place.
+When omitted, the index's current uniqueness in the database is kept.
+**Changing this value explicitly will destroy and recreate the index**: Spanner indexes cannot be altered in place.
 
 <a id="nestedatt--columns"></a>
 ### Nested Schema for `columns`
@@ -74,6 +75,7 @@ Optional:
 
 - `order` (String) The sorting order of the column in the index.
 Valid values are: `asc` or `desc`. If not specified the default is `asc`.
+When omitted, the column's current order in the database is kept.
 
 
 <a id="nestedblock--timeouts"></a>

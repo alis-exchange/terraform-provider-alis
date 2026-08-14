@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -66,6 +67,40 @@ func (o spannerTableIndexColumn) attrTypes() map[string]attr.Type {
 	}
 }
 
+// resolveUnknownIndexInherited replaces unknown unique and columns.order
+// values with null before a plan is persisted as state. Both are Computed, so
+// omitted values plan as unknown, and a brand-new index (or newly added
+// column) has no prior state for UseStateForUnknown to inherit — but unknown
+// values cannot be stored. The next Read hydrates the real values.
+func resolveUnknownIndexInherited(ctx context.Context, plan spannerTableIndexModel) (spannerTableIndexModel, diag.Diagnostics) {
+	var diags diag.Diagnostics
+
+	if plan.Unique.IsUnknown() {
+		plan.Unique = types.BoolNull()
+	}
+	if plan.Columns.IsNull() || plan.Columns.IsUnknown() {
+		return plan, diags
+	}
+
+	columns := make([]spannerTableIndexColumn, 0, len(plan.Columns.Elements()))
+	diags.Append(plan.Columns.ElementsAs(ctx, &columns, false)...)
+	if diags.HasError() {
+		return plan, diags
+	}
+	for i := range columns {
+		if columns[i].Order.IsUnknown() {
+			columns[i].Order = types.StringNull()
+		}
+	}
+	resolved, d := types.ListValueFrom(ctx, types.ObjectType{AttrTypes: spannerTableIndexColumn{}.attrTypes()}, columns)
+	diags.Append(d...)
+	if diags.HasError() {
+		return plan, diags
+	}
+	plan.Columns = resolved
+	return plan, diags
+}
+
 // Metadata returns the resource type name.
 func (r *spannerTableIndexResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_google_spanner_table_index"
@@ -74,6 +109,7 @@ func (r *spannerTableIndexResource) Metadata(_ context.Context, req resource.Met
 // Schema defines the schema for the resource.
 func (r *spannerTableIndexResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Version: resourceSchemaVersion,
 		Blocks: map[string]schema.Block{
 			"timeouts": timeouts.Block(ctx, timeouts.Opts{
 				Create: true,
@@ -155,8 +191,17 @@ func (r *spannerTableIndexResource) Schema(ctx context.Context, _ resource.Schem
 						},
 						"order": schema.StringAttribute{
 							Optional: true,
+							// Computed with UseStateForUnknown: state always holds the
+							// hydrated order ("asc" when omitted), so unset config must
+							// inherit it instead of reading as a change that recreates
+							// the index.
+							Computed: true,
+							PlanModifiers: []planmodifier.String{
+								stringplanmodifier.UseStateForUnknown(),
+							},
 							MarkdownDescription: "The sorting order of the column in the index.\n" +
-								"Valid values are: `asc` or `desc`. If not specified the default is `asc`.",
+								"Valid values are: `asc` or `desc`. If not specified the default is `asc`.\n" +
+								"When omitted, the column's current order in the database is kept.",
 							Validators: []validator.String{
 								stringvalidator.OneOf(services.SpannerTableIndexColumnOrders...),
 							},
@@ -172,9 +217,16 @@ func (r *spannerTableIndexResource) Schema(ctx context.Context, _ resource.Schem
 			},
 			"unique": schema.BoolAttribute{
 				Optional: true,
+				// Computed with UseStateForUnknown, which must run before
+				// RequiresReplace: state always holds the hydrated value
+				// (false when omitted), so unset config inherits it and the
+				// replace check compares real values, never unknown.
+				Computed: true,
 				MarkdownDescription: "Indicates if the index is unique.\n" +
-					"**Changing this value will destroy and recreate the index**: Spanner indexes cannot be altered in place.",
+					"When omitted, the index's current uniqueness in the database is kept.\n" +
+					"**Changing this value explicitly will destroy and recreate the index**: Spanner indexes cannot be altered in place.",
 				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.UseStateForUnknown(),
 					boolplanmodifier.RequiresReplace(),
 				},
 			},
@@ -237,7 +289,9 @@ func (r *spannerTableIndexResource) Create(ctx context.Context, req resource.Cre
 		})
 	}
 
-	if !plan.Unique.IsNull() {
+	// unique is Computed: at create time an omitted value is still unknown
+	// (no prior state to inherit), which must read as unset, not false.
+	if !plan.Unique.IsNull() && !plan.Unique.IsUnknown() {
 		index.Unique = wrapperspb.Bool(plan.Unique.ValueBool())
 	}
 
@@ -255,6 +309,11 @@ func (r *spannerTableIndexResource) Create(ctx context.Context, req resource.Cre
 
 	// Map response body to schema and populate Computed attribute values
 	plan.Name = types.StringValue(indexName)
+	plan, rd := resolveUnknownIndexInherited(ctx, plan)
+	resp.Diagnostics.Append(rd...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 
 	// Set state to fully populated data
 	diags = resp.State.Set(ctx, plan)
@@ -358,6 +417,11 @@ func (r *spannerTableIndexResource) Update(ctx context.Context, req resource.Upd
 
 	// Map response body to schema and populate Computed attribute values
 	plan.Name = types.StringValue(indexName)
+	plan, rd := resolveUnknownIndexInherited(ctx, plan)
+	resp.Diagnostics.Append(rd...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 
 	// Set state to fully populated data
 	diags = resp.State.Set(ctx, plan)

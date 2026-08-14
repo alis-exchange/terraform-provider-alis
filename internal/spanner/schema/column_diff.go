@@ -69,7 +69,11 @@ func ClassifyColumnChange(prior, planned *SpannerTableColumn) (ColumnChangeClass
 		)
 	}
 
-	if prior.GetIsStored().GetValue() != planned.GetIsStored().GetValue() {
+	// An unset planned is_stored is "no opinion", never a change: the attribute
+	// is Computed, so an omitted config value is still unknown here and resolves
+	// to the prior state after plan modification. Only an explicit value can
+	// disagree with the prior column and force a replace.
+	if planned.GetIsStored() != nil && prior.GetIsStored().GetValue() != planned.GetIsStored().GetValue() {
 		return ColumnRequiresReplace, fmt.Sprintf("Column %q has a changed is_stored status and requires a table replace", name)
 	}
 

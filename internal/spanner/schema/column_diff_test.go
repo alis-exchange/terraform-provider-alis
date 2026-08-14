@@ -175,11 +175,23 @@ func TestClassifyColumnChange(t *testing.T) {
 			"",
 		},
 
-		// is_stored (null ≡ false)
+		// is_stored: an unset PLANNED value means "no opinion" — is_stored is
+		// Computed, so an omitted config value plans as unknown and inherits
+		// the prior state via UseStateForUnknown. Forcing a replace here would
+		// destroy every v1.x table with a computed column (v1 always created
+		// them STORED and had no is_stored attribute to say so). Alterable is
+		// acceptable: the resolved plan equals prior state, so no update runs.
 		{
-			"is_stored true to nil requires replace",
+			"is_stored true to nil planned is not a replace",
 			withIsStored(computedColumn(), wrapperspb.Bool(true)),
 			withIsStored(computedColumn(), nil),
+			ColumnAlterable,
+			"",
+		},
+		{
+			"is_stored true to explicit false requires replace",
+			withIsStored(computedColumn(), wrapperspb.Bool(true)),
+			withIsStored(computedColumn(), wrapperspb.Bool(false)),
 			ColumnRequiresReplace,
 			`Column "full_name" has a changed is_stored status and requires a table replace`,
 		},
