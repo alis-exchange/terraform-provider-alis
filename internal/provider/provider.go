@@ -15,6 +15,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
+	"github.com/hashicorp/terraform-plugin-framework/function"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
@@ -27,7 +28,8 @@ import (
 
 // Ensure the implementation satisfies the expected interfaces.
 var (
-	_ provider.Provider = &googleProvider{}
+	_ provider.Provider              = &googleProvider{}
+	_ provider.ProviderWithFunctions = &googleProvider{}
 )
 
 // Every Configure call builds a provider instance, and each Connection owns a
@@ -278,5 +280,15 @@ func (p *googleProvider) Resources(_ context.Context) []func() resource.Resource
 		spanner.NewTableIamBindingResource,
 		spanner.NewTableTtlPolicyResource,
 		spanner.NewDatabaseSequenceResource,
+	}
+}
+
+// Functions defines the provider-defined functions implemented in the
+// provider. They require Terraform 1.8 or later.
+func (p *googleProvider) Functions(_ context.Context) []func() function.Function {
+	return []func() function.Function{
+		spanner.NewProtoTimestampDdlFunction,
+		spanner.NewResourceNameAncestorDdlFunction,
+		spanner.NewResourceNameIDDdlFunction,
 	}
 }

@@ -26,8 +26,8 @@ Note on PROTO columns: a table column is declared as a protocol buffer type via 
 
 Requirements:
 
-- [Terraform](https://developer.hashicorp.com/terraform/downloads) >= 1.5 — the oldest version the acceptance suite runs against (see the matrix in [`test.yml`](.github/workflows/test.yml)); raise this line and that matrix together
-- [Go](https://go.dev/doc/install) >= 1.26.5 (only to build the provider from source) — the patch floor tracks standard-library security fixes, so it moves when `govulncheck` reports one
+- [Terraform](https://developer.hashicorp.com/terraform/downloads) >= 1.8 — required by the provider-defined functions and the oldest version the acceptance suite runs against (see the matrix in [`test.yml`](.github/workflows/test.yml)); raise this line and that matrix together
+- [Go](https://go.dev/doc/install) >= 1.26.6 (only to build the provider from source) — the patch floor tracks standard-library security fixes, so it moves when `govulncheck` reports one
 - Docker (only for emulator-backed tests)
 - `protoc` (only to regenerate the proto test fixture)
 
@@ -83,7 +83,7 @@ With dev overrides active, skip `terraform init` and run `terraform plan` / `ter
 
 ### Manual verification fixtures
 
-[`testing/resources/`](testing/resources) contains one directory of real `.tf` configs per resource; [`.template`](testing/resources/.template) is the starting point for a new one:
+[`testing/resources/`](testing/resources) contains one directory of real `.tf` configs per resource, plus [`functions/`](testing/resources/functions) for the provider-defined functions; [`.template`](testing/resources/.template) is the starting point for a new one:
 
 1. Copy `.template` to `testing/resources/<resource_name>` and write the resource config.
 2. Create `terraform.tfvars` with `GOOGLE_PROJECT`, `SPANNER_INSTANCE`, `SPANNER_DATABASE` (table-scoped resources also take `SPANNER_TABLE`). `terraform.tfvars` and `*.tfstate` are gitignored — they hold real project details.

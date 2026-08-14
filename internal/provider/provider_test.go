@@ -7,6 +7,7 @@ import (
 	"terraform-provider-alis/internal/provider"
 
 	fwdatasource "github.com/hashicorp/terraform-plugin-framework/datasource"
+	fwfunction "github.com/hashicorp/terraform-plugin-framework/function"
 	fwprovider "github.com/hashicorp/terraform-plugin-framework/provider"
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
 )
@@ -59,6 +60,32 @@ func TestProvider_ResourceSchemasValid(t *testing.T) {
 		}
 		if diags := schemaResp.Schema.ValidateImplementation(ctx); diags.HasError() {
 			t.Errorf("%s: schema implementation: %v", metaResp.TypeName, diags)
+		}
+	}
+}
+
+func TestProvider_FunctionsValid(t *testing.T) {
+	ctx := context.Background()
+	p := provider.NewProvider("test")().(fwprovider.ProviderWithFunctions)
+
+	for _, newFunction := range p.Functions(ctx) {
+		f := newFunction()
+
+		metaResp := fwfunction.MetadataResponse{}
+		f.Metadata(ctx, fwfunction.MetadataRequest{}, &metaResp)
+
+		defResp := fwfunction.DefinitionResponse{}
+		f.Definition(ctx, fwfunction.DefinitionRequest{}, &defResp)
+
+		if defResp.Diagnostics.HasError() {
+			t.Errorf("%s: definition diagnostics: %v", metaResp.Name, defResp.Diagnostics)
+			continue
+		}
+
+		validateResp := fwfunction.DefinitionValidateResponse{}
+		defResp.Definition.ValidateImplementation(ctx, fwfunction.DefinitionValidateRequest{FuncName: metaResp.Name}, &validateResp)
+		if validateResp.Diagnostics.HasError() {
+			t.Errorf("%s: definition implementation: %v", metaResp.Name, validateResp.Diagnostics)
 		}
 	}
 }

@@ -201,6 +201,8 @@ func (r *spannerTableResource) Schema(ctx context.Context, _ resource.SchemaRequ
 										"This is only applicable to columns where `is_computed` is true.\n" +
 										"The expression must be a valid SQL expression that generates a value for the column.\n" +
 										"Example: `column1 + column2`, or `proto_column.field`.\n" +
+										"The provider functions `provider::alis::proto_timestamp_ddl`, `provider::alis::resource_name_ancestor_ddl` and " +
+										"`provider::alis::resource_name_id_ddl` generate common expressions (Terraform 1.8+).\n" +
 										"**Changing this value will cause a table replace**.",
 								},
 								"is_stored": schema.BoolAttribute{

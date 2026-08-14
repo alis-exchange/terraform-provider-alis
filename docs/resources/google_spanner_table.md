@@ -150,6 +150,7 @@ The column must be of type `TIMESTAMP`.
 This is only applicable to columns where `is_computed` is true.
 The expression must be a valid SQL expression that generates a value for the column.
 Example: `column1 + column2`, or `proto_column.field`.
+The provider functions `provider::alis::proto_timestamp_ddl`, `provider::alis::resource_name_ancestor_ddl` and `provider::alis::resource_name_id_ddl` generate common expressions (Terraform 1.8+).
 **Changing this value will cause a table replace**.
 - `default_value` (String) Expression used as the column default in Spanner `DEFAULT (...)`.
 It must be valid for the column type: literals (e.g. `10.0` for `FLOAT64`, `"true"` for `BOOL` or `STRING`) or Spanner default expressions.

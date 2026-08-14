@@ -95,7 +95,7 @@ jobs:
         # Oldest supported, one in between, newest. The floor is the version
         # README.md advertises as the minimum — move both or neither.
         terraform:
-          - '1.5.*'
+          - '1.8.*'
           - '1.10.*'
           - '1.15.*'
     steps:
