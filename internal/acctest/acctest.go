@@ -1,7 +1,7 @@
 // Package acctest wires terraform-plugin-testing acceptance tests to a real
 // Spanner backend. Backend resolution reuses conntest.Target: a running
 // emulator via SPANNER_EMULATOR_HOST, a Docker emulator via testcontainers,
-// live Spanner via ALIS_OS_PROJECT/ALIS_OS_INSTANCE (set ALIS_OS_LIVE=1 to
+// live Spanner via GOOGLE_PROJECT/SPANNER_INSTANCE (set SPANNER_LIVE=1 to
 // choose it over a reachable emulator), or skip.
 //
 // On the emulator each test gets a fresh database, dropped on cleanup after
@@ -122,7 +122,7 @@ func (e Env) SkipIfNoRoleListing(t *testing.T) {
 
 	_, _, err := e.Conn.DatabaseRoles(ctx, e.DatabaseName, 1, "")
 	if err != nil {
-		t.Skipf("backend cannot list database roles (%v); set ALIS_OS_PROJECT/ALIS_OS_INSTANCE with ALIS_OS_LIVE=1 for live coverage", err)
+		t.Skipf("backend cannot list database roles (%v); set GOOGLE_PROJECT/SPANNER_INSTANCE with SPANNER_LIVE=1 for live coverage", err)
 	}
 }
 

@@ -22,8 +22,8 @@ import (
 // IntegrationSuite runs full lifecycles (create → read → mutate → delete)
 // for every Spanner resource the provider manages, against the backend
 // resolved once by conntest.Target: an emulator by default, falling back to
-// live Spanner when no emulator is available and ALIS_OS_PROJECT /
-// ALIS_OS_INSTANCE are set. Each test creates the objects it needs under
+// live Spanner when no emulator is available and GOOGLE_PROJECT /
+// SPANNER_INSTANCE are set. Each test creates the objects it needs under
 // distinct tftest_-prefixed names and removes them afterwards, so a shared
 // live database is left as it was found.
 type IntegrationSuite struct {

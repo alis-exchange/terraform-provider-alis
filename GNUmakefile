@@ -8,7 +8,8 @@ test:
 
 # Terraform-driven acceptance tests (internal/provider). Needs a terraform
 # binary on PATH (or TF_ACC_TERRAFORM_PATH / TF_ACC_TERRAFORM_VERSION) and a
-# Spanner backend: Docker, SPANNER_EMULATOR_HOST, or ALIS_OS_* for live GCP.
+# Spanner backend: Docker, SPANNER_EMULATOR_HOST, or GOOGLE_PROJECT +
+# SPANNER_INSTANCE for live GCP.
 .PHONY: testacc
 testacc:
 	TF_ACC=1 go test ./internal/provider/ -v $(TESTARGS) -timeout 60m
