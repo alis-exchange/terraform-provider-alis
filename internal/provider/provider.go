@@ -288,6 +288,7 @@ func (p *googleProvider) Resources(_ context.Context) []func() resource.Resource
 func (p *googleProvider) Functions(_ context.Context) []func() function.Function {
 	return []func() function.Function{
 		spanner.NewProtoTimestampDdlFunction,
+		spanner.NewProtoDateDdlFunction,
 		spanner.NewResourceNameAncestorDdlFunction,
 		spanner.NewResourceNameIDDdlFunction,
 	}

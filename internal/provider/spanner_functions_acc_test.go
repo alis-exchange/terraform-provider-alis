@@ -24,6 +24,10 @@ output "proto_timestamp" {
   value = provider::alis::proto_timestamp_ddl("Book.create_time")
 }
 
+output "proto_date" {
+  value = provider::alis::proto_date_ddl("Book.publish_date")
+}
+
 output "ancestor_single" {
   value = provider::alis::resource_name_ancestor_ddl("Book.name", "shelves")
 }
@@ -47,6 +51,10 @@ output "resource_id" {
 					resource.TestCheckOutput(
 						"proto_timestamp",
 						"TIMESTAMP_ADD(TIMESTAMP_SECONDS(Book.create_time.seconds),INTERVAL CAST(FLOOR(Book.create_time.nanos / 1000) AS INT64) MICROSECOND)",
+					),
+					resource.TestCheckOutput(
+						"proto_date",
+						"DATE(CAST((Book.publish_date).year AS INT64),CAST((Book.publish_date).month AS INT64),CAST((Book.publish_date).day AS INT64))",
 					),
 					resource.TestCheckOutput("ancestor_single",
 						"REGEXP_EXTRACT(Book.name, r'^(shelves/[^/]+)')"),

@@ -13,6 +13,7 @@ import (
 // Ensure the implementations satisfy the expected interfaces.
 var (
 	_ function.Function = &protoTimestampDdlFunction{}
+	_ function.Function = &protoDateDdlFunction{}
 	_ function.Function = &resourceNameAncestorDdlFunction{}
 	_ function.Function = &resourceNameIDDdlFunction{}
 )
@@ -58,6 +59,20 @@ func protoTimestampDdl(fieldPath string) (string, error) {
 	return fmt.Sprintf(
 		"TIMESTAMP_ADD(TIMESTAMP_SECONDS(%s.seconds),INTERVAL CAST(FLOOR(%s.nanos / 1000) AS INT64) MICROSECOND)",
 		fieldPath, fieldPath,
+	), nil
+}
+
+// protoDateDdl builds the computed-column expression converting a
+// google.type.Date field into a Spanner DATE. The field path is
+// parenthesized because that is Spanner's canonical form for the stored
+// generation expression.
+func protoDateDdl(fieldPath string) (string, error) {
+	if err := validateFieldPath(fieldPath); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf(
+		"DATE(CAST((%s).year AS INT64),CAST((%s).month AS INT64),CAST((%s).day AS INT64))",
+		fieldPath, fieldPath, fieldPath,
 	), nil
 }
 
@@ -136,6 +151,53 @@ func (f *protoTimestampDdlFunction) Run(ctx context.Context, req function.RunReq
 	}
 
 	ddl, err := protoTimestampDdl(fieldPath)
+	if err != nil {
+		resp.Error = function.ConcatFuncErrors(resp.Error, function.NewArgumentFuncError(0, err.Error()))
+		return
+	}
+	resp.Error = function.ConcatFuncErrors(resp.Error, resp.Result.Set(ctx, ddl))
+}
+
+// NewProtoDateDdlFunction is a helper function to simplify the provider implementation.
+func NewProtoDateDdlFunction() function.Function {
+	return &protoDateDdlFunction{}
+}
+
+type protoDateDdlFunction struct{}
+
+// Metadata returns the function name.
+func (f *protoDateDdlFunction) Metadata(_ context.Context, _ function.MetadataRequest, resp *function.MetadataResponse) {
+	resp.Name = "proto_date_ddl"
+}
+
+// Definition returns the function signature and documentation.
+func (f *protoDateDdlFunction) Definition(_ context.Context, _ function.DefinitionRequest, resp *function.DefinitionResponse) {
+	resp.Definition = function.Definition{
+		Summary: "Generates computed-column DDL converting a proto Date field to a Spanner DATE.",
+		MarkdownDescription: "Generates a `computation_ddl` expression for `alis_google_spanner_table` computed columns that converts a " +
+			"`google.type.Date` field of a `PROTO` column into a Spanner `DATE`.\n\n" +
+			"For example `provider::alis::proto_date_ddl(\"Book.publish_date\")` returns\n" +
+			"`DATE(CAST((Book.publish_date).year AS INT64),CAST((Book.publish_date).month AS INT64),CAST((Book.publish_date).day AS INT64))`.",
+		Parameters: []function.Parameter{
+			function.StringParameter{
+				Name: "field_path",
+				MarkdownDescription: "Dotted path to the `google.type.Date` field, starting at the proto column name, " +
+					"e.g. `Book.publish_date`.",
+			},
+		},
+		Return: function.StringReturn{},
+	}
+}
+
+// Run generates the DDL expression.
+func (f *protoDateDdlFunction) Run(ctx context.Context, req function.RunRequest, resp *function.RunResponse) {
+	var fieldPath string
+	resp.Error = function.ConcatFuncErrors(resp.Error, req.Arguments.Get(ctx, &fieldPath))
+	if resp.Error != nil {
+		return
+	}
+
+	ddl, err := protoDateDdl(fieldPath)
 	if err != nil {
 		resp.Error = function.ConcatFuncErrors(resp.Error, function.NewArgumentFuncError(0, err.Error()))
 		return

@@ -40,6 +40,41 @@ func TestProtoTimestampDdl(t *testing.T) {
 	}
 }
 
+func TestProtoDateDdl(t *testing.T) {
+	tests := []struct {
+		name      string
+		fieldPath string
+		want      string
+		wantErr   bool
+	}{
+		{
+			name:      "proto field path",
+			fieldPath: "BranchPosition.effective_date",
+			want:      "DATE(CAST((BranchPosition.effective_date).year AS INT64),CAST((BranchPosition.effective_date).month AS INT64),CAST((BranchPosition.effective_date).day AS INT64))",
+		},
+		{
+			name:      "deeply nested field",
+			fieldPath: "Book.metadata.publish_date",
+			want:      "DATE(CAST((Book.metadata.publish_date).year AS INT64),CAST((Book.metadata.publish_date).month AS INT64),CAST((Book.metadata.publish_date).day AS INT64))",
+		},
+		{name: "empty", fieldPath: "", wantErr: true},
+		{name: "sql injection", fieldPath: "Book.date)) STORED; DROP TABLE x --", wantErr: true},
+		{name: "leading digit", fieldPath: "1Book.date", wantErr: true},
+		{name: "trailing dot", fieldPath: "Book.", wantErr: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := protoDateDdl(tc.fieldPath)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("protoDateDdl(%q) error = %v, wantErr %v", tc.fieldPath, err, tc.wantErr)
+			}
+			if got != tc.want {
+				t.Errorf("protoDateDdl(%q) = %q, want %q", tc.fieldPath, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestResourceNameAncestorDdl(t *testing.T) {
 	tests := []struct {
 		name        string

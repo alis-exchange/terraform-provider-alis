@@ -3,6 +3,10 @@ output "proto_timestamp_ddl" {
   value = provider::alis::proto_timestamp_ddl("Book.create_time")
 }
 
+output "proto_date_ddl" {
+  value = provider::alis::proto_date_ddl("Book.publish_date")
+}
+
 output "ancestor_ddl" {
   value = provider::alis::resource_name_ancestor_ddl("Book.name", "shelves")
 }
