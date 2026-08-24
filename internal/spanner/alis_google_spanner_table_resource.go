@@ -303,7 +303,10 @@ func (r *spannerTableResource) Schema(ctx context.Context, _ resource.SchemaRequ
 						},
 					},
 				},
-				MarkdownDescription: "The interleave configuration of the table.",
+				MarkdownDescription: "The interleave configuration of the table.\n" +
+					"When omitted, an existing interleave on the table is left untouched and unmanaged; " +
+					"declare the block (matching the database, e.g. after `terraform import`) to manage it.\n" +
+					"**Changing this value will cause a table replace**.",
 				PlanModifiers: []planmodifier.Object{
 					objectplanmodifier.RequiresReplace(),
 				},
@@ -468,10 +471,9 @@ func (r *spannerTableResource) Read(ctx context.Context, req resource.ReadReques
 		state.Schema = s
 	}
 
-	// Populate interleave
-	if table.Interleave != nil {
-		state.Interleave = tableInterleaveToModel(table.Interleave)
-	}
+	// Populate interleave, keeping what the configuration never expressed
+	// unset (see preserveUnsetInterleave).
+	state.Interleave = preserveUnsetInterleave(state.Interleave, table.Interleave)
 
 	// Set refreshed state
 	diags = resp.State.Set(ctx, &state)
@@ -638,6 +640,24 @@ func (r *spannerTableResource) ImportState(ctx context.Context, req resource.Imp
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("instance"), instanceName)...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("database"), databaseName)...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("name"), tableName)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Refresh only hydrates interleave for state that already tracks it (see
+	// preserveUnsetInterleave), so import must seed it here — otherwise an
+	// interleaved table's first plan after import demands a replace.
+	table, err := r.config.SpannerService.GetSpannerTable(ctx, req.ID)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Error Importing Table",
+			"Could not read Table ("+req.ID+") to import it: "+utils.ErrDetail(err),
+		)
+		return
+	}
+	if table.Interleave != nil {
+		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("interleave"), tableInterleaveToModel(table.Interleave))...)
+	}
 }
 
 // Configure adds the provider configured client to the resource.

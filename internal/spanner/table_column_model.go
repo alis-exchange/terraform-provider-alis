@@ -165,6 +165,27 @@ func tableInterleaveToModel(interleave *tableschema.SpannerTableInterleave) *spa
 	return out
 }
 
+// preserveUnsetInterleave decides what interleave a refresh stores in state.
+// Interleave is Optional and replace-only, so hydrating values the
+// configuration never expressed turns into a planned table replace: a table
+// interleaved out-of-band must stay unmanaged (nil) while the state does not
+// track the block, and a tracked block keeps on_delete unset when the prior
+// state left it unset — INFORMATION_SCHEMA always answers NO ACTION even for
+// an omitted clause. The parent table is always taken from the database so
+// real drift stays visible; a database that is no longer interleaved clears
+// the block for the same reason.
+func preserveUnsetInterleave(prior *spannerTableInterleave, db *tableschema.SpannerTableInterleave) *spannerTableInterleave {
+	if prior == nil || db == nil {
+		return nil
+	}
+
+	out := tableInterleaveToModel(db)
+	if prior.OnDelete.IsNull() {
+		out.OnDelete = types.StringNull()
+	}
+	return out
+}
+
 // resolveUnknownIsStored replaces unknown is_stored values with null before a
 // plan is persisted as state. is_stored is Computed, so an omitted value plans
 // as unknown, and a brand-new column has no prior state for UseStateForUnknown
