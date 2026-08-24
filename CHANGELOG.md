@@ -1,4 +1,14 @@
-# [](https://github.com/alis-exchange/terraform-provider-alis/compare/v2.0.0-beta5...v) (2026-08-14)
+# [](https://github.com/alis-exchange/terraform-provider-alis/compare/v2.0.0-beta6...v) (2026-08-24)
+
+
+### Bug Fixes
+
+* **spanner:** adopt matching index/foreign key on create retry after timeout ([b744fcb](https://github.com/alis-exchange/terraform-provider-alis/commit/b744fcb6e89d8d846a5af90cae90a2b4a4fd40dc))
+
+
+### Features
+
+* **spanner:** add proto_date_ddl function for computed-column DDL ([7849c03](https://github.com/alis-exchange/terraform-provider-alis/commit/7849c038b749283ed2035ce7d29696ea33109f96))
 
 # [2.0.0-beta5](https://github.com/alis-exchange/terraform-provider-alis/compare/v2.0.0-beta4...v2.0.0-beta5) (2026-08-14)
 
