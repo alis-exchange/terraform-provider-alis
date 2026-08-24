@@ -153,6 +153,36 @@ a table or index replace. Set them explicitly only when you want to change
 them — an explicit change still recreates the table or index, as those
 properties cannot be altered in place.
 
+## Index configurations that drift from the database: first plan may replace
+
+v1.x never altered an existing index on update: applying an
+`alis_google_spanner_table_index` whose `columns`, `order` or `unique`
+disagreed with the actual index was a silent no-op, so such drift could sit
+unnoticed indefinitely. v2 plans honestly — an index cannot be altered in
+place, so any difference between an explicitly configured value and the
+database index is a **destroy and recreate of the index**, including a full
+backfill on large tables.
+
+Before upgrading, confirm each index block matches the index as it exists in
+the database (`INFORMATION_SCHEMA.INDEXES` and
+`INFORMATION_SCHEMA.INDEX_COLUMNS`), and correct the configuration where they
+disagree. An index replace in the first v2 plan for an index you did not
+change is this drift surfacing, not a change v2 wants by itself.
+
+## Data sources: a missing object is now an error
+
+Two data sources previously returned an empty result when the object they
+read did not exist; both now fail the plan or refresh:
+
+* `alis_google_spanner_table_iam_binding` returned `permissions = null` for a
+  binding that did not exist; it now errors.
+* `alis_google_spanner_database_roles` silently removed itself from state
+  when the read failed with not-found; it now errors.
+
+If a configuration reads a binding that might not exist yet, create it first
+with the `alis_google_spanner_table_iam_binding` resource and reference that
+resource (or use `depends_on`) so the read happens after the binding exists.
+
 ## Leftovers from v1.x
 
 v1.x maintained a `column_metadata` table inside each managed database to

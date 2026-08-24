@@ -118,7 +118,9 @@ The name must satisfy the expression `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`
 
 ### Optional
 
-- `interleave` (Attributes) The interleave configuration of the table. (see [below for nested schema](#nestedatt--interleave))
+- `interleave` (Attributes) The interleave configuration of the table.
+When omitted, an existing interleave on the table is left untouched and unmanaged; declare the block (matching the database, e.g. after `terraform import`) to manage it.
+**Changing this value will cause a table replace**. (see [below for nested schema](#nestedatt--interleave))
 - `prevent_destroy` (Boolean) Prevent the table from being destroyed.
 **This only applies to the terraform state and does not prevent the actual table from being deleted via another source.**
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
