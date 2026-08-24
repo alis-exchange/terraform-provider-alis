@@ -3,11 +3,23 @@ package services
 import (
 	"context"
 	"sort"
+	"strings"
 
 	"terraform-provider-alis/internal/spanner/conn"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
+
+// isDuplicateNameInSchema reports whether err is Spanner refusing a schema
+// change because an object named name already exists. This is how a redeploy
+// surfaces after a timed-out apply: the first attempt's DDL completed
+// server-side, so the retry collides with its own earlier work.
+func isDuplicateNameInSchema(err error, name string) bool {
+	return status.Code(err) == codes.FailedPrecondition &&
+		strings.Contains(err.Error(), "Duplicate name in schema: "+name)
+}
 
 // GetIndexes returns the secondary indexes of a table, reconstructed from the
 // INFORMATION_SCHEMA indexes/index_columns join. The per-column rows are

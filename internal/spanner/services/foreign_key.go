@@ -88,10 +88,48 @@ func (s *SpannerService) CreateSpannerTableForeignKeyConstraint(
 		return nil, status.Errorf(codes.InvalidArgument, "%v", err)
 	}
 	if err := s.conn.ExecuteDDL(ctx, database, ddl); err != nil {
+		if isDuplicateNameInSchema(err, constraint.Name) {
+			// Typically a redeploy after a timed-out apply whose ADD CONSTRAINT
+			// completed server-side. Adopting the constraint is only safe when
+			// it is exactly what this create would have built. The lookup is
+			// scoped to parent, so a same-named constraint on another table
+			// stays a conflict.
+			existing, getErr := s.GetSpannerTableForeignKeyConstraint(ctx, parent, constraint.Name)
+			if getErr == nil && foreignKeyConstraintsEquivalent(constraint, existing) {
+				return existing, nil
+			}
+			return nil, status.Errorf(
+				codes.AlreadyExists,
+				"Foreign Key Constraint (%s) already exists in the schema but does not match the planned definition on Table (%s); drop the existing constraint or align the configuration",
+				constraint.Name,
+				parent,
+			)
+		}
 		return nil, status.Errorf(codes.Internal, "Error creating foreign key constraint: %v", err)
 	}
 
 	return constraint, nil
+}
+
+// foreignKeyConstraintsEquivalent reports whether an existing constraint is
+// exactly the one a create would have built. want holds configuration values
+// (OnDelete may be Unspecified, which Spanner materializes as NO ACTION), got
+// holds hydrated INFORMATION_SCHEMA values, so OnDelete is normalized before
+// comparing.
+func foreignKeyConstraintsEquivalent(want, got *schema.SpannerTableForeignKeyConstraint) bool {
+	if want == nil || got == nil {
+		return false
+	}
+	normalize := func(a schema.SpannerTableConstraintAction) schema.SpannerTableConstraintAction {
+		if a == schema.SpannerTableConstraintActionUnspecified {
+			return schema.SpannerTableConstraintNoAction
+		}
+		return a
+	}
+	return want.Column == got.Column &&
+		want.ReferencedTable == got.ReferencedTable &&
+		want.ReferencedColumn == got.ReferencedColumn &&
+		normalize(want.OnDelete) == normalize(got.OnDelete)
 }
 
 // GetSpannerTableForeignKeyConstraint reconstructs a foreign key constraint

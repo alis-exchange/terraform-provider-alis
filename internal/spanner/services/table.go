@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"terraform-provider-alis/internal/spanner/names"
 	"terraform-provider-alis/internal/spanner/schema"
@@ -72,8 +71,7 @@ func (s *SpannerService) CreateSpannerTable(
 	// Retry belongs to the Connection, which applies it uniformly; see the
 	// invariants on conn.Connection.
 	if _, err := table.Create(ctx, s.conn); err != nil {
-		if status.Code(err) == codes.FailedPrecondition &&
-			strings.Contains(err.Error(), "Duplicate name in schema: "+tableId) {
+		if isDuplicateNameInSchema(err, tableId) {
 			return nil, status.Errorf(codes.AlreadyExists, "Table (%s) already exists", table.GetName())
 		}
 
@@ -144,7 +142,7 @@ func (s *SpannerService) GetSpannerTable(ctx context.Context, name string) (*sch
 
 	table, err := (&schema.SpannerTable{}).Get(ctx, s.conn, name)
 	if err != nil {
-		if (errors.Is(err, schema.ErrTableNotFound{})) {
+		if errors.Is(err, schema.ErrTableNotFound{}) {
 			return nil, status.Errorf(codes.NotFound, "Table (%s) not found", name)
 		}
 

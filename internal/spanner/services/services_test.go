@@ -71,7 +71,8 @@ func (s *IntegrationSuite) ensureBoolValueBundle() {
 	s.Require().NoError(err, "marshal descriptor set")
 	s.Require().NoError(
 		s.cn.ExecuteDDLWithDescriptors(s.ctx, s.db, fds, "CREATE PROTO BUNDLE (`google.protobuf.BoolValue`)"),
-		"create proto bundle")
+		"create proto bundle",
+	)
 }
 
 func idColumn() *schema.SpannerTableColumn {
@@ -266,6 +267,98 @@ func (s *IntegrationSuite) TestTableIndexLifecycle() {
 	s.Equal(codes.NotFound, status.Code(err), "GetSpannerTableIndex after delete")
 }
 
+// TestTableIndexCreateRetry covers the redeploy-after-timeout path: the first
+// apply's CREATE INDEX completes server-side after the client gave up, so the
+// retry hits "Duplicate name in schema". A retry whose definition matches the
+// existing index must succeed; one that differs must fail AlreadyExists.
+func (s *IntegrationSuite) TestTableIndexCreateRetry() {
+	tableID := "tftest_idx_retry"
+	tableName := s.db + "/tables/" + tableID
+
+	s.createTable(tableID, []*schema.SpannerTableColumn{
+		idColumn(),
+		{Name: "display_name", Type: "STRING", Size: wrapperspb.Int64(255)},
+	})
+
+	explicitIndex := func() *SpannerTableIndex {
+		return &SpannerTableIndex{
+			Name: "tftest_idx_retry_explicit",
+			Columns: []*SpannerTableIndexColumn{
+				{Name: "display_name", Order: SpannerTableIndexColumnOrder_DESC},
+			},
+			Unique: wrapperspb.Bool(true),
+		}
+	}
+	_, err := s.service.CreateSpannerTableIndex(s.ctx, tableName, explicitIndex())
+	s.Require().NoError(err, "CreateSpannerTableIndex explicit")
+	s.T().Cleanup(func() {
+		_, _ = s.service.DeleteSpannerTableIndex(context.Background(), tableName, "tftest_idx_retry_explicit")
+	})
+
+	got, err := s.service.CreateSpannerTableIndex(s.ctx, tableName, explicitIndex())
+	s.Require().NoError(err, "retry with matching definition should adopt the existing index")
+	s.Equal("tftest_idx_retry_explicit", got.Name)
+
+	// A plan leaving order and unique unset must still match the existing
+	// index Spanner reports as ASC and non-unique.
+	defaultedIndex := func() *SpannerTableIndex {
+		return &SpannerTableIndex{
+			Name:    "tftest_idx_retry_defaulted",
+			Columns: []*SpannerTableIndexColumn{{Name: "display_name"}},
+		}
+	}
+	_, err = s.service.CreateSpannerTableIndex(s.ctx, tableName, defaultedIndex())
+	s.Require().NoError(err, "CreateSpannerTableIndex defaulted")
+	s.T().Cleanup(func() {
+		_, _ = s.service.DeleteSpannerTableIndex(context.Background(), tableName, "tftest_idx_retry_defaulted")
+	})
+	got, err = s.service.CreateSpannerTableIndex(s.ctx, tableName, defaultedIndex())
+	s.Require().NoError(err, "retry with defaulted definition should adopt the existing index")
+	s.Equal("tftest_idx_retry_defaulted", got.Name)
+
+	differing := explicitIndex()
+	differing.Columns = []*SpannerTableIndexColumn{{Name: "id"}}
+	differing.Unique = nil
+	_, err = s.service.CreateSpannerTableIndex(s.ctx, tableName, differing)
+	s.Equal(codes.AlreadyExists, status.Code(err), "retry with different definition")
+}
+
+// TestForeignKeyCreateRetry is TestTableIndexCreateRetry for foreign keys:
+// re-adding an identical constraint adopts it, a differing one is refused.
+func (s *IntegrationSuite) TestForeignKeyCreateRetry() {
+	childName := s.db + "/tables/tftest_fkr_orders"
+	constraintName := "FK_tftest_fkr_orders_user"
+
+	s.createTable("tftest_fkr_users", []*schema.SpannerTableColumn{idColumn()})
+	s.createTable("tftest_fkr_orders", []*schema.SpannerTableColumn{
+		idColumn(),
+		{Name: "user_id", Type: "INT64"},
+	})
+
+	fk := func() *schema.SpannerTableForeignKeyConstraint {
+		return &schema.SpannerTableForeignKeyConstraint{
+			Name:             constraintName,
+			Column:           "user_id",
+			ReferencedTable:  "tftest_fkr_users",
+			ReferencedColumn: "id",
+		}
+	}
+	_, err := s.service.CreateSpannerTableForeignKeyConstraint(s.ctx, childName, fk())
+	s.Require().NoError(err, "CreateSpannerTableForeignKeyConstraint")
+	s.T().Cleanup(func() {
+		_ = s.service.DeleteSpannerTableForeignKeyConstraint(context.Background(), childName, constraintName)
+	})
+
+	got, err := s.service.CreateSpannerTableForeignKeyConstraint(s.ctx, childName, fk())
+	s.Require().NoError(err, "retry with matching definition should adopt the existing constraint")
+	s.Equal(constraintName, got.Name)
+
+	differing := fk()
+	differing.OnDelete = schema.SpannerTableConstraintActionCascade
+	_, err = s.service.CreateSpannerTableForeignKeyConstraint(s.ctx, childName, differing)
+	s.Equal(codes.AlreadyExists, status.Code(err), "retry with different definition")
+}
+
 func (s *IntegrationSuite) TestForeignKeyLifecycle() {
 	childName := s.db + "/tables/tftest_fk_orders"
 	constraintName := "FK_tftest_orders_user"
@@ -296,7 +389,8 @@ func (s *IntegrationSuite) TestForeignKeyLifecycle() {
 
 	s.Require().NoError(
 		s.service.DeleteSpannerTableForeignKeyConstraint(s.ctx, childName, constraintName),
-		"DeleteSpannerTableForeignKeyConstraint")
+		"DeleteSpannerTableForeignKeyConstraint",
+	)
 	_, err = s.service.GetSpannerTableForeignKeyConstraint(s.ctx, childName, constraintName)
 	s.Equal(codes.NotFound, status.Code(err), "GetSpannerTableForeignKeyConstraint after delete")
 }

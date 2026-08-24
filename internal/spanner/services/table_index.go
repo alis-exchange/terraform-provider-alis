@@ -77,10 +77,56 @@ func (s *SpannerService) CreateSpannerTableIndex(ctx context.Context, parent str
 		return nil, status.Errorf(codes.InvalidArgument, "%v", err)
 	}
 	if err := s.conn.ExecuteDDL(ctx, database, ddl); err != nil {
+		if isDuplicateNameInSchema(err, index.Name) {
+			// Typically a redeploy after a timed-out apply whose CREATE INDEX
+			// completed server-side. Adopting the index is only safe when it
+			// is exactly what this create would have built.
+			existing, getErr := s.GetSpannerTableIndex(ctx, parent, index.Name)
+			if getErr == nil && indexesEquivalent(index, existing) {
+				return existing, nil
+			}
+			return nil, status.Errorf(
+				codes.AlreadyExists,
+				"Index (%s) already exists on Table (%s) but does not match the planned definition; drop the existing index or align the configuration",
+				index.Name,
+				parent,
+			)
+		}
 		return nil, status.Errorf(codes.Internal, "Error creating index: %v", err)
 	}
 
 	return index, nil
+}
+
+// indexesEquivalent reports whether an existing index is exactly the one a
+// create would have built: same columns in the same sequence and sort order,
+// same uniqueness. want holds configuration values (order may be UNSPECIFIED,
+// unique may be nil — both meaning Spanner's defaults), got holds hydrated
+// INFORMATION_SCHEMA values, so both sides are normalized before comparing.
+func indexesEquivalent(want, got *SpannerTableIndex) bool {
+	if want == nil || got == nil || len(want.Columns) != len(got.Columns) {
+		return false
+	}
+	if want.Unique.GetValue() != got.Unique.GetValue() {
+		return false
+	}
+	for i := range want.Columns {
+		if want.Columns[i] == nil || got.Columns[i] == nil || want.Columns[i].Name != got.Columns[i].Name {
+			return false
+		}
+		if normalizeIndexColumnOrder(want.Columns[i].Order) != normalizeIndexColumnOrder(got.Columns[i].Order) {
+			return false
+		}
+	}
+	return true
+}
+
+// normalizeIndexColumnOrder resolves UNSPECIFIED to ASC, mirroring CreateDdl.
+func normalizeIndexColumnOrder(o SpannerTableIndexColumnOrder) SpannerTableIndexColumnOrder {
+	if o == SpannerTableIndexColumnOrder_UNSPECIFIED {
+		return SpannerTableIndexColumnOrder_ASC
+	}
+	return o
 }
 
 // GetSpannerTableIndex gets a Spanner table index.
