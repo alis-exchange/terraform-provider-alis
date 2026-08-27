@@ -20,7 +20,7 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/gcloud v0.44.0
 	golang.org/x/oauth2 v0.36.0
 	google.golang.org/api v0.293.0
-	google.golang.org/grpc v1.83.0
+	google.golang.org/grpc v1.83.1
 	google.golang.org/protobuf v1.36.12
 	gorm.io/gorm v1.31.2
 )
