@@ -1,9 +1,11 @@
-# [](https://github.com/alis-exchange/terraform-provider-alis/compare/v2.0.0-beta6...v) (2026-08-24)
+# [](https://github.com/alis-exchange/terraform-provider-alis/compare/v2.0.0-beta7...v) (2026-09-10)
 
 
 ### Bug Fixes
 
 * **spanner:** adopt matching index/foreign key on create retry after timeout ([b744fcb](https://github.com/alis-exchange/terraform-provider-alis/commit/b744fcb6e89d8d846a5af90cae90a2b4a4fd40dc))
+* **spanner:** keep unmanaged interleave out of refreshed table state ([a61c73b](https://github.com/alis-exchange/terraform-provider-alis/commit/a61c73b91d79ba6eb481c093fe52aac0c211124a))
+* **spanner:** reject protected table destroy and replacement during plan ([2e5c109](https://github.com/alis-exchange/terraform-provider-alis/commit/2e5c10969f911d470a2667265b631cb96fc45b1a))
 
 
 ### Features
