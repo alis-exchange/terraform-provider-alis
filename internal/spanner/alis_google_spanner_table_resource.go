@@ -34,6 +34,7 @@ var (
 	_ resource.Resource                = &spannerTableResource{}
 	_ resource.ResourceWithConfigure   = &spannerTableResource{}
 	_ resource.ResourceWithImportState = &spannerTableResource{}
+	_ resource.ResourceWithModifyPlan  = &spannerTableResource{}
 )
 
 // NewSpannerTableResource is a helper function to simplify the provider implementation.
@@ -45,7 +46,9 @@ func NewSpannerTableResource() resource.Resource {
 // (alis_google_spanner_table). Only schema.columns can change in place;
 // identifying attributes carry RequiresReplace plan modifiers, and column
 // changes that DDL cannot apply in place force a replace via
-// tableColumnsRequireReplace.
+// tableColumnsRequireReplace. While the prior state has prevent_destroy set to
+// true, every destroy plan and every replace decision is refused during
+// planning (see table_protection.go), and Delete refuses again at apply.
 type spannerTableResource struct {
 	config *internal.ProviderConfig
 }
@@ -134,28 +137,44 @@ func (r *spannerTableResource) Schema(ctx context.Context, _ resource.SchemaRequ
 					}, "Name must be a valid Spanner Table ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions"),
 				},
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
+					stringplanmodifier.RequiresReplaceIf(
+						tableStringRequiresReplace,
+						tableReplaceDescription,
+						tableReplaceDescription,
+					),
 				},
 			},
 			"project": schema.StringAttribute{
 				Required:            true,
 				MarkdownDescription: "The Google Cloud project ID in which the table belongs.",
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
+					stringplanmodifier.RequiresReplaceIf(
+						tableStringRequiresReplace,
+						tableReplaceDescription,
+						tableReplaceDescription,
+					),
 				},
 			},
 			"instance": schema.StringAttribute{
 				Required:            true,
 				MarkdownDescription: "The name of the Spanner instance.",
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
+					stringplanmodifier.RequiresReplaceIf(
+						tableStringRequiresReplace,
+						tableReplaceDescription,
+						tableReplaceDescription,
+					),
 				},
 			},
 			"database": schema.StringAttribute{
 				Required:            true,
 				MarkdownDescription: "The name of the parent database.",
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
+					stringplanmodifier.RequiresReplaceIf(
+						tableStringRequiresReplace,
+						tableReplaceDescription,
+						tableReplaceDescription,
+					),
 				},
 			},
 			"schema": schema.SingleNestedAttribute{
@@ -308,13 +327,27 @@ func (r *spannerTableResource) Schema(ctx context.Context, _ resource.SchemaRequ
 					"declare the block (matching the database, e.g. after `terraform import`) to manage it.\n" +
 					"**Changing this value will cause a table replace**.",
 				PlanModifiers: []planmodifier.Object{
-					objectplanmodifier.RequiresReplace(),
+					objectplanmodifier.RequiresReplaceIf(
+						tableObjectRequiresReplace,
+						tableReplaceDescription,
+						tableReplaceDescription,
+					),
 				},
 			},
 			"prevent_destroy": schema.BoolAttribute{
 				Optional: true,
 				Computed: true,
-				MarkdownDescription: "Prevent the table from being destroyed.\n" +
+				MarkdownDescription: "Prevent the table from being destroyed. Defaults to `true`.\n" +
+					"While the value recorded in state is `true`, any plan that would destroy the table fails during " +
+					"planning: an explicit destroy, the resource being removed from configuration, and a replacement " +
+					"caused by a change to `name`, `project`, `instance`, `database` or `interleave`, or by a column " +
+					"change Spanner cannot apply in place.\n" +
+					"The check reads the value recorded in state, not the value being planned, so setting " +
+					"`prevent_destroy = false` in the same change as the destructive edit does not lift the protection: " +
+					"apply that change on its own first, then apply the destroy or the replacement.\n" +
+					"Replacements forced from outside the configuration (`terraform apply -replace=...`, " +
+					"`terraform taint`) are not visible while planning and fail at apply instead. " +
+					"A table seeded by `terraform import` records no value until its first apply.\n" +
 					"**This only applies to the terraform state and does not prevent the actual table from being deleted via another source.**",
 				Default: booldefault.StaticBool(true),
 			},
@@ -591,13 +624,11 @@ func (r *spannerTableResource) Delete(ctx context.Context, req resource.DeleteRe
 
 	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String()
 
-	// Check if prevent_destroy is set to true
-	if state.PreventDestroy.ValueBool() {
-		resp.Diagnostics.AddAttributeError(
-			path.Root("prevent_destroy"),
-			"Error Deleting Table",
-			"Table ("+tableName+") is protected from deletion by the Terraform configuration. Set `prevent_destroy` to false to allow deletion.",
-		)
+	// Apply-time backstop for the plan-time guard in ModifyPlan, which covers
+	// destroys Terraform never planned as such: replacements forced with
+	// -replace or taint reach Delete without a destroy plan.
+	resp.Diagnostics.Append(guardTableDestroy(ctx, req.State)...)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 
@@ -610,6 +641,21 @@ func (r *spannerTableResource) Delete(ctx context.Context, req resource.DeleteRe
 		)
 		return
 	}
+}
+
+// ModifyPlan refuses a destroy plan while the prior state protects the table,
+// so the refusal lands before Terraform destroys anything. Replacement plans
+// are refused by the RequiresReplaceIf guards on the replace-only attributes
+// instead: the framework hands this method an empty RequiresReplace, so the
+// attribute plan modifiers are the only place a replace decision is visible.
+// The plan is left untouched, as the framework requires on destroy.
+func (r *spannerTableResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	// A non-null plan is a create or an update; only a destroy plan is null.
+	if !req.Plan.Raw.IsNull() {
+		return
+	}
+
+	resp.Diagnostics.Append(guardTableDestroy(ctx, req.State)...)
 }
 
 func (r *spannerTableResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {

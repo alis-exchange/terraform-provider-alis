@@ -14,7 +14,9 @@ import (
 // tableColumnsRequireReplace is the RequiresReplaceIf handler for schema.columns.
 // It pairs prior and planned columns by name and forces a table replace whenever
 // schema.ClassifyColumnChange reports a change that cannot be applied in place,
-// emitting one warning per affected column.
+// emitting one warning per affected column. The replace decision is made here,
+// so destroy protection is enforced here as well: resource-level ModifyPlan is
+// handed no attribute replace paths.
 func tableColumnsRequireReplace(ctx context.Context, req planmodifier.ListRequest, resp *listplanmodifier.RequiresReplaceIfFuncResponse) {
 	priorColumns, d := tableColumnsToSchema(ctx, req.StateValue)
 	resp.Diagnostics.Append(d...)
@@ -57,5 +59,11 @@ func tableColumnsRequireReplace(ctx context.Context, req planmodifier.ListReques
 			resp.RequiresReplace = true
 			resp.Diagnostics.AddWarning(fmt.Sprintf("Column %q requires a table replace", name), reason)
 		}
+	}
+
+	// The per-column warnings above stay, so a refused plan still names the
+	// columns that would have forced the replace.
+	if resp.RequiresReplace {
+		resp.Diagnostics.Append(guardTableReplace(ctx, req.State, req.Path)...)
 	}
 }

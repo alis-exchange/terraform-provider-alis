@@ -169,6 +169,38 @@ the database (`INFORMATION_SCHEMA.INDEXES` and
 disagree. An index replace in the first v2 plan for an index you did not
 change is this drift surfacing, not a change v2 wants by itself.
 
+## `prevent_destroy` is enforced while planning
+
+v1.x checked `prevent_destroy` only inside the delete call. A destroy plan
+therefore succeeded, and the protected table failed part-way through
+`terraform apply` — after every resource sequenced ahead of it had already
+been destroyed. Terraform does not roll an apply back, so recovering meant
+re-creating infrastructure that had just been removed.
+
+v2 fails the plan instead, with `Table Protected From Deletion`, and the check
+covers replacements as well as plain destroys. While the state records
+`prevent_destroy = true`, `Table Protected From Replacement` refuses a change
+to `name`, `project`, `instance`, `database` or `interleave`, and a column
+change Spanner cannot apply in place.
+
+The value is read from the state, not from the configuration being planned, so
+setting `prevent_destroy = false` in the same change as the destructive edit
+does not lift the protection. Lift it in its own apply first:
+
+1. Set `prevent_destroy = false` and apply — an in-place update.
+2. Apply the destroy or the replacing change.
+
+Step 1 has to plan without a replace of its own. A table whose replace-only
+attributes have drifted from the database — an interleave or column type
+changed out of band — refuses every plan, including the one that would lift
+the protection, until the configuration matches the database again. Correct
+the configuration first, then lift the protection.
+
+Replacements forced from outside the configuration are invisible while
+planning: `terraform apply -replace=...` and `terraform taint` are planned by
+Terraform as a create, not as a destroy, so the provider only sees them at
+apply. Those still fail inside the delete, as in v1.x.
+
 ## Data sources: a missing object is now an error
 
 Two data sources previously returned an empty result when the object they

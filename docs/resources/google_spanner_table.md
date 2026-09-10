@@ -121,7 +121,10 @@ The name must satisfy the expression `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`
 - `interleave` (Attributes) The interleave configuration of the table.
 When omitted, an existing interleave on the table is left untouched and unmanaged; declare the block (matching the database, e.g. after `terraform import`) to manage it.
 **Changing this value will cause a table replace**. (see [below for nested schema](#nestedatt--interleave))
-- `prevent_destroy` (Boolean) Prevent the table from being destroyed.
+- `prevent_destroy` (Boolean) Prevent the table from being destroyed. Defaults to `true`.
+While the value recorded in state is `true`, any plan that would destroy the table fails during planning: an explicit destroy, the resource being removed from configuration, and a replacement caused by a change to `name`, `project`, `instance`, `database` or `interleave`, or by a column change Spanner cannot apply in place.
+The check reads the value recorded in state, not the value being planned, so setting `prevent_destroy = false` in the same change as the destructive edit does not lift the protection: apply that change on its own first, then apply the destroy or the replacement.
+Replacements forced from outside the configuration (`terraform apply -replace=...`, `terraform taint`) are not visible while planning and fail at apply instead. A table seeded by `terraform import` records no value until its first apply.
 **This only applies to the terraform state and does not prevent the actual table from being deleted via another source.**
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 

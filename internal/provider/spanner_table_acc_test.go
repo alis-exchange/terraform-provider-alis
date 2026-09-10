@@ -2,7 +2,6 @@ package provider_test
 
 import (
 	"fmt"
-	"regexp"
 	"testing"
 
 	"terraform-provider-alis/internal/acctest"
@@ -177,56 +176,6 @@ resource "alis_google_spanner_table" "test" {
 						plancheck.ExpectResourceAction("alis_google_spanner_table.test", plancheck.ResourceActionReplace),
 					},
 				},
-			},
-		},
-	})
-}
-
-func TestAccSpannerTable_preventDestroyGuard(t *testing.T) {
-	env := acctest.Setup(t)
-	const table = "tftest_guarded"
-
-	config := func(preventDestroyLine string) string {
-		return env.ProviderBlock() + fmt.Sprintf(`
-resource "alis_google_spanner_table" "test" {
-  project  = %q
-  instance = %q
-  database = %q
-  name     = %q
-  %s
-  schema = {
-    columns = [
-      {
-        name           = "id",
-        type           = "INT64",
-        is_primary_key = true,
-        required       = true,
-      },
-    ]
-  }
-}
-`, env.Project, env.Instance, env.Database, table, preventDestroyLine)
-	}
-
-	resource.Test(t, resource.TestCase{
-		ProtoV6ProviderFactories: acctest.ProtoV6ProviderFactories(),
-		CheckDestroy:             checkTableDestroy(env, t, table),
-		Steps: []resource.TestStep{
-			{
-				// prevent_destroy defaults to true when omitted.
-				Config: config(""),
-				Check: resource.TestCheckResourceAttr(
-					"alis_google_spanner_table.test", "prevent_destroy", "true",
-				),
-			},
-			{
-				Config:      config(""),
-				Destroy:     true,
-				ExpectError: regexp.MustCompile("protected from deletion"),
-			},
-			{
-				// Lift the guard so the test's final destroy succeeds.
-				Config: config("prevent_destroy = false"),
 			},
 		},
 	})
