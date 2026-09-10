@@ -72,11 +72,6 @@ type TablePolicyBinding struct {
 	Permissions []TablePolicyBindingPermission
 }
 
-// TablePolicy represents a Spanner table roles policy.
-type TablePolicy struct {
-	Bindings []*TablePolicyBinding
-}
-
 // TablePermissionsRow is one row of INFORMATION_SCHEMA.TABLE_PRIVILEGES.
 // Field names match the column names so the query scanner can map them.
 type TablePermissionsRow struct {

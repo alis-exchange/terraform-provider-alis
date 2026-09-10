@@ -27,46 +27,6 @@ type SpannerTable struct {
 	Interleave *SpannerTableInterleave
 }
 
-// GetProject returns "projects/{p}", or "" when the table name is unset or
-// malformed (no panics on short names).
-func (t *SpannerTable) GetProject() string {
-	n, err := names.ParseTable(t.GetName())
-	if err != nil {
-		return ""
-	}
-	return "projects/" + n.Project
-}
-
-// GetProjectId returns the project id segment, or "" when the table name is
-// unset or malformed.
-func (t *SpannerTable) GetProjectId() string {
-	n, err := names.ParseTable(t.GetName())
-	if err != nil {
-		return ""
-	}
-	return n.Project
-}
-
-// GetInstance returns "projects/{p}/instances/{i}", or "" when the table
-// name is unset or malformed.
-func (t *SpannerTable) GetInstance() string {
-	n, err := names.ParseTable(t.GetName())
-	if err != nil {
-		return ""
-	}
-	return fmt.Sprintf("projects/%s/instances/%s", n.Project, n.Instance)
-}
-
-// GetInstanceId returns the instance id segment, or "" when the table name
-// is unset or malformed.
-func (t *SpannerTable) GetInstanceId() string {
-	n, err := names.ParseTable(t.GetName())
-	if err != nil {
-		return ""
-	}
-	return n.Instance
-}
-
 // GetDatabase returns the fully qualified database name, or "" when the
 // table name is unset or malformed.
 func (t *SpannerTable) GetDatabase() string {

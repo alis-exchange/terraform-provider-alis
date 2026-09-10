@@ -4,30 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"log"
-	"os"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"gorm.io/gorm/logger"
 	"gorm.io/gorm/utils"
-)
-
-var (
-	// Discard sends every log message to io.Discard.
-	Discard = New(log.New(io.Discard, "", log.LstdFlags), logger.Config{})
-	// Default writes to stdout at Warn level, with color and a 200ms
-	// slow-SQL threshold.
-	Default = New(log.New(os.Stdout, "\r\n", log.LstdFlags), logger.Config{
-		SlowThreshold:             200 * time.Millisecond,
-		LogLevel:                  logger.Warn,
-		IgnoreRecordNotFoundError: false,
-		Colorful:                  true,
-	})
-	// Recorder captures the most recent traced SQL statement instead of
-	// printing it, delegating all other logging to Default.
-	Recorder = traceRecorder{Interface: Default, BeginAt: time.Now()}
 )
 
 // New builds a gorm logger that writes formatted messages via writer and
@@ -183,28 +164,4 @@ func (l *tfLogger) ParamsFilter(ctx context.Context, sql string, params ...inter
 		return sql, nil
 	}
 	return sql, params
-}
-
-// traceRecorder overrides Trace to capture the last SQL statement, row count,
-// and error for inspection instead of printing them; every other method
-// delegates to the embedded Interface.
-type traceRecorder struct {
-	logger.Interface
-	BeginAt      time.Time
-	SQL          string
-	RowsAffected int64
-	Err          error
-}
-
-// New returns a fresh recorder with the same delegate Interface and no
-// captured trace.
-func (l *traceRecorder) New() *traceRecorder {
-	return &traceRecorder{Interface: l.Interface, BeginAt: time.Now()}
-}
-
-// Trace records the statement, row count, and error rather than logging them.
-func (l *traceRecorder) Trace(ctx context.Context, begin time.Time, fc func() (string, int64), err error) {
-	l.BeginAt = begin
-	l.SQL, l.RowsAffected = fc()
-	l.Err = err
 }
