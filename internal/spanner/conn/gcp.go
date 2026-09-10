@@ -2,27 +2,23 @@ package conn
 
 import (
 	"context"
+	"database/sql"
 	"errors"
-	"log"
 	"os"
 	"reflect"
 	"strings"
 	"sync"
 	"time"
 
-	customloggers "terraform-provider-alis/internal/spanner/logger"
-
 	"cloud.google.com/go/spanner"
 	spannerAdmin "cloud.google.com/go/spanner/admin/database/apiv1"
 	"cloud.google.com/go/spanner/admin/database/apiv1/databasepb"
-	spannergorm "github.com/googleapis/go-gorm-spanner"
 	spannerdriver "github.com/googleapis/go-sql-spanner"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
 )
 
 // emulatorHostEnv names the emulator address adapters read at construction.
@@ -47,38 +43,22 @@ func EmulatorHost() string {
 	return os.Getenv(emulatorHostEnv)
 }
 
-// defaultGormLogger is the single logger configuration applied to every
-// session the adapter hands out.
-func defaultGormLogger() gormlogger.Interface {
-	return customloggers.New(
-		log.New(os.Stdout, "\r\n", log.LstdFlags),
-		gormlogger.Config{
-			SlowThreshold:             200 * time.Millisecond,
-			LogLevel:                  gormlogger.Info,
-			IgnoreRecordNotFoundError: false,
-			ParameterizedQueries:      true,
-			Colorful:                  true,
-		},
-	)
-}
-
 // gcpConn is the production adapter: it implements Connection over the real
-// Google clients — the database admin client for DDL and metadata, and gorm
-// (over go-sql-spanner) for DML and queries. The admin client is created once
-// per adapter; gorm sessions and dialect lookups are cached per database.
-// SPANNER_EMULATOR_HOST is captured at construction time, so the adapter must
-// be built after the variable is set.
+// Google clients — the database admin client for DDL and metadata, and
+// database/sql (over go-sql-spanner) for INFORMATION_SCHEMA queries. The admin
+// client is created once per adapter; SQL pools and dialect lookups are cached
+// per database. SPANNER_EMULATOR_HOST is captured at construction time, so
+// the adapter must be built after the variable is set.
 type gcpConn struct {
 	opts         Options
 	emulatorHost string
-	logger       gormlogger.Interface
 
 	adminOnce sync.Once
 	admin     *spannerAdmin.DatabaseAdminClient
 	adminErr  error
 
 	mu       sync.Mutex
-	sessions map[string]*gorm.DB
+	sessions map[string]*sql.DB
 	dialects map[string]Dialect
 }
 
@@ -88,8 +68,7 @@ func newGCPAdapter(opts Options) *gcpConn {
 	return &gcpConn{
 		opts:         opts,
 		emulatorHost: EmulatorHost(),
-		logger:       defaultGormLogger(),
-		sessions:     map[string]*gorm.DB{},
+		sessions:     map[string]*sql.DB{},
 		dialects:     map[string]Dialect{},
 	}
 }
@@ -116,15 +95,15 @@ func (g *gcpConn) adminClient(ctx context.Context) (*spannerAdmin.DatabaseAdminC
 	return g.admin, g.adminErr
 }
 
-// session returns the cached gorm handle for a database, building it on first
+// session returns the cached SQL pool for a database, building it on first
 // use from a go-sql-spanner connector that carries this Conn's credentials —
-// a DSN-string gorm.Open has no credential parameter, so the connector is the
-// only route by which credentials can reach the gorm path.
-func (g *gcpConn) session(ctx context.Context, database string) (*gorm.DB, error) {
+// a DSN-string sql.Open has no credential parameter, so the connector is the
+// only route by which credentials can reach the query path.
+func (g *gcpConn) session(database string) (*sql.DB, error) {
 	g.mu.Lock()
 	if db, ok := g.sessions[database]; ok {
 		g.mu.Unlock()
-		return db.WithContext(ctx), nil
+		return db, nil
 	}
 	g.mu.Unlock()
 
@@ -145,24 +124,16 @@ func (g *gcpConn) session(ctx context.Context, database string) (*gorm.DB, error
 		return nil, status.Errorf(codes.Internal, "Error creating Spanner connector: %v", err)
 	}
 
-	db, err := gorm.Open(
-		spannergorm.New(spannergorm.Config{Connector: connector}),
-		&gorm.Config{
-			PrepareStmt: true,
-			Logger:      g.logger,
-		},
-	)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "Error connecting to database: %v", err)
-	}
+	db := sql.OpenDB(connector)
 
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if cached, ok := g.sessions[database]; ok {
-		return cached.WithContext(ctx), nil
+		_ = db.Close() // lost the race; keep the first pool
+		return cached, nil
 	}
 	g.sessions[database] = db
-	return db.WithContext(ctx), nil
+	return db, nil
 }
 
 func (g *gcpConn) Dialect(ctx context.Context, database string) (Dialect, error) {
@@ -219,26 +190,44 @@ func (g *gcpConn) ExecuteDDLWithDescriptors(ctx context.Context, database string
 	return op.Wait(ctx)
 }
 
-func (g *gcpConn) Exec(ctx context.Context, database, sql string, params ...any) error {
-	db, err := g.session(ctx, database)
+func (g *gcpConn) Exec(ctx context.Context, database, query string, params ...any) error {
+	db, err := g.session(database)
 	if err != nil {
 		return err
 	}
-	return db.Exec(sql, params...).Error
+	_, err = db.ExecContext(ctx, query, params...)
+	return err
 }
 
-func (g *gcpConn) Query(ctx context.Context, database string, dest any, sql string, params ...any) error {
-	db, err := g.session(ctx, database)
+func (g *gcpConn) Query(ctx context.Context, database string, dest any, query string, params ...any) error {
+	db, err := g.session(database)
 	if err != nil {
 		return err
 	}
-	result := db.Raw(sql, params...).Scan(dest)
-	if result.Error != nil {
-		return result.Error
+
+	start := time.Now()
+	rows, err := db.QueryContext(ctx, query, params...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	n, err := scanInto(rows, dest)
+	if err == nil {
+		err = rows.Err() // scanInto already checks this; repeated for static analysis
+	}
+	tflog.Debug(ctx, "spanner query", map[string]any{
+		"database":   database,
+		"sql":        query,
+		"rows":       n,
+		"elapsed_ms": time.Since(start).Milliseconds(),
+	})
+	if err != nil {
+		return err
 	}
 	// Port contract: dest *T with zero rows is codes.NotFound; dest *[]T
 	// with zero rows is an empty slice and nil error.
-	if result.RowsAffected == 0 && !isSlicePointer(dest) {
+	if n == 0 && !isSlicePointer(dest) {
 		return status.Error(codes.NotFound, "no rows")
 	}
 	return nil
@@ -288,9 +277,7 @@ func (g *gcpConn) Close() error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	for name, db := range g.sessions {
-		if sqlDB, err := db.DB(); err == nil {
-			_ = sqlDB.Close()
-		}
+		_ = db.Close()
 		delete(g.sessions, name)
 	}
 	if g.admin != nil {

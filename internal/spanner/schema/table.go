@@ -219,30 +219,30 @@ func (t *SpannerTable) Create(ctx context.Context, cn conn.Connection) (*Spanner
 // columnOptionRow mirror the INFORMATION_SCHEMA result shapes;
 // sql.NullString distinguishes NULL from empty strings.
 type tableInfoRow struct {
-	TableName       sql.NullString `gorm:"column:TABLE_NAME"`
-	ParentTableName sql.NullString `gorm:"column:PARENT_TABLE_NAME"`
-	OnDeleteAction  sql.NullString `gorm:"column:ON_DELETE_ACTION"`
-	InterleaveType  sql.NullString `gorm:"column:INTERLEAVE_TYPE"`
+	TableName       sql.NullString `db:"TABLE_NAME"`
+	ParentTableName sql.NullString `db:"PARENT_TABLE_NAME"`
+	OnDeleteAction  sql.NullString `db:"ON_DELETE_ACTION"`
+	InterleaveType  sql.NullString `db:"INTERLEAVE_TYPE"`
 }
 
 type informationSchemaColumnRow struct {
-	ColumnName     sql.NullString `gorm:"column:COLUMN_NAME"`
-	SpannerType    sql.NullString `gorm:"column:SPANNER_TYPE"`
-	IsNullable     sql.NullString `gorm:"column:IS_NULLABLE"`
-	ColumnDefault  sql.NullString `gorm:"column:COLUMN_DEFAULT"`
-	IsGenerated    sql.NullString `gorm:"column:IS_GENERATED"`
-	IsStored       sql.NullString `gorm:"column:IS_STORED"`
-	GenerationExpr sql.NullString `gorm:"column:GENERATION_EXPRESSION"`
+	ColumnName     sql.NullString `db:"COLUMN_NAME"`
+	SpannerType    sql.NullString `db:"SPANNER_TYPE"`
+	IsNullable     sql.NullString `db:"IS_NULLABLE"`
+	ColumnDefault  sql.NullString `db:"COLUMN_DEFAULT"`
+	IsGenerated    sql.NullString `db:"IS_GENERATED"`
+	IsStored       sql.NullString `db:"IS_STORED"`
+	GenerationExpr sql.NullString `db:"GENERATION_EXPRESSION"`
 }
 
 type primaryKeyRow struct {
-	ColumnName sql.NullString `gorm:"column:COLUMN_NAME"`
+	ColumnName sql.NullString `db:"COLUMN_NAME"`
 }
 
 type columnOptionRow struct {
-	ColumnName  sql.NullString `gorm:"column:COLUMN_NAME"`
-	OptionName  sql.NullString `gorm:"column:OPTION_NAME"`
-	OptionValue sql.NullString `gorm:"column:OPTION_VALUE"`
+	ColumnName  sql.NullString `db:"COLUMN_NAME"`
+	OptionName  sql.NullString `db:"OPTION_NAME"`
+	OptionValue sql.NullString `db:"OPTION_VALUE"`
 }
 
 // Get hydrates the table from the database's INFORMATION_SCHEMA (TABLES,

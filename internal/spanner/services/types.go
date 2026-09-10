@@ -76,9 +76,9 @@ type TablePolicyBinding struct {
 // column tags are what the query scanner maps on, so they must keep matching
 // the column names the query returns.
 type TablePermissionsRow struct {
-	TableName     string `gorm:"column:TABLE_NAME"`
-	PrivilegeType string `gorm:"column:PRIVILEGE_TYPE"`
-	Grantee       string `gorm:"column:GRANTEE"`
+	TableName     string `db:"TABLE_NAME"`
+	PrivilegeType string `db:"PRIVILEGE_TYPE"`
+	Grantee       string `db:"GRANTEE"`
 }
 
 // GetPermission maps the row's PRIVILEGE_TYPE to a
@@ -102,38 +102,38 @@ func (r TablePermissionsRow) GetPermission() TablePolicyBindingPermission {
 // join queried by GetIndexes — one row per (index, column) pair, later merged
 // into SpannerTableIndex values.
 type Index struct {
-	IndexName       string
-	IndexType       string
-	ColumnName      string
-	ColumnOrdering  string
-	IsUnique        bool
-	OrdinalPosition int
+	IndexName       string `db:"index_name"`
+	IndexType       string `db:"index_type"`
+	ColumnName      string `db:"column_name"`
+	ColumnOrdering  string `db:"column_ordering"`
+	IsUnique        bool   `db:"is_unique"`
+	OrdinalPosition int    `db:"ordinal_position"`
 }
 
 // Constraint is one row of the INFORMATION_SCHEMA constraint join used to
 // read foreign keys back from the database. The column tags are what the query
 // scanner maps on, so they must keep matching the aliases the join selects.
 type Constraint struct {
-	ConstraintName    string `gorm:"column:CONSTRAINT_NAME"`
-	ConstraintType    string `gorm:"column:CONSTRAINT_TYPE"`
-	ConstrainedTable  string `gorm:"column:CONSTRAINED_TABLE"`
-	ConstrainedColumn string `gorm:"column:CONSTRAINED_COLUMN"`
-	UpdateRule        string `gorm:"column:UPDATE_RULE"`
-	DeleteRule        string `gorm:"column:DELETE_RULE"`
-	ReferencedTable   string `gorm:"column:REFERENCED_TABLE"`
-	ReferencedColumn  string `gorm:"column:REFERENCED_COLUMN"`
+	ConstraintName    string `db:"CONSTRAINT_NAME"`
+	ConstraintType    string `db:"CONSTRAINT_TYPE"`
+	ConstrainedTable  string `db:"CONSTRAINED_TABLE"`
+	ConstrainedColumn string `db:"CONSTRAINED_COLUMN"`
+	UpdateRule        string `db:"UPDATE_RULE"`
+	DeleteRule        string `db:"DELETE_RULE"`
+	ReferencedTable   string `db:"REFERENCED_TABLE"`
+	ReferencedColumn  string `db:"REFERENCED_COLUMN"`
 }
 
 // SequenceRow is one row of INFORMATION_SCHEMA.SEQUENCES left-joined with
 // SEQUENCE_OPTIONS — one row per (sequence, option) pair.
 type SequenceRow struct {
-	Catalog      string `gorm:"column:CATALOG"`
-	Schema       string `gorm:"column:SCHEMA"`
-	SequenceName string `gorm:"column:SEQUENCE_NAME"`
-	DataType     string `gorm:"column:DATA_TYPE"`
+	Catalog      string `db:"CATALOG"`
+	Schema       string `db:"SCHEMA"`
+	SequenceName string `db:"SEQUENCE_NAME"`
+	DataType     string `db:"DATA_TYPE"`
 
 	// Pointers handle the potential NULLs from the LEFT JOIN
-	OptionName  *string `gorm:"column:OPTION_NAME"`
-	OptionValue *string `gorm:"column:OPTION_VALUE"`
-	OptionType  *string `gorm:"column:OPTION_TYPE"`
+	OptionName  *string `db:"OPTION_NAME"`
+	OptionValue *string `db:"OPTION_VALUE"`
+	OptionType  *string `db:"OPTION_TYPE"`
 }

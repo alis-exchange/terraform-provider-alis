@@ -51,7 +51,7 @@ func TestEmulator_PortEndToEnd(t *testing.T) {
 
 	t.Run("Query reads real INFORMATION_SCHEMA shapes", func(t *testing.T) {
 		type tableRow struct {
-			TableName string `gorm:"column:TABLE_NAME"`
+			TableName string `db:"TABLE_NAME"`
 		}
 		var rows []tableRow
 		if err := cn.Query(ctx, db, &rows,
@@ -69,8 +69,8 @@ func TestEmulator_PortEndToEnd(t *testing.T) {
 		}
 
 		type singer struct {
-			ID   int64  `gorm:"column:id"`
-			Name string `gorm:"column:name"`
+			ID   int64  `db:"id"`
+			Name string `db:"name"`
 		}
 		var got singer
 		if err := cn.Query(ctx, db, &got, "SELECT id, name FROM singers WHERE id = ?", 1); err != nil {
@@ -83,7 +83,7 @@ func TestEmulator_PortEndToEnd(t *testing.T) {
 
 	t.Run("single-row dest with zero rows is NotFound", func(t *testing.T) {
 		type singer struct {
-			ID int64 `gorm:"column:id"`
+			ID int64 `db:"id"`
 		}
 		var got singer
 		err := cn.Query(ctx, db, &got, "SELECT id FROM singers WHERE id = ?", 999)
@@ -123,7 +123,7 @@ func TestEmulator_SupportMatrix(t *testing.T) {
 		// The TTL resource only ever reads the expression back — background
 		// deletion never runs on the emulator and is not needed.
 		type policyRow struct {
-			Expr string `gorm:"column:ROW_DELETION_POLICY_EXPRESSION"`
+			Expr string `db:"ROW_DELETION_POLICY_EXPRESSION"`
 		}
 		var row policyRow
 		if err := cn.Query(
@@ -145,7 +145,7 @@ func TestEmulator_SupportMatrix(t *testing.T) {
 			t.Skipf("emulator rejects CREATE SEQUENCE: %v", err)
 		}
 		type seqRow struct {
-			Name string `gorm:"column:SEQUENCE_NAME"`
+			Name string `db:"SEQUENCE_NAME"`
 		}
 		var rows []seqRow
 		if err := cn.Query(ctx, db, &rows,
@@ -179,7 +179,7 @@ func TestEmulator_SupportMatrix(t *testing.T) {
 		}
 
 		type privRow struct {
-			Grantee string `gorm:"column:GRANTEE"`
+			Grantee string `db:"GRANTEE"`
 		}
 		var rows []privRow
 		if err := cn.Query(
@@ -222,9 +222,9 @@ func TestEmulator_SupportMatrix(t *testing.T) {
 			t.Fatalf("create table: %v", err)
 		}
 		type optRow struct {
-			ColumnName  string `gorm:"column:COLUMN_NAME"`
-			OptionName  string `gorm:"column:OPTION_NAME"`
-			OptionValue string `gorm:"column:OPTION_VALUE"`
+			ColumnName  string `db:"COLUMN_NAME"`
+			OptionName  string `db:"OPTION_NAME"`
+			OptionValue string `db:"OPTION_VALUE"`
 		}
 		var rows []optRow
 		if err := cn.Query(

@@ -109,8 +109,8 @@ func (s *SpannerService) GetSpannerTableRowDeletionPolicy(ctx context.Context, p
 	}
 
 	type RowDeletionPolicy struct {
-		TableName                   string `gorm:"column:TABLE_NAME"`
-		RowDeletionPolicyExpression string `gorm:"column:ROW_DELETION_POLICY_EXPRESSION"`
+		TableName                   string `db:"TABLE_NAME"`
+		RowDeletionPolicyExpression string `db:"ROW_DELETION_POLICY_EXPRESSION"`
 	}
 	var policy RowDeletionPolicy
 	if err := s.conn.Query(

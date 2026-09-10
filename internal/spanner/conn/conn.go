@@ -2,7 +2,7 @@
 // and Spanner. Callers speak DDL/SQL strings and plain structs; every Google
 // client, credential, logger, retry policy, and session pool lives behind this
 // interface. No other package in the repo may construct a Spanner admin client,
-// data client, or gorm handle directly.
+// data client, or database/sql pool directly.
 package conn
 
 import (
@@ -84,7 +84,7 @@ type Connection interface {
 // credentials, default logger, default retry policy.
 type Options struct {
 	// Credentials is threaded into every client the adapter creates (admin,
-	// data, and the go-sql-spanner connector under gorm). nil falls back to
+	// data, and the go-sql-spanner connector). nil falls back to
 	// Application Default Credentials. Ignored when SPANNER_EMULATOR_HOST is
 	// set.
 	Credentials *googleoauth.Credentials
