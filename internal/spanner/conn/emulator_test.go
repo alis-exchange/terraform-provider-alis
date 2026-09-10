@@ -63,10 +63,8 @@ func TestEmulator_PortEndToEnd(t *testing.T) {
 		}
 	})
 
-	t.Run("Exec DML and single-row Query readback", func(t *testing.T) {
-		if err := cn.Exec(ctx, db, "INSERT INTO singers (id, name) VALUES (?, ?)", 1, "Alice"); err != nil {
-			t.Fatalf("Exec: %v", err)
-		}
+	t.Run("single-row Query readback", func(t *testing.T) {
+		conntest.Seed(t, db, "INSERT INTO singers (id, name) VALUES (?, ?)", 1, "Alice")
 
 		type singer struct {
 			ID   int64  `db:"id"`

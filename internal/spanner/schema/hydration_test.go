@@ -88,7 +88,7 @@ func TestSpannerTable_Get_HydratesFromInformationSchemaOnly(t *testing.T) {
 		t.Errorf("Get() issued %d queries, want 4 (TABLES, COLUMNS, INDEX_COLUMNS, COLUMN_OPTIONS)", len(ops))
 	}
 	// Reading must never change schema or data.
-	if n := len(fake.OpsOf(connfake.OpExecuteDDL)) + len(fake.OpsOf(connfake.OpExec)); n != 0 {
+	if n := len(fake.OpsOf(connfake.OpExecuteDDL)); n != 0 {
 		t.Errorf("Get() issued %d DDL/DML ops, want 0", n)
 	}
 

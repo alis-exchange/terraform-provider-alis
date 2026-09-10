@@ -190,15 +190,6 @@ func (g *gcpConn) ExecuteDDLWithDescriptors(ctx context.Context, database string
 	return op.Wait(ctx)
 }
 
-func (g *gcpConn) Exec(ctx context.Context, database, query string, params ...any) error {
-	db, err := g.session(database)
-	if err != nil {
-		return err
-	}
-	_, err = db.ExecContext(ctx, query, params...)
-	return err
-}
-
 func (g *gcpConn) Query(ctx context.Context, database string, dest any, query string, params ...any) error {
 	db, err := g.session(database)
 	if err != nil {

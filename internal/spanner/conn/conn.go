@@ -56,11 +56,6 @@ type Connection interface {
 	// descriptors on the same request. Same semantics as ExecuteDDL otherwise.
 	ExecuteDDLWithDescriptors(ctx context.Context, database string, protoDescriptors []byte, statements ...string) error
 
-	// Exec runs exactly one non-schema statement (DML) with positional params.
-	// Schema changes MUST use ExecuteDDL so retry and LRO semantics stay
-	// uniform; passing DDL here is a contract violation.
-	Exec(ctx context.Context, database, sql string, params ...any) error
-
 	// Query runs sql with positional params and scans rows into dest.
 	// Column-to-field mapping happens inside the adapter, so fakes can serve
 	// canned structs.

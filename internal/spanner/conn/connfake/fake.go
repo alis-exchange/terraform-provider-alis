@@ -26,7 +26,6 @@ const (
 	// OpExecuteDDL covers both ExecuteDDL and ExecuteDDLWithDescriptors; the
 	// recorded ProtoDescriptors distinguish the two.
 	OpExecuteDDL    OpKind = "ExecuteDDL"
-	OpExec          OpKind = "Exec"
 	OpQuery         OpKind = "Query"
 	OpDatabaseRoles OpKind = "DatabaseRoles"
 )
@@ -37,7 +36,7 @@ type Op struct {
 	Database         string
 	Statements       []string // ExecuteDDL / ExecuteDDLWithDescriptors
 	ProtoDescriptors []byte   // ExecuteDDLWithDescriptors
-	SQL              string   // Exec / Query
+	SQL              string   // Query
 	Params           []any
 }
 
@@ -142,15 +141,12 @@ func (f *Fake) OpsOf(kind OpKind) []Op {
 	return out
 }
 
-// Statements returns every DDL statement and Exec SQL, flattened, in call order.
+// Statements returns every DDL statement, flattened, in call order.
 func (f *Fake) Statements() []string {
 	var out []string
 	for _, op := range f.Ops() {
-		switch op.Kind {
-		case OpExecuteDDL:
+		if op.Kind == OpExecuteDDL {
 			out = append(out, op.Statements...)
-		case OpExec:
-			out = append(out, op.SQL)
 		}
 	}
 	return out
@@ -209,10 +205,6 @@ func (f *Fake) ExecuteDDL(_ context.Context, database string, statements ...stri
 
 func (f *Fake) ExecuteDDLWithDescriptors(_ context.Context, database string, protoDescriptors []byte, statements ...string) error {
 	return f.record(Op{Kind: OpExecuteDDL, Database: database, Statements: statements, ProtoDescriptors: protoDescriptors})
-}
-
-func (f *Fake) Exec(_ context.Context, database, sql string, params ...any) error {
-	return f.record(Op{Kind: OpExec, Database: database, SQL: sql, Params: params})
 }
 
 func (f *Fake) Query(_ context.Context, database string, dest any, sql string, params ...any) error {

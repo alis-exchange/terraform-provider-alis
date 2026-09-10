@@ -17,6 +17,7 @@ package conntest
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"strconv"
@@ -34,6 +35,8 @@ import (
 	tcspanner "github.com/testcontainers/testcontainers-go/modules/gcloud/spanner"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	_ "github.com/googleapis/go-sql-spanner" // registers the "spanner" database/sql driver
 )
 
 const (
@@ -140,6 +143,21 @@ func Setup(t *testing.T, dialect databasepb.DatabaseDialect) (conn.Connection, s
 		t.Fatalf("conntest.Setup: %v", err)
 	}
 	return cn, database
+}
+
+// Seed runs one DML statement against database so a test can read it back
+// through the Connection under test. The port deliberately has no DML verb
+// (the provider only ever reads INFORMATION_SCHEMA), so tests seed rows here.
+func Seed(t *testing.T, database, stmt string, params ...any) {
+	t.Helper()
+	db, err := sql.Open("spanner", database)
+	if err != nil {
+		t.Fatalf("conntest.Seed: open: %v", err)
+	}
+	defer db.Close()
+	if _, err := db.ExecContext(context.Background(), stmt, params...); err != nil {
+		t.Fatalf("conntest.Seed: %v", err)
+	}
 }
 
 // Target resolves the Spanner backend for integration tests that exercise
