@@ -28,6 +28,13 @@ lint:
 fmt:
 	golangci-lint fmt ./...
 
+# Advisories affecting code that is actually reachable, test files included.
+# go run keeps the tool out of go.mod and needs no install step; CI runs this
+# same target, so the two cannot drift.
+.PHONY: vulncheck
+vulncheck:
+	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
 .PHONY: docs
 docs:
 	go generate ./...

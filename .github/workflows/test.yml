@@ -48,7 +48,7 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: Run govulncheck
-        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+        run: make vulncheck
 
   # Registry documentation is generated from the provider schema, so a schema
   # change with no regenerated page ships wrong docs.

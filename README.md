@@ -113,13 +113,63 @@ Environment variables:
 
 Without `SPANNER_LIVE`, the `GOOGLE_PROJECT`/`SPANNER_INSTANCE`/`SPANNER_DATABASE` variables only take effect when no emulator can be reached.
 
-Make targets: `make test` (the default — everything except acceptance), `make testacc` (acceptance tests only), `make testacc-all` (everything including acceptance), `make lint`, `make fmt`, `make docs`, and `make docs-check`. CI runs lint, `make docs-check`, `make test`, and the acceptance suite across several Terraform versions on every pull request (`.github/workflows/test.yml`).
+Make targets: `make test` (the default — everything except acceptance), `make testacc` (acceptance tests only), `make testacc-all` (everything including acceptance), `make lint`, `make fmt`, `make vulncheck`, `make docs`, and `make docs-check`. The checks CI enforces are listed under [Lint and vulnerability checks](#lint-and-vulnerability-checks).
 
 The PROTO-column test fixture `internal/spanner/conn/testdata/tftest.pb` is compiled from `tftest.proto`; regenerate it with the `protoc` command in that file's header comment:
 
 ```sh
 protoc --descriptor_set_out=tftest.pb --include_imports -I . tftest.proto
 ```
+
+## Lint and vulnerability checks
+
+[`test.yml`](.github/workflows/test.yml) runs five jobs on every pull request and on
+pushes to `main` — lint, vulncheck, docs, unit and acceptance, the last across three
+Terraform versions — and each one fails the build. Run them locally before opening a pull
+request or tagging a release:
+
+```sh
+make lint       # golangci-lint over the whole module
+make vulncheck  # advisories affecting code that is actually reachable
+make docs-check # fails when docs/ or examples/ are stale
+make test       # unit, emulator and integration tests
+make testacc    # acceptance tests (needs a terraform binary; CI runs 1.8, 1.10 and 1.15)
+```
+
+`make lint` runs [golangci-lint](https://golangci-lint.run) with the linter set pinned in
+[`.golangci.yml`](.golangci.yml); `make fmt` applies the formatters it checks (gofumpt, gci
+import grouping, golines). CI pins the golangci-lint version, so upgrade the version in the
+workflow and the local install together.
+
+`make vulncheck` runs [govulncheck](https://go.dev/blog/vuln), which reports only advisories
+your code actually reaches. It shells out through `go run`, so nothing needs installing and
+the tool stays out of `go.mod`; the CI job invokes the same target.
+
+Two things are worth knowing when it fails:
+
+* **Test-only dependencies still fail the job.** `govulncheck ./...` includes test files, and
+  the emulator harness pulls in testcontainers, the Docker client and their archive and SSH
+  dependencies. An advisory reachable only from `internal/acctest` or
+  `internal/spanner/conn/conntest` does not affect the published provider, but it still turns
+  CI red, so it has to be fixed rather than waived.
+* **Confirm whether the shipped binary is affected.** Scanning the built provider answers
+  that directly, and the answer belongs in the release notes when the two disagree:
+
+  ```sh
+  go build -o /tmp/provider .
+  go run golang.org/x/vuln/cmd/govulncheck@latest -mode=binary /tmp/provider
+  ```
+
+Most findings clear by bumping the named module, including an indirect one:
+
+```sh
+go get golang.org/x/crypto@v0.56.0
+go mod tidy
+```
+
+Re-run `make vulncheck` and `make test` afterwards. An indirect bump moves a dependency
+ahead of what the module that requires it selected, so the emulator-backed tiers are the
+ones that catch a bad upgrade.
 
 ## Generating documentation
 
@@ -136,9 +186,10 @@ This also runs `terraform fmt` across `examples/` (see the `go:generate` directi
 Releases are cut by pushing a semver tag; GitHub Actions does the rest:
 
 1. Ensure commits follow [Conventional Commits](https://www.conventionalcommits.org/) — the changelog is generated from them.
-2. Tag and push: `git tag v1.x.y && git push origin v1.x.y`.
-3. On a `v*` tag, [`release.yml`](.github/workflows/release.yml) extracts release notes from `CHANGELOG.md` and runs [GoReleaser](.goreleaser.yml), which builds binaries for linux/darwin/windows/freebsd, signs the checksums with the repo's GPG key, and publishes the GitHub release. [`changelog.yml`](.github/workflows/changelog.yml) regenerates `CHANGELOG.md` with `conventional-changelog` and pushes it back.
-4. The Terraform Registry picks the new version up from the GitHub release.
+2. Confirm the checks in [Lint and vulnerability checks](#lint-and-vulnerability-checks) pass on the commit being tagged. The release workflow does not re-run them, so a tag can ship code that `test.yml` would have rejected.
+3. Tag and push: `git tag v1.x.y && git push origin v1.x.y`.
+4. On a `v*` tag, [`release.yml`](.github/workflows/release.yml) extracts release notes from `CHANGELOG.md` and runs [GoReleaser](.goreleaser.yml), which builds binaries for linux/darwin/windows/freebsd, signs the checksums with the repo's GPG key, and publishes the GitHub release. [`changelog.yml`](.github/workflows/changelog.yml) regenerates `CHANGELOG.md` with `conventional-changelog` and pushes it back.
+5. The Terraform Registry picks the new version up from the GitHub release.
 
 ## License
 
