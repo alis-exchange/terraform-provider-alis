@@ -69,6 +69,7 @@ linters:
         - name: superfluous-else
         - name: time-naming
         - name: unreachable-code
+        - name: use-any
         # var-declaration disabled: main.go intentionally uses
         #   `var version string = "dev"` so goreleaser can overwrite it via
         #   -ldflags. Explicit type prevents the ldflag from becoming an

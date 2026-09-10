@@ -62,33 +62,33 @@ func (l *tfLogger) LogMode(level logger.LogLevel) logger.Interface {
 }
 
 // Info logs an info-level message to the writer and mirrors it to tflog.
-func (l *tfLogger) Info(ctx context.Context, msg string, data ...interface{}) {
+func (l *tfLogger) Info(ctx context.Context, msg string, data ...any) {
 	if l.LogLevel >= logger.Info {
 		tflog.Info(ctx, render(msg, data...), callerField())
-		l.Printf(l.infoStr+msg, append([]interface{}{utils.FileWithLineNum()}, data...)...)
+		l.Printf(l.infoStr+msg, append([]any{utils.FileWithLineNum()}, data...)...)
 	}
 }
 
 // Warn logs a warn-level message to the writer and mirrors it to tflog.
-func (l *tfLogger) Warn(ctx context.Context, msg string, data ...interface{}) {
+func (l *tfLogger) Warn(ctx context.Context, msg string, data ...any) {
 	if l.LogLevel >= logger.Warn {
 		tflog.Warn(ctx, render(msg, data...), callerField())
-		l.Printf(l.warnStr+msg, append([]interface{}{utils.FileWithLineNum()}, data...)...)
+		l.Printf(l.warnStr+msg, append([]any{utils.FileWithLineNum()}, data...)...)
 	}
 }
 
 // Error logs an error-level message to the writer and mirrors it to tflog.
-func (l *tfLogger) Error(ctx context.Context, msg string, data ...interface{}) {
+func (l *tfLogger) Error(ctx context.Context, msg string, data ...any) {
 	if l.LogLevel >= logger.Error {
 		tflog.Error(ctx, render(msg, data...), callerField())
-		l.Printf(l.errStr+msg, append([]interface{}{utils.FileWithLineNum()}, data...)...)
+		l.Printf(l.errStr+msg, append([]any{utils.FileWithLineNum()}, data...)...)
 	}
 }
 
 // render fills gorm's format string with its arguments. Terraform renders log
 // messages verbatim, so the format string itself must never be the message —
 // it would reach operators with its verbs and color codes unsubstituted.
-func render(msg string, data ...interface{}) string {
+func render(msg string, data ...any) string {
 	if len(data) == 0 {
 		return msg
 	}
@@ -98,8 +98,8 @@ func render(msg string, data ...interface{}) string {
 
 // callerField carries the gorm call site that the writer's format prefix
 // carries for the terminal.
-func callerField() map[string]interface{} {
-	return map[string]interface{}{"caller": utils.FileWithLineNum()}
+func callerField() map[string]any {
+	return map[string]any{"caller": utils.FileWithLineNum()}
 }
 
 // Trace logs a completed SQL statement with its duration and row count,
@@ -121,7 +121,7 @@ func (l *tfLogger) Trace(ctx context.Context, begin time.Time, fc func() (string
 		} else {
 			l.Printf(l.traceErrStr, utils.FileWithLineNum(), err, float64(elapsed.Nanoseconds())/1e6, rows, sql)
 		}
-		tflog.Trace(ctx, sql, map[string]interface{}{
+		tflog.Trace(ctx, sql, map[string]any{
 			"caller":       utils.FileWithLineNum(),
 			"rowsAffected": rows,
 			"error":        err,
@@ -135,7 +135,7 @@ func (l *tfLogger) Trace(ctx context.Context, begin time.Time, fc func() (string
 		} else {
 			l.Printf(l.traceWarnStr, utils.FileWithLineNum(), slowLog, float64(elapsed.Nanoseconds())/1e6, rows, sql)
 		}
-		tflog.Trace(ctx, sql, map[string]interface{}{
+		tflog.Trace(ctx, sql, map[string]any{
 			"caller":       utils.FileWithLineNum(),
 			"rowsAffected": rows,
 			"warning":      slowLog,
@@ -148,7 +148,7 @@ func (l *tfLogger) Trace(ctx context.Context, begin time.Time, fc func() (string
 		} else {
 			l.Printf(l.traceStr, utils.FileWithLineNum(), float64(elapsed.Nanoseconds())/1e6, rows, sql)
 		}
-		tflog.Trace(ctx, sql, map[string]interface{}{
+		tflog.Trace(ctx, sql, map[string]any{
 			"caller":       utils.FileWithLineNum(),
 			"rowsAffected": rows,
 			"duration":     elapsed,
@@ -159,7 +159,7 @@ func (l *tfLogger) Trace(ctx context.Context, begin time.Time, fc func() (string
 // ParamsFilter implements gorm's params-filter hook: with
 // ParameterizedQueries set it strips the bound params so parameter values
 // never reach log output.
-func (l *tfLogger) ParamsFilter(ctx context.Context, sql string, params ...interface{}) (string, []interface{}) {
+func (l *tfLogger) ParamsFilter(ctx context.Context, sql string, params ...any) (string, []any) {
 	if l.ParameterizedQueries {
 		return sql, nil
 	}
