@@ -61,11 +61,11 @@ internal/bigtable/templates/**.tf
 # --- Claude Code ---
 # Per-developer overrides; the rest of .claude/ may be committed.
 .claude/settings.local.json
+.claude/
 
 # --- Conductor ---
 # Track specs, plans, and artifacts
 conductor/
-
 
 # --- HashiCorp scaffolding leftovers ---
 # website/, Vagrant, and command/test-fixtures come from the plugin scaffold.
