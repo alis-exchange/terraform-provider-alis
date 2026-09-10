@@ -12,9 +12,9 @@ import (
 type SpannerTableIndexColumnOrder int64
 
 const (
-	SpannerTableIndexColumnOrder_UNSPECIFIED SpannerTableIndexColumnOrder = iota
-	SpannerTableIndexColumnOrder_ASC
-	SpannerTableIndexColumnOrder_DESC
+	SpannerTableIndexColumnOrderUnspecified SpannerTableIndexColumnOrder = iota
+	SpannerTableIndexColumnOrderAsc
+	SpannerTableIndexColumnOrderDesc
 )
 
 // String returns the lowercase configuration spelling; CreateDdl upper-cases
@@ -26,8 +26,8 @@ func (s SpannerTableIndexColumnOrder) String() string {
 // SpannerTableIndexColumnOrders lists the orders accepted in configuration
 // (UNSPECIFIED is excluded).
 var SpannerTableIndexColumnOrders = []string{
-	SpannerTableIndexColumnOrder_ASC.String(),
-	SpannerTableIndexColumnOrder_DESC.String(),
+	SpannerTableIndexColumnOrderAsc.String(),
+	SpannerTableIndexColumnOrderDesc.String(),
 }
 
 // SpannerTableIndexColumn is a single column entry in an index.
@@ -36,7 +36,7 @@ type SpannerTableIndexColumn struct {
 	Name string
 	// The sort order of the column in the index
 	//
-	// Accepts either SpannerTableIndexColumnOrder_ASC or SpannerTableIndexColumnOrder_DESC
+	// Accepts either SpannerTableIndexColumnOrderAsc or SpannerTableIndexColumnOrderDesc
 	Order SpannerTableIndexColumnOrder
 }
 
@@ -74,8 +74,8 @@ func (i *SpannerTableIndex) CreateDdl(table string) (string, error) {
 	columns := make([]string, 0, len(i.Columns))
 	for _, column := range i.Columns {
 		order := column.Order
-		if order == SpannerTableIndexColumnOrder_UNSPECIFIED {
-			order = SpannerTableIndexColumnOrder_ASC
+		if order == SpannerTableIndexColumnOrderUnspecified {
+			order = SpannerTableIndexColumnOrderAsc
 		}
 		columns = append(columns, fmt.Sprintf("%s %s", column.Name, strings.ToUpper(order.String())))
 	}

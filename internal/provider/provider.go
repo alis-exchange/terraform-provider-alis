@@ -6,7 +6,6 @@ import (
 	"strings"
 	"sync"
 
-	"terraform-provider-alis/internal"
 	"terraform-provider-alis/internal/spanner"
 	"terraform-provider-alis/internal/spanner/conn"
 	spannerservices "terraform-provider-alis/internal/spanner/services"
@@ -168,7 +167,7 @@ func (p *googleProvider) Schema(_ context.Context, _ provider.SchemaRequest, res
 	}
 }
 
-// Configure resolves Google credentials and builds the shared ProviderConfig
+// Configure resolves Google credentials and builds the shared Spanner service
 // that every resource and data source receives via ProviderData. Credentials
 // are resolved exactly once here — from the credentials attribute, the
 // access_token attribute, or Application Default Credentials, in that order
@@ -241,23 +240,21 @@ func (p *googleProvider) Configure(ctx context.Context, req provider.ConfigureRe
 		return
 	}
 
-	// Make the Bigtable and Spanner services available during DataSource and Resource
-	// type Configure methods.
-	providerConfig := &internal.ProviderConfig{
-		GoogleProjectId: config.Project.ValueString(),
-		// conn.New is the single place the resolved credentials reach every
-		// Spanner client.
-		SpannerService: spannerservices.NewSpannerService(
-			sharedConnection(
-				connectionKey(config.Project.ValueString(), credentials, accessToken, googleCreds),
-				func() conn.Connection {
-					return conn.New(conn.Options{Credentials: googleCreds})
-				},
-			),
+	// Make the Spanner service available during DataSource and Resource type
+	// Configure methods.
+	//
+	// conn.New is the single place the resolved credentials reach every Spanner
+	// client.
+	spannerService := spannerservices.NewSpannerService(
+		sharedConnection(
+			connectionKey(config.Project.ValueString(), credentials, accessToken, googleCreds),
+			func() conn.Connection {
+				return conn.New(conn.Options{Credentials: googleCreds})
+			},
 		),
-	}
-	resp.DataSourceData = providerConfig
-	resp.ResourceData = providerConfig
+	)
+	resp.DataSourceData = spannerService
+	resp.ResourceData = spannerService
 
 	tflog.Info(ctx, "Done initializing alis provider", map[string]any{"success": true})
 }
@@ -278,7 +275,7 @@ func (p *googleProvider) Resources(_ context.Context) []func() resource.Resource
 		spanner.NewTableForeignKeyResource,
 		spanner.NewDatabaseRoleResource,
 		spanner.NewTableIamBindingResource,
-		spanner.NewTableTtlPolicyResource,
+		spanner.NewTableTTLPolicyResource,
 		spanner.NewDatabaseSequenceResource,
 	}
 }

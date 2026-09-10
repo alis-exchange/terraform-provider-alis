@@ -4,9 +4,9 @@ import (
 	"context"
 	"regexp"
 
-	"terraform-provider-alis/internal"
 	"terraform-provider-alis/internal/spanner/names"
 	tableschema "terraform-provider-alis/internal/spanner/schema"
+	"terraform-provider-alis/internal/spanner/services"
 	"terraform-provider-alis/internal/utils"
 	"terraform-provider-alis/internal/validators"
 
@@ -31,10 +31,11 @@ import (
 
 // Ensure the implementation satisfies the expected interfaces.
 var (
-	_ resource.Resource                = &spannerTableResource{}
-	_ resource.ResourceWithConfigure   = &spannerTableResource{}
-	_ resource.ResourceWithImportState = &spannerTableResource{}
-	_ resource.ResourceWithModifyPlan  = &spannerTableResource{}
+	_ resource.Resource                   = &spannerTableResource{}
+	_ resource.ResourceWithConfigure      = &spannerTableResource{}
+	_ resource.ResourceWithImportState    = &spannerTableResource{}
+	_ resource.ResourceWithModifyPlan     = &spannerTableResource{}
+	_ resource.ResourceWithValidateConfig = &spannerTableResource{}
 )
 
 // NewSpannerTableResource is a helper function to simplify the provider implementation.
@@ -50,7 +51,7 @@ func NewSpannerTableResource() resource.Resource {
 // true, every destroy plan and every replace decision is refused during
 // planning (see table_protection.go), and Delete refuses again at apply.
 type spannerTableResource struct {
-	config *internal.ProviderConfig
+	service *services.SpannerService
 }
 
 type spannerTableModel struct {
@@ -132,8 +133,8 @@ func (r *spannerTableResource) Schema(ctx context.Context, _ resource.SchemaRequ
 					"The name must satisfy the expression `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`",
 				Validators: []validator.String{
 					validators.RegexMatches([]*regexp.Regexp{
-						utils.Pattern(utils.SpannerGoogleSqlTableIdRegex),
-						utils.Pattern(utils.SpannerPostgresSqlTableIdRegex),
+						utils.Pattern(utils.SpannerGoogleSQLTableIDRegex),
+						utils.Pattern(utils.SpannerPostgresSQLTableIDRegex),
 					}, "Name must be a valid Spanner Table ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions"),
 				},
 				PlanModifiers: []planmodifier.String{
@@ -196,8 +197,8 @@ func (r *spannerTableResource) Schema(ctx context.Context, _ resource.SchemaRequ
 										"The maximum length is 128 characters.",
 									Validators: []validator.String{
 										validators.RegexMatches([]*regexp.Regexp{
-											utils.Pattern(utils.SpannerGoogleSqlColumnIdRegex),
-											utils.Pattern(utils.SpannerPostgresSqlColumnIdRegex),
+											utils.Pattern(utils.SpannerGoogleSQLColumnIDRegex),
+											utils.Pattern(utils.SpannerPostgresSQLColumnIDRegex),
 										}, "Name must be a valid Spanner Column ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions"),
 									},
 								},
@@ -386,10 +387,10 @@ func (r *spannerTableResource) Create(ctx context.Context, req resource.CreateRe
 	// Get project and instance name
 	project := plan.Project.ValueString()
 	instanceName := plan.Instance.ValueString()
-	databaseId := plan.Database.ValueString()
-	tableId := plan.Name.ValueString()
+	databaseID := plan.Database.ValueString()
+	tableID := plan.Name.ValueString()
 
-	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String()
+	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseID, Table: tableID}.String()
 
 	// Populate schema if any
 	if plan.Schema != nil {
@@ -407,9 +408,9 @@ func (r *spannerTableResource) Create(ctx context.Context, req resource.CreateRe
 	table.Interleave = tableInterleaveToSchema(plan.Interleave)
 
 	// Create table
-	_, err := r.config.SpannerService.CreateSpannerTable(ctx,
-		names.DatabaseName{Project: project, Instance: instanceName, Database: databaseId}.String(),
-		tableId,
+	_, err := r.service.CreateSpannerTable(ctx,
+		names.DatabaseName{Project: project, Instance: instanceName, Database: databaseID}.String(),
+		tableID,
 		table,
 	)
 	if err != nil {
@@ -421,7 +422,7 @@ func (r *spannerTableResource) Create(ctx context.Context, req resource.CreateRe
 	}
 
 	// Map response body to schema and populate Computed attribute values
-	plan.Name = types.StringValue(tableId)
+	plan.Name = types.StringValue(tableID)
 	if plan.Schema != nil {
 		columns, d := resolveUnknownIsStored(ctx, plan.Schema.Columns)
 		resp.Diagnostics.Append(d...)
@@ -452,13 +453,13 @@ func (r *spannerTableResource) Read(ctx context.Context, req resource.ReadReques
 	// Get project and instance name
 	project := state.Project.ValueString()
 	instanceName := state.Instance.ValueString()
-	databaseId := state.Database.ValueString()
-	tableId := state.Name.ValueString()
+	databaseID := state.Database.ValueString()
+	tableID := state.Name.ValueString()
 
-	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String()
+	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseID, Table: tableID}.String()
 
 	// Get table from API
-	table, err := r.config.SpannerService.GetSpannerTable(ctx, tableName)
+	table, err := r.service.GetSpannerTable(ctx, tableName)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			resp.State.RemoveResource(ctx)
@@ -474,7 +475,7 @@ func (r *spannerTableResource) Read(ctx context.Context, req resource.ReadReques
 	}
 
 	// Set refreshed state
-	state.Name = types.StringValue(tableId)
+	state.Name = types.StringValue(tableID)
 
 	// Populate schema
 	if table.Schema != nil {
@@ -540,11 +541,11 @@ func (r *spannerTableResource) Update(ctx context.Context, req resource.UpdateRe
 	// Get project and instance name
 	project := plan.Project.ValueString()
 	instanceName := plan.Instance.ValueString()
-	databaseId := plan.Database.ValueString()
-	tableId := plan.Name.ValueString()
+	databaseID := plan.Database.ValueString()
+	tableID := plan.Name.ValueString()
 
 	// Generate table from plan
-	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String()
+	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseID, Table: tableID}.String()
 	table := &tableschema.SpannerTable{
 		Name: tableName,
 		Schema: &tableschema.SpannerTableSchema{
@@ -568,7 +569,7 @@ func (r *spannerTableResource) Update(ctx context.Context, req resource.UpdateRe
 	table.Interleave = tableInterleaveToSchema(plan.Interleave)
 
 	// Update table
-	_, err := r.config.SpannerService.UpdateSpannerTable(ctx, table, &fieldmaskpb.FieldMask{
+	_, err := r.service.UpdateSpannerTable(ctx, table, &fieldmaskpb.FieldMask{
 		Paths: []string{"schema.columns"},
 	}, false)
 	if err != nil {
@@ -580,7 +581,7 @@ func (r *spannerTableResource) Update(ctx context.Context, req resource.UpdateRe
 	}
 
 	// Map response body to schema and populate Computed attribute values
-	plan.Name = types.StringValue(tableId)
+	plan.Name = types.StringValue(tableID)
 	if plan.Schema != nil {
 		columns, d := resolveUnknownIsStored(ctx, plan.Schema.Columns)
 		resp.Diagnostics.Append(d...)
@@ -619,10 +620,10 @@ func (r *spannerTableResource) Delete(ctx context.Context, req resource.DeleteRe
 	// Get project and instance name
 	project := state.Project.ValueString()
 	instanceName := state.Instance.ValueString()
-	databaseId := state.Database.ValueString()
-	tableId := state.Name.ValueString()
+	databaseID := state.Database.ValueString()
+	tableID := state.Name.ValueString()
 
-	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String()
+	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseID, Table: tableID}.String()
 
 	// Apply-time backstop for the plan-time guard in ModifyPlan, which covers
 	// destroys Terraform never planned as such: replacements forced with
@@ -633,7 +634,7 @@ func (r *spannerTableResource) Delete(ctx context.Context, req resource.DeleteRe
 	}
 
 	// Delete existing table
-	_, err := r.config.SpannerService.DeleteSpannerTable(ctx, tableName)
+	_, err := r.service.DeleteSpannerTable(ctx, tableName)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Deleting Table",
@@ -668,8 +669,8 @@ func (r *spannerTableResource) ImportState(ctx context.Context, req resource.Imp
 		return
 	}
 
-	if !utils.Pattern(utils.SpannerGoogleSqlTableNameRegex).MatchString(req.ID) &&
-		!utils.Pattern(utils.SpannerPostgresSqlTableNameRegex).MatchString(req.ID) {
+	if !utils.Pattern(utils.SpannerGoogleSQLTableNameRegex).MatchString(req.ID) &&
+		!utils.Pattern(utils.SpannerPostgresSQLTableNameRegex).MatchString(req.ID) {
 		resp.Diagnostics.AddError(
 			"Invalid Import ID",
 			"Import ID ("+req.ID+") contains an invalid project, instance, database or table ID. See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions for table naming conventions.",
@@ -693,7 +694,7 @@ func (r *spannerTableResource) ImportState(ctx context.Context, req resource.Imp
 	// Refresh only hydrates interleave for state that already tracks it (see
 	// preserveUnsetInterleave), so import must seed it here — otherwise an
 	// interleaved table's first plan after import demands a replace.
-	table, err := r.config.SpannerService.GetSpannerTable(ctx, req.ID)
+	table, err := r.service.GetSpannerTable(ctx, req.ID)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Importing Table",
@@ -708,12 +709,12 @@ func (r *spannerTableResource) ImportState(ctx context.Context, req resource.Imp
 
 // Configure adds the provider configured client to the resource.
 func (r *spannerTableResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	config, ok := configureProviderConfig(req.ProviderData, &resp.Diagnostics)
+	service, ok := configureSpannerService(req.ProviderData, &resp.Diagnostics)
 	if !ok {
 		return
 	}
 
-	r.config = config
+	r.service = service
 }
 
 // ValidateConfig emits warnings (not errors) for incomplete column

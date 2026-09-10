@@ -30,8 +30,8 @@ func TestSpannerTableIndexCreateDdl(t *testing.T) {
 			index: &SpannerTableIndex{
 				Name: "by_name_date",
 				Columns: []*SpannerTableIndexColumn{
-					{Name: "display_name", Order: SpannerTableIndexColumnOrder_ASC},
-					{Name: "inception_date", Order: SpannerTableIndexColumnOrder_DESC},
+					{Name: "display_name", Order: SpannerTableIndexColumnOrderAsc},
+					{Name: "inception_date", Order: SpannerTableIndexColumnOrderDesc},
 				},
 				Unique: wrapperspb.Bool(true),
 			},
@@ -88,7 +88,7 @@ func TestSpannerTableIndexCreateDdl(t *testing.T) {
 		if _, err := idx.CreateDdl("t"); err != nil {
 			t.Fatal(err)
 		}
-		if col.Order != SpannerTableIndexColumnOrder_UNSPECIFIED {
+		if col.Order != SpannerTableIndexColumnOrderUnspecified {
 			t.Errorf("builder mutated input column order to %v", col.Order)
 		}
 	})

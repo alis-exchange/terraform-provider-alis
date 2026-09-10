@@ -76,8 +76,6 @@ linters:
     staticcheck:
       checks:
         - all
-        - -ST1000 # package doc comments — opt in when we're ready
-        - -ST1003 # naming conventions — revive handles this
     nolintlint:
       require-explanation: true
       require-specific: true

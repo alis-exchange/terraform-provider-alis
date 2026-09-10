@@ -4,38 +4,38 @@ import (
 	"strings"
 	"testing"
 
-	"terraform-provider-alis/internal"
+	"terraform-provider-alis/internal/spanner/services"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 )
 
-func TestConfigureProviderConfig(t *testing.T) {
+func TestConfigureSpannerService(t *testing.T) {
 	t.Run("nil provider data is a silent no-op", func(t *testing.T) {
 		var diags diag.Diagnostics
-		config, ok := configureProviderConfig(nil, &diags)
-		if ok || config != nil || diags.HasError() {
-			t.Errorf("got (%v, %v, errs=%v), want silent (nil, false)", config, ok, diags)
+		service, ok := configureSpannerService(nil, &diags)
+		if ok || service != nil || diags.HasError() {
+			t.Errorf("got (%v, %v, errs=%v), want silent (nil, false)", service, ok, diags)
 		}
 	})
 
 	t.Run("wrong type produces diagnostic naming the actual expected type", func(t *testing.T) {
 		var diags diag.Diagnostics
-		config, ok := configureProviderConfig("not-a-config", &diags)
-		if ok || config != nil || !diags.HasError() {
-			t.Fatalf("got (%v, %v, errs=%v), want error diagnostic", config, ok, diags)
+		service, ok := configureSpannerService("not-a-service", &diags)
+		if ok || service != nil || !diags.HasError() {
+			t.Fatalf("got (%v, %v, errs=%v), want error diagnostic", service, ok, diags)
 		}
 		detail := diags.Errors()[0].Detail()
-		if !strings.Contains(detail, "internal.ProviderConfig") {
-			t.Errorf("diagnostic %q must name internal.ProviderConfig", detail)
+		if !strings.Contains(detail, "services.SpannerService") {
+			t.Errorf("diagnostic %q must name services.SpannerService", detail)
 		}
 	})
 
 	t.Run("correct type is returned", func(t *testing.T) {
 		var diags diag.Diagnostics
-		want := &internal.ProviderConfig{GoogleProjectId: "p"}
-		config, ok := configureProviderConfig(want, &diags)
-		if !ok || config != want || diags.HasError() {
-			t.Errorf("got (%v, %v, errs=%v), want the config back", config, ok, diags)
+		want := &services.SpannerService{}
+		service, ok := configureSpannerService(want, &diags)
+		if !ok || service != want || diags.HasError() {
+			t.Errorf("got (%v, %v, errs=%v), want the service back", service, ok, diags)
 		}
 	})
 }

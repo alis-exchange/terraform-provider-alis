@@ -28,8 +28,8 @@ func (s *SpannerService) CreateSpannerSequence(
 	if err := utils.ValidateDialectArgument(
 		"parent",
 		parent,
-		utils.SpannerGoogleSqlDatabaseNameRegex,
-		utils.SpannerPostgresSqlDatabaseNameRegex,
+		utils.SpannerGoogleSQLDatabaseNameRegex,
+		utils.SpannerPostgresSQLDatabaseNameRegex,
 	); err != nil {
 		return nil, err
 	}
@@ -68,8 +68,8 @@ func (s *SpannerService) GetSpannerSequence(ctx context.Context, name string) (*
 	if err := utils.ValidateDialectArgument(
 		"name",
 		name,
-		utils.SpannerGoogleSqlSequenceNameRegex,
-		utils.SpannerPostgresSqlSequenceNameRegex,
+		utils.SpannerGoogleSQLSequenceNameRegex,
+		utils.SpannerPostgresSQLSequenceNameRegex,
 	); err != nil {
 		return nil, err
 	}
@@ -78,7 +78,7 @@ func (s *SpannerService) GetSpannerSequence(ctx context.Context, name string) (*
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument name (%s): %v", name, err)
 	}
-	sequenceId := sequenceName.Sequence
+	sequenceID := sequenceName.Sequence
 	database := sequenceName.DatabaseName().String()
 
 	var rows []*SequenceRow
@@ -87,13 +87,13 @@ func (s *SpannerService) GetSpannerSequence(ctx context.Context, name string) (*
 		database,
 		&rows,
 		"SELECT s.CATALOG, s.SCHEMA, s.NAME AS SEQUENCE_NAME, s.DATA_TYPE, o.OPTION_NAME, o.OPTION_VALUE, o.OPTION_TYPE FROM INFORMATION_SCHEMA.SEQUENCES s LEFT JOIN INFORMATION_SCHEMA.SEQUENCE_OPTIONS o ON s.CATALOG = o.CATALOG AND s.SCHEMA = o.SCHEMA AND s.NAME = o.NAME WHERE s.NAME = ?",
-		sequenceId,
+		sequenceID,
 	); err != nil {
 		return nil, status.Errorf(codes.Internal, "Error getting sequence: %v", err)
 	}
 
 	if len(rows) == 0 {
-		return nil, status.Errorf(codes.NotFound, "Sequence %s not found", sequenceId)
+		return nil, status.Errorf(codes.NotFound, "Sequence %s not found", sequenceID)
 	}
 
 	// From sequence rows,
@@ -190,8 +190,8 @@ func (s *SpannerService) UpdateSpannerSequence(ctx context.Context, sequence *sc
 	if err := utils.ValidateDialectArgument(
 		"name",
 		sequence.GetName(),
-		utils.SpannerGoogleSqlSequenceNameRegex,
-		utils.SpannerPostgresSqlSequenceNameRegex,
+		utils.SpannerGoogleSQLSequenceNameRegex,
+		utils.SpannerPostgresSQLSequenceNameRegex,
 	); err != nil {
 		return nil, err
 	}
@@ -224,8 +224,8 @@ func (s *SpannerService) DeleteSpannerSequence(ctx context.Context, name string)
 	if err := utils.ValidateDialectArgument(
 		"name",
 		name,
-		utils.SpannerGoogleSqlSequenceNameRegex,
-		utils.SpannerPostgresSqlSequenceNameRegex,
+		utils.SpannerGoogleSQLSequenceNameRegex,
+		utils.SpannerPostgresSQLSequenceNameRegex,
 	); err != nil {
 		return err
 	}

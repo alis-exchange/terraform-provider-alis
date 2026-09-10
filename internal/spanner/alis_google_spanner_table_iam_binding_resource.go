@@ -4,7 +4,6 @@ import (
 	"context"
 	"regexp"
 
-	"terraform-provider-alis/internal"
 	"terraform-provider-alis/internal/spanner/names"
 	"terraform-provider-alis/internal/spanner/services"
 	"terraform-provider-alis/internal/utils"
@@ -37,7 +36,7 @@ func NewTableIamBindingResource() resource.Resource {
 }
 
 type tableIamBindingResource struct {
-	config *internal.ProviderConfig
+	service *services.SpannerService
 }
 
 // tableIamBindingResourceModel mirrors tableIamBindingModel (shared with the
@@ -105,8 +104,8 @@ func (r *tableIamBindingResource) Schema(ctx context.Context, _ resource.SchemaR
 				Required: true,
 				Validators: []validator.String{
 					validators.RegexMatches([]*regexp.Regexp{
-						utils.Pattern(utils.SpannerGoogleSqlRoleIdRegex),
-						utils.Pattern(utils.SpannerPostgresSqlRoleIdRegex),
+						utils.Pattern(utils.SpannerGoogleSQLRoleIDRegex),
+						utils.Pattern(utils.SpannerPostgresSQLRoleIDRegex),
 					}, "Role must be a valid Spanner database role ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions"),
 				},
 				PlanModifiers: []planmodifier.String{
@@ -159,13 +158,13 @@ func (r *tableIamBindingResource) Create(ctx context.Context, req resource.Creat
 	for _, permission := range plan.Permissions {
 		switch permission.ValueString() {
 		case "SELECT":
-			permissions = append(permissions, services.TablePolicyBindingPermission_SELECT)
+			permissions = append(permissions, services.TablePolicyBindingPermissionSelect)
 		case "INSERT":
-			permissions = append(permissions, services.TablePolicyBindingPermission_INSERT)
+			permissions = append(permissions, services.TablePolicyBindingPermissionInsert)
 		case "UPDATE":
-			permissions = append(permissions, services.TablePolicyBindingPermission_UPDATE)
+			permissions = append(permissions, services.TablePolicyBindingPermissionUpdate)
 		case "DELETE":
-			permissions = append(permissions, services.TablePolicyBindingPermission_DELETE)
+			permissions = append(permissions, services.TablePolicyBindingPermissionDelete)
 		default:
 			// Unreachable while the schema validator enforces the same set of
 			// values; kept as a guard against the two drifting apart.
@@ -180,7 +179,7 @@ func (r *tableIamBindingResource) Create(ctx context.Context, req resource.Creat
 
 	tableName := names.TableName{Project: project, Instance: instance, Database: database, Table: table}.String()
 
-	binding, err := r.config.SpannerService.SetTableIamBinding(ctx,
+	binding, err := r.service.SetTableIamBinding(ctx,
 		tableName,
 		&services.TablePolicyBinding{
 			Role:        role,
@@ -231,7 +230,7 @@ func (r *tableIamBindingResource) Read(ctx context.Context, req resource.ReadReq
 
 	tableName := names.TableName{Project: project, Instance: instance, Database: database, Table: table}.String()
 
-	binding, err := r.config.SpannerService.GetTableIamBinding(ctx, tableName, role)
+	binding, err := r.service.GetTableIamBinding(ctx, tableName, role)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			resp.State.RemoveResource(ctx)
@@ -291,13 +290,13 @@ func (r *tableIamBindingResource) Update(ctx context.Context, req resource.Updat
 	for _, permission := range plan.Permissions {
 		switch permission.ValueString() {
 		case "SELECT":
-			permissions = append(permissions, services.TablePolicyBindingPermission_SELECT)
+			permissions = append(permissions, services.TablePolicyBindingPermissionSelect)
 		case "INSERT":
-			permissions = append(permissions, services.TablePolicyBindingPermission_INSERT)
+			permissions = append(permissions, services.TablePolicyBindingPermissionInsert)
 		case "UPDATE":
-			permissions = append(permissions, services.TablePolicyBindingPermission_UPDATE)
+			permissions = append(permissions, services.TablePolicyBindingPermissionUpdate)
 		case "DELETE":
-			permissions = append(permissions, services.TablePolicyBindingPermission_DELETE)
+			permissions = append(permissions, services.TablePolicyBindingPermissionDelete)
 		default:
 			// Unreachable while the schema validator enforces the same set of
 			// values; kept as a guard against the two drifting apart.
@@ -312,7 +311,7 @@ func (r *tableIamBindingResource) Update(ctx context.Context, req resource.Updat
 
 	tableName := names.TableName{Project: project, Instance: instance, Database: database, Table: table}.String()
 
-	binding, err := r.config.SpannerService.SetTableIamBinding(ctx,
+	binding, err := r.service.SetTableIamBinding(ctx,
 		tableName,
 		&services.TablePolicyBinding{
 			Role:        role,
@@ -371,7 +370,7 @@ func (r *tableIamBindingResource) Delete(ctx context.Context, req resource.Delet
 
 	tableName := names.TableName{Project: project, Instance: instance, Database: database, Table: table}.String()
 
-	err := r.config.SpannerService.DeleteTableIamBinding(ctx, tableName, role)
+	err := r.service.DeleteTableIamBinding(ctx, tableName, role)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Deleting Table IAM Binding",
@@ -391,8 +390,8 @@ func (r *tableIamBindingResource) ImportState(ctx context.Context, req resource.
 		return
 	}
 
-	if !utils.Pattern(utils.SpannerGoogleSqlTableRoleNameRegex).MatchString(req.ID) &&
-		!utils.Pattern(utils.SpannerPostgresSqlTableRoleNameRegex).MatchString(req.ID) {
+	if !utils.Pattern(utils.SpannerGoogleSQLTableRoleNameRegex).MatchString(req.ID) &&
+		!utils.Pattern(utils.SpannerPostgresSQLTableRoleNameRegex).MatchString(req.ID) {
 		resp.Diagnostics.AddError(
 			"Invalid Import ID",
 			"Import ID ("+req.ID+") contains an invalid project, instance, database, table or role ID. Expected format: projects/{project}/instances/{instance}/databases/{database}/tables/{table}/tableRoles/{role}.",
@@ -415,12 +414,12 @@ func (r *tableIamBindingResource) ImportState(ctx context.Context, req resource.
 
 // Configure adds the provider configured client to the resource.
 func (r *tableIamBindingResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	config, ok := configureProviderConfig(req.ProviderData, &resp.Diagnostics)
+	service, ok := configureSpannerService(req.ProviderData, &resp.Diagnostics)
 	if !ok {
 		return
 	}
 
-	r.config = config
+	r.service = service
 }
 
 func (r *tableIamBindingResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {

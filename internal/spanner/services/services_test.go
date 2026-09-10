@@ -240,7 +240,7 @@ func (s *IntegrationSuite) TestTableIndexLifecycle() {
 	_, err := s.service.CreateSpannerTableIndex(s.ctx, tableName, &SpannerTableIndex{
 		Name: indexName,
 		Columns: []*SpannerTableIndexColumn{
-			{Name: "display_name", Order: SpannerTableIndexColumnOrder_DESC},
+			{Name: "display_name", Order: SpannerTableIndexColumnOrderDesc},
 		},
 		Unique: wrapperspb.Bool(true),
 	})
@@ -250,7 +250,7 @@ func (s *IntegrationSuite) TestTableIndexLifecycle() {
 	s.Require().NoError(err, "GetSpannerTableIndex")
 	s.Require().Len(got.Columns, 1)
 	s.Equal("display_name", got.Columns[0].Name)
-	s.Equal(SpannerTableIndexColumnOrder_DESC, got.Columns[0].Order)
+	s.Equal(SpannerTableIndexColumnOrderDesc, got.Columns[0].Order)
 	s.True(got.Unique.GetValue(), "unique")
 
 	indices, err := s.service.ListSpannerTableIndices(s.ctx, tableName)
@@ -284,7 +284,7 @@ func (s *IntegrationSuite) TestTableIndexCreateRetry() {
 		return &SpannerTableIndex{
 			Name: "tftest_idx_retry_explicit",
 			Columns: []*SpannerTableIndexColumn{
-				{Name: "display_name", Order: SpannerTableIndexColumnOrder_DESC},
+				{Name: "display_name", Order: SpannerTableIndexColumnOrderDesc},
 			},
 			Unique: wrapperspb.Bool(true),
 		}
@@ -482,7 +482,7 @@ func (s *IntegrationSuite) TestTableIamBindingLifecycle() {
 
 	_, err = s.service.SetTableIamBinding(s.ctx, tableName, &TablePolicyBinding{
 		Role:        roleID,
-		Permissions: []TablePolicyBindingPermission{TablePolicyBindingPermission_SELECT},
+		Permissions: []TablePolicyBindingPermission{TablePolicyBindingPermissionSelect},
 	})
 	s.Require().NoError(err, "SetTableIamBinding")
 	s.T().Cleanup(func() { _ = s.service.DeleteTableIamBinding(context.Background(), tableName, roleID) })
@@ -490,7 +490,7 @@ func (s *IntegrationSuite) TestTableIamBindingLifecycle() {
 	got, err := s.service.GetTableIamBinding(s.ctx, tableName, roleID)
 	s.Require().NoError(err, "GetTableIamBinding")
 	s.Equal(roleID, got.Role)
-	s.Contains(got.Permissions, TablePolicyBindingPermission_SELECT)
+	s.Contains(got.Permissions, TablePolicyBindingPermissionSelect)
 
 	s.Require().NoError(s.service.DeleteTableIamBinding(s.ctx, tableName, roleID), "DeleteTableIamBinding")
 }

@@ -21,7 +21,7 @@ import (
 //
 // Params:
 //   - ctx: {context.Context} - The context to use for the operation(Required)
-//   - projectId: {string} - The Google Cloud project ID(Required for accessToken)
+//   - projectID: {string} - The Google Cloud project ID(Required for accessToken)
 //   - credentialsStr: {string} - The credentials JSON string
 //   - accessToken: {string} - The access token
 //   - scopes: {[]string} - The scopes to use for the credentials
@@ -29,7 +29,7 @@ import (
 // Returns: {google.Credentials}.
 func GetGoogleCredentials(
 	ctx context.Context,
-	projectId, credentialsStr, accessToken string,
+	projectID, credentialsStr, accessToken string,
 	scopes ...string,
 ) (*googleoauth.Credentials, error) {
 	// Set default scopes if none are provided
@@ -61,8 +61,8 @@ func GetGoogleCredentials(
 
 	// If access token is provided, use it
 	if accessToken != "" {
-		// Ensure that projectId is provided
-		if projectId == "" {
+		// Ensure that projectID is provided
+		if projectID == "" {
 			return nil, errors.New("projectId is required for accessToken")
 		}
 
@@ -72,7 +72,7 @@ func GetGoogleCredentials(
 
 		tflog.Debug(ctx, "Using provided access token")
 		return &googleoauth.Credentials{
-			ProjectID:   projectId,
+			ProjectID:   projectID,
 			TokenSource: staticTokenSource,
 		}, nil
 	}

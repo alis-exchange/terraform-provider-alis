@@ -4,9 +4,9 @@ import (
 	"context"
 	"regexp"
 
-	"terraform-provider-alis/internal"
 	"terraform-provider-alis/internal/spanner/names"
 	tableschema "terraform-provider-alis/internal/spanner/schema"
+	"terraform-provider-alis/internal/spanner/services"
 	"terraform-provider-alis/internal/utils"
 	"terraform-provider-alis/internal/validators"
 
@@ -36,7 +36,7 @@ func NewTableForeignKeyResource() resource.Resource {
 }
 
 type spannerTableForeignKeyResource struct {
-	config *internal.ProviderConfig
+	service *services.SpannerService
 }
 
 type spannerTableForeignKeyModel struct {
@@ -96,8 +96,8 @@ func (r *spannerTableForeignKeyResource) Schema(ctx context.Context, _ resource.
 					"The name must satisfy the expression `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`",
 				Validators: []validator.String{
 					validators.RegexMatches([]*regexp.Regexp{
-						utils.Pattern(utils.SpannerGoogleSqlTableIdRegex),
-						utils.Pattern(utils.SpannerPostgresSqlTableIdRegex),
+						utils.Pattern(utils.SpannerGoogleSQLTableIDRegex),
+						utils.Pattern(utils.SpannerPostgresSQLTableIDRegex),
 					}, "Name must be a valid Spanner Table ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions"),
 				},
 				PlanModifiers: []planmodifier.String{
@@ -111,8 +111,8 @@ func (r *spannerTableForeignKeyResource) Schema(ctx context.Context, _ resource.
 					"The **FK_** prefix is recommended but not required.",
 				Validators: []validator.String{
 					validators.RegexMatches([]*regexp.Regexp{
-						utils.Pattern(utils.SpannerGoogleSqlConstraintIdRegex),
-						utils.Pattern(utils.SpannerPostgresSqlConstraintIdRegex),
+						utils.Pattern(utils.SpannerGoogleSQLConstraintIDRegex),
+						utils.Pattern(utils.SpannerPostgresSQLConstraintIDRegex),
 					}, "Name must be a valid Spanner Constraint ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions"),
 				},
 				PlanModifiers: []planmodifier.String{
@@ -125,8 +125,8 @@ func (r *spannerTableForeignKeyResource) Schema(ctx context.Context, _ resource.
 					"The name must satisfy the expression `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`",
 				Validators: []validator.String{
 					validators.RegexMatches([]*regexp.Regexp{
-						utils.Pattern(utils.SpannerGoogleSqlTableIdRegex),
-						utils.Pattern(utils.SpannerPostgresSqlTableIdRegex),
+						utils.Pattern(utils.SpannerGoogleSQLTableIDRegex),
+						utils.Pattern(utils.SpannerPostgresSQLTableIDRegex),
 					}, "Name must be a valid Spanner Table ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions"),
 				},
 				PlanModifiers: []planmodifier.String{
@@ -139,8 +139,8 @@ func (r *spannerTableForeignKeyResource) Schema(ctx context.Context, _ resource.
 					"See https://cloud.google.com/spanner/docs/foreign-keys/overview",
 				Validators: []validator.String{
 					validators.RegexMatches([]*regexp.Regexp{
-						utils.Pattern(utils.SpannerGoogleSqlColumnIdRegex),
-						utils.Pattern(utils.SpannerPostgresSqlColumnIdRegex),
+						utils.Pattern(utils.SpannerGoogleSQLColumnIDRegex),
+						utils.Pattern(utils.SpannerPostgresSQLColumnIDRegex),
 					}, "Column must be a valid Spanner Column ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions"),
 				},
 				PlanModifiers: []planmodifier.String{
@@ -153,8 +153,8 @@ func (r *spannerTableForeignKeyResource) Schema(ctx context.Context, _ resource.
 					"See https://cloud.google.com/spanner/docs/foreign-keys/overview",
 				Validators: []validator.String{
 					validators.RegexMatches([]*regexp.Regexp{
-						utils.Pattern(utils.SpannerGoogleSqlColumnIdRegex),
-						utils.Pattern(utils.SpannerPostgresSqlColumnIdRegex),
+						utils.Pattern(utils.SpannerGoogleSQLColumnIDRegex),
+						utils.Pattern(utils.SpannerPostgresSQLColumnIDRegex),
 					}, "Column must be a valid Spanner Column ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions"),
 				},
 				PlanModifiers: []planmodifier.String{
@@ -199,8 +199,8 @@ func (r *spannerTableForeignKeyResource) Create(ctx context.Context, req resourc
 	// Get project and instance name
 	project := plan.Project.ValueString()
 	instanceName := plan.Instance.ValueString()
-	databaseId := plan.Database.ValueString()
-	tableId := plan.Table.ValueString()
+	databaseID := plan.Database.ValueString()
+	tableID := plan.Table.ValueString()
 
 	// Generate policy from plan
 	constraint := &tableschema.SpannerTableForeignKeyConstraint{
@@ -211,10 +211,10 @@ func (r *spannerTableForeignKeyResource) Create(ctx context.Context, req resourc
 		OnDelete:         tableschema.SpannerTableConstraintActionFromString(plan.OnDelete.ValueString()),
 	}
 
-	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String()
+	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseID, Table: tableID}.String()
 
 	// Create foreign key constraint
-	_, err := r.config.SpannerService.CreateSpannerTableForeignKeyConstraint(ctx, tableName, constraint)
+	_, err := r.service.CreateSpannerTableForeignKeyConstraint(ctx, tableName, constraint)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Creating Foreign Key Constraint",
@@ -244,14 +244,14 @@ func (r *spannerTableForeignKeyResource) Read(ctx context.Context, req resource.
 	// Get project and instance name
 	project := state.Project.ValueString()
 	instanceName := state.Instance.ValueString()
-	databaseId := state.Database.ValueString()
-	tableId := state.Table.ValueString()
+	databaseID := state.Database.ValueString()
+	tableID := state.Table.ValueString()
 	name := state.Name.ValueString()
 
-	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String()
+	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseID, Table: tableID}.String()
 
 	// Get constraint from API
-	constraint, err := r.config.SpannerService.GetSpannerTableForeignKeyConstraint(ctx, tableName, name)
+	constraint, err := r.service.GetSpannerTableForeignKeyConstraint(ctx, tableName, name)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			resp.State.RemoveResource(ctx)
@@ -318,14 +318,14 @@ func (r *spannerTableForeignKeyResource) Delete(ctx context.Context, req resourc
 	// Get project and instance name
 	project := state.Project.ValueString()
 	instanceName := state.Instance.ValueString()
-	databaseId := state.Database.ValueString()
-	tableId := state.Table.ValueString()
+	databaseID := state.Database.ValueString()
+	tableID := state.Table.ValueString()
 	name := state.Name.ValueString()
 
-	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String()
+	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseID, Table: tableID}.String()
 
 	// Delete existing foreign key constraint
-	err := r.config.SpannerService.DeleteSpannerTableForeignKeyConstraint(ctx, tableName, name)
+	err := r.service.DeleteSpannerTableForeignKeyConstraint(ctx, tableName, name)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Deleting Foreign Key Constraint",
@@ -337,12 +337,12 @@ func (r *spannerTableForeignKeyResource) Delete(ctx context.Context, req resourc
 
 // Configure adds the provider configured client to the resource.
 func (r *spannerTableForeignKeyResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	config, ok := configureProviderConfig(req.ProviderData, &resp.Diagnostics)
+	service, ok := configureSpannerService(req.ProviderData, &resp.Diagnostics)
 	if !ok {
 		return
 	}
 
-	r.config = config
+	r.service = service
 }
 
 // ImportState imports an existing foreign key constraint into state.

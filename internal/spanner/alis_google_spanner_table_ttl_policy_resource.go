@@ -4,7 +4,6 @@ import (
 	"context"
 	"regexp"
 
-	"terraform-provider-alis/internal"
 	"terraform-provider-alis/internal/spanner/names"
 	"terraform-provider-alis/internal/spanner/services"
 	"terraform-provider-alis/internal/utils"
@@ -26,37 +25,37 @@ import (
 
 // Ensure the implementation satisfies the expected interfaces.
 var (
-	_ resource.Resource                = &spannerTableTtlPolicyResource{}
-	_ resource.ResourceWithConfigure   = &spannerTableTtlPolicyResource{}
-	_ resource.ResourceWithImportState = &spannerTableTtlPolicyResource{}
+	_ resource.Resource                = &spannerTableTTLPolicyResource{}
+	_ resource.ResourceWithConfigure   = &spannerTableTTLPolicyResource{}
+	_ resource.ResourceWithImportState = &spannerTableTTLPolicyResource{}
 )
 
-// NewTableTtlPolicyResource is a helper function to simplify the provider implementation.
-func NewTableTtlPolicyResource() resource.Resource {
-	return &spannerTableTtlPolicyResource{}
+// NewTableTTLPolicyResource is a helper function to simplify the provider implementation.
+func NewTableTTLPolicyResource() resource.Resource {
+	return &spannerTableTTLPolicyResource{}
 }
 
-type spannerTableTtlPolicyResource struct {
-	config *internal.ProviderConfig
+type spannerTableTTLPolicyResource struct {
+	service *services.SpannerService
 }
 
-type spannerTableTtlModel struct {
+type spannerTableTTLModel struct {
 	Project  types.String   `tfsdk:"project"`
 	Instance types.String   `tfsdk:"instance"`
 	Database types.String   `tfsdk:"database"`
 	Table    types.String   `tfsdk:"table"`
 	Column   types.String   `tfsdk:"column"`
-	Ttl      types.Int64    `tfsdk:"ttl"`
+	TTL      types.Int64    `tfsdk:"ttl"`
 	Timeouts timeouts.Value `tfsdk:"timeouts"`
 }
 
 // Metadata returns the resource type name.
-func (r *spannerTableTtlPolicyResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+func (r *spannerTableTTLPolicyResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_google_spanner_table_ttl_policy"
 }
 
 // Schema defines the schema for the resource.
-func (r *spannerTableTtlPolicyResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *spannerTableTTLPolicyResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Version: resourceSchemaVersion,
 		Blocks: map[string]schema.Block{
@@ -94,8 +93,8 @@ func (r *spannerTableTtlPolicyResource) Schema(ctx context.Context, _ resource.S
 					"The name must satisfy the expression `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`",
 				Validators: []validator.String{
 					validators.RegexMatches([]*regexp.Regexp{
-						utils.Pattern(utils.SpannerGoogleSqlTableIdRegex),
-						utils.Pattern(utils.SpannerPostgresSqlTableIdRegex),
+						utils.Pattern(utils.SpannerGoogleSQLTableIDRegex),
+						utils.Pattern(utils.SpannerPostgresSQLTableIDRegex),
 					}, "Name must be a valid Spanner Table ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions"),
 				},
 				PlanModifiers: []planmodifier.String{
@@ -108,8 +107,8 @@ func (r *spannerTableTtlPolicyResource) Schema(ctx context.Context, _ resource.S
 					"The column must be of type `TIMESTAMP`. See https://cloud.google.com/spanner/docs/ttl/working-with-ttl",
 				Validators: []validator.String{
 					validators.RegexMatches([]*regexp.Regexp{
-						utils.Pattern(utils.SpannerGoogleSqlColumnIdRegex),
-						utils.Pattern(utils.SpannerPostgresSqlColumnIdRegex),
+						utils.Pattern(utils.SpannerGoogleSQLColumnIDRegex),
+						utils.Pattern(utils.SpannerPostgresSQLColumnIDRegex),
 					}, "Column must be a valid Spanner Column ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions"),
 				},
 			},
@@ -127,9 +126,9 @@ func (r *spannerTableTtlPolicyResource) Schema(ctx context.Context, _ resource.S
 }
 
 // Create a new resource.
-func (r *spannerTableTtlPolicyResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+func (r *spannerTableTTLPolicyResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	// Retrieve values from plan
-	var plan spannerTableTtlModel
+	var plan spannerTableTTLModel
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -147,19 +146,19 @@ func (r *spannerTableTtlPolicyResource) Create(ctx context.Context, req resource
 	// Get project and instance name
 	project := plan.Project.ValueString()
 	instanceName := plan.Instance.ValueString()
-	databaseId := plan.Database.ValueString()
-	tableId := plan.Table.ValueString()
+	databaseID := plan.Database.ValueString()
+	tableID := plan.Table.ValueString()
 
 	// Generate policy from plan
 	policy := &services.SpannerTableRowDeletionPolicy{
 		Column:   plan.Column.ValueString(),
-		Duration: wrapperspb.Int64(plan.Ttl.ValueInt64()),
+		Duration: wrapperspb.Int64(plan.TTL.ValueInt64()),
 	}
 
-	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String()
+	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseID, Table: tableID}.String()
 
 	// Create row deletion policy
-	_, err := r.config.SpannerService.CreateSpannerTableRowDeletionPolicy(ctx, tableName, policy)
+	_, err := r.service.CreateSpannerTableRowDeletionPolicy(ctx, tableName, policy)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Creating TTL Policy",
@@ -177,9 +176,9 @@ func (r *spannerTableTtlPolicyResource) Create(ctx context.Context, req resource
 }
 
 // Read resource information.
-func (r *spannerTableTtlPolicyResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+func (r *spannerTableTTLPolicyResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	// Get current state
-	var state spannerTableTtlModel
+	var state spannerTableTTLModel
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -189,13 +188,13 @@ func (r *spannerTableTtlPolicyResource) Read(ctx context.Context, req resource.R
 	// Get project and instance name
 	project := state.Project.ValueString()
 	instanceName := state.Instance.ValueString()
-	databaseId := state.Database.ValueString()
-	tableId := state.Table.ValueString()
+	databaseID := state.Database.ValueString()
+	tableID := state.Table.ValueString()
 
-	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String()
+	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseID, Table: tableID}.String()
 
 	// Get policy from API
-	policy, err := r.config.SpannerService.GetSpannerTableRowDeletionPolicy(ctx, tableName)
+	policy, err := r.service.GetSpannerTableRowDeletionPolicy(ctx, tableName)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			resp.State.RemoveResource(ctx)
@@ -213,7 +212,7 @@ func (r *spannerTableTtlPolicyResource) Read(ctx context.Context, req resource.R
 	// Set refreshed state
 	state.Column = types.StringValue(policy.Column)
 	if policy.Duration != nil {
-		state.Ttl = types.Int64Value(policy.Duration.GetValue())
+		state.TTL = types.Int64Value(policy.Duration.GetValue())
 	}
 
 	// Set refreshed state
@@ -224,9 +223,9 @@ func (r *spannerTableTtlPolicyResource) Read(ctx context.Context, req resource.R
 	}
 }
 
-func (r *spannerTableTtlPolicyResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+func (r *spannerTableTTLPolicyResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	// Retrieve values from plan
-	var plan spannerTableTtlModel
+	var plan spannerTableTTLModel
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -244,19 +243,19 @@ func (r *spannerTableTtlPolicyResource) Update(ctx context.Context, req resource
 	// Get project and instance name
 	project := plan.Project.ValueString()
 	instanceName := plan.Instance.ValueString()
-	databaseId := plan.Database.ValueString()
-	tableId := plan.Table.ValueString()
+	databaseID := plan.Database.ValueString()
+	tableID := plan.Table.ValueString()
 
 	// Generate policy from plan
 	policy := &services.SpannerTableRowDeletionPolicy{
 		Column:   plan.Column.ValueString(),
-		Duration: wrapperspb.Int64(plan.Ttl.ValueInt64()),
+		Duration: wrapperspb.Int64(plan.TTL.ValueInt64()),
 	}
 
-	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String()
+	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseID, Table: tableID}.String()
 
 	// Update row deletion policy
-	_, err := r.config.SpannerService.UpdateSpannerTableRowDeletionPolicy(ctx, tableName, policy)
+	_, err := r.service.UpdateSpannerTableRowDeletionPolicy(ctx, tableName, policy)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Updating TTL Policy",
@@ -274,9 +273,9 @@ func (r *spannerTableTtlPolicyResource) Update(ctx context.Context, req resource
 }
 
 // Delete deletes the resource and removes the Terraform state on success.
-func (r *spannerTableTtlPolicyResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+func (r *spannerTableTTLPolicyResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	// Retrieve values from state
-	var state spannerTableTtlModel
+	var state spannerTableTTLModel
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -294,13 +293,13 @@ func (r *spannerTableTtlPolicyResource) Delete(ctx context.Context, req resource
 	// Get project and instance name
 	project := state.Project.ValueString()
 	instanceName := state.Instance.ValueString()
-	databaseId := state.Database.ValueString()
-	tableId := state.Table.ValueString()
+	databaseID := state.Database.ValueString()
+	tableID := state.Table.ValueString()
 
-	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String()
+	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseID, Table: tableID}.String()
 
 	// Delete existing row deletion policy
-	err := r.config.SpannerService.DeleteSpannerTableRowDeletionPolicy(ctx, tableName)
+	err := r.service.DeleteSpannerTableRowDeletionPolicy(ctx, tableName)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Deleting TTL Policy",
@@ -310,7 +309,7 @@ func (r *spannerTableTtlPolicyResource) Delete(ctx context.Context, req resource
 	}
 }
 
-func (r *spannerTableTtlPolicyResource) ImportState(
+func (r *spannerTableTTLPolicyResource) ImportState(
 	ctx context.Context,
 	req resource.ImportStateRequest,
 	resp *resource.ImportStateResponse,
@@ -324,8 +323,8 @@ func (r *spannerTableTtlPolicyResource) ImportState(
 		return
 	}
 
-	if !utils.Pattern(utils.SpannerGoogleSqlTableNameRegex).MatchString(req.ID) &&
-		!utils.Pattern(utils.SpannerPostgresSqlTableNameRegex).MatchString(req.ID) {
+	if !utils.Pattern(utils.SpannerGoogleSQLTableNameRegex).MatchString(req.ID) &&
+		!utils.Pattern(utils.SpannerPostgresSQLTableNameRegex).MatchString(req.ID) {
 		resp.Diagnostics.AddError(
 			"Invalid Import ID",
 			"Import ID ("+req.ID+") contains an invalid project, instance, database or table ID. Expected format: projects/{project}/instances/{instance}/databases/{database}/tables/{table}.",
@@ -345,16 +344,16 @@ func (r *spannerTableTtlPolicyResource) ImportState(
 }
 
 // Configure adds the provider configured client to the resource.
-func (r *spannerTableTtlPolicyResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	config, ok := configureProviderConfig(req.ProviderData, &resp.Diagnostics)
+func (r *spannerTableTTLPolicyResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+	service, ok := configureSpannerService(req.ProviderData, &resp.Diagnostics)
 	if !ok {
 		return
 	}
 
-	r.config = config
+	r.service = service
 }
 
-func (r *spannerTableTtlPolicyResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {
+func (r *spannerTableTTLPolicyResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {
 	return []resource.ConfigValidator{
 
 		//resourcevalidator.Conflicting(),

@@ -18,7 +18,7 @@ func TestAllResourceSchemas_HaveTimeoutsBlock(t *testing.T) {
 		"table":       NewSpannerTableResource(),
 		"index":       NewSpannerTableIndexResource(),
 		"foreign_key": NewTableForeignKeyResource(),
-		"ttl_policy":  NewTableTtlPolicyResource(),
+		"ttl_policy":  NewTableTTLPolicyResource(),
 		"iam_binding": NewTableIamBindingResource(),
 		"role":        NewDatabaseRoleResource(),
 		"sequence":    NewDatabaseSequenceResource(),

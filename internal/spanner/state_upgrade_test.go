@@ -22,7 +22,7 @@ func upgradeTestResources() map[string]resource.Resource {
 		"table":       NewSpannerTableResource(),
 		"index":       NewSpannerTableIndexResource(),
 		"foreign_key": NewTableForeignKeyResource(),
-		"ttl_policy":  NewTableTtlPolicyResource(),
+		"ttl_policy":  NewTableTTLPolicyResource(),
 		"iam_binding": NewTableIamBindingResource(),
 		"role":        NewDatabaseRoleResource(),
 		"sequence":    NewDatabaseSequenceResource(),

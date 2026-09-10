@@ -16,37 +16,37 @@ func TestValidateArgument(t *testing.T) {
 	}{
 		"database name valid": {
 			value: "projects/my-project/instances/my-instance/databases/my-db01",
-			regex: SpannerGoogleSqlDatabaseNameRegex,
+			regex: SpannerGoogleSQLDatabaseNameRegex,
 			want:  true,
 		},
 		"database name uppercase project": {
 			value: "projects/My-Project/instances/my-instance/databases/my-db01",
-			regex: SpannerGoogleSqlDatabaseNameRegex,
+			regex: SpannerGoogleSQLDatabaseNameRegex,
 			want:  false,
 		},
 		"database name wrong collection": {
 			value: "projects/my-project/instances/my-instance/tables/my-db01",
-			regex: SpannerGoogleSqlDatabaseNameRegex,
+			regex: SpannerGoogleSQLDatabaseNameRegex,
 			want:  false,
 		},
 		"table name valid": {
 			value: "projects/my-project/instances/my-instance/databases/my-db01/tables/MyTable_1",
-			regex: SpannerGoogleSqlTableNameRegex,
+			regex: SpannerGoogleSQLTableNameRegex,
 			want:  true,
 		},
 		"table name with dash": {
 			value: "projects/my-project/instances/my-instance/databases/my-db01/tables/my-table",
-			regex: SpannerGoogleSqlTableNameRegex,
+			regex: SpannerGoogleSQLTableNameRegex,
 			want:  false,
 		},
 		"table id valid": {
 			value: "MyTable_1",
-			regex: SpannerGoogleSqlTableIdRegex,
+			regex: SpannerGoogleSQLTableIDRegex,
 			want:  true,
 		},
 		"table id leading digit": {
 			value: "1table",
-			regex: SpannerGoogleSqlTableIdRegex,
+			regex: SpannerGoogleSQLTableIDRegex,
 			want:  false,
 		},
 	}
@@ -88,27 +88,27 @@ func TestCutPrefixAndSuffix(t *testing.T) {
 func TestValidateDialectArgument(t *testing.T) {
 	cases := map[string]struct {
 		field, value           string
-		googleSql, postgresSql string
+		googleSQL, postgresSQL string
 		wantErr                bool
 	}{
 		"matches googlesql pattern": {
 			field: "name", value: "tftest_table",
-			googleSql: SpannerGoogleSqlTableIdRegex, postgresSql: SpannerPostgresSqlTableIdRegex,
+			googleSQL: SpannerGoogleSQLTableIDRegex, postgresSQL: SpannerPostgresSQLTableIDRegex,
 		},
 		"matches postgres pattern only": {
 			field: "database", value: "projects/my-project/instances/my-instance/databases/MyDb01",
-			googleSql: SpannerGoogleSqlDatabaseNameRegex, postgresSql: SpannerPostgresSqlDatabaseNameRegex,
+			googleSQL: SpannerGoogleSQLDatabaseNameRegex, postgresSQL: SpannerPostgresSQLDatabaseNameRegex,
 		},
 		"matches neither": {
 			field: "role", value: "admin1, admin2",
-			googleSql: SpannerGoogleSqlRoleIdRegex, postgresSql: SpannerPostgresSqlRoleIdRegex,
+			googleSQL: SpannerGoogleSQLRoleIDRegex, postgresSQL: SpannerPostgresSQLRoleIDRegex,
 			wantErr: true,
 		},
 	}
 
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			err := ValidateDialectArgument(tc.field, tc.value, tc.googleSql, tc.postgresSql)
+			err := ValidateDialectArgument(tc.field, tc.value, tc.googleSQL, tc.postgresSQL)
 			if !tc.wantErr {
 				if err != nil {
 					t.Fatalf("ValidateDialectArgument(%q, %q, ...) = %v, want nil", tc.field, tc.value, err)
@@ -122,7 +122,7 @@ func TestValidateDialectArgument(t *testing.T) {
 			if status.Code(err) != codes.InvalidArgument {
 				t.Errorf("code = %v, want InvalidArgument", status.Code(err))
 			}
-			for _, want := range []string{tc.field, tc.value, tc.googleSql, tc.postgresSql} {
+			for _, want := range []string{tc.field, tc.value, tc.googleSQL, tc.postgresSQL} {
 				if !strings.Contains(err.Error(), want) {
 					t.Errorf("error %q does not mention %q", err, want)
 				}
@@ -134,8 +134,8 @@ func TestValidateDialectArgument(t *testing.T) {
 // Pattern is what makes validation compile-once; a fresh compile per call
 // would be silently correct, so assert on identity.
 func TestPatternCompilesOnce(t *testing.T) {
-	first := Pattern(SpannerGoogleSqlTableIdRegex)
-	second := Pattern(SpannerGoogleSqlTableIdRegex)
+	first := Pattern(SpannerGoogleSQLTableIDRegex)
+	second := Pattern(SpannerGoogleSQLTableIDRegex)
 	if first != second {
 		t.Error("Pattern returned distinct compilations for the same expression")
 	}

@@ -20,28 +20,28 @@ import (
 // Params:
 //   - ctx: context.Context - The context to use for RPCs.
 //   - parent: string - Required. The name of the database that will serve the new table.
-//   - tableId: string - Required. The ID of the table to create.
+//   - tableID: string - Required. The ID of the table to create.
 //   - table: *SpannerTable - Required. The table to create.
 //
 // Returns: *SpannerTable.
 func (s *SpannerService) CreateSpannerTable(
 	ctx context.Context,
-	parent, tableId string,
+	parent, tableID string,
 	table *schema.SpannerTable,
 ) (*schema.SpannerTable, error) {
 	if err := utils.ValidateDialectArgument(
 		"parent",
 		parent,
-		utils.SpannerGoogleSqlDatabaseNameRegex,
-		utils.SpannerPostgresSqlDatabaseNameRegex,
+		utils.SpannerGoogleSQLDatabaseNameRegex,
+		utils.SpannerPostgresSQLDatabaseNameRegex,
 	); err != nil {
 		return nil, err
 	}
 	if err := utils.ValidateDialectArgument(
 		"table_id",
-		tableId,
-		utils.SpannerGoogleSqlTableIdRegex,
-		utils.SpannerPostgresSqlTableIdRegex,
+		tableID,
+		utils.SpannerGoogleSQLTableIDRegex,
+		utils.SpannerPostgresSQLTableIDRegex,
 	); err != nil {
 		return nil, err
 	}
@@ -62,7 +62,7 @@ func (s *SpannerService) CreateSpannerTable(
 	}
 
 	// Set table name
-	table.Name = fmt.Sprintf("%s/tables/%s", parent, tableId)
+	table.Name = fmt.Sprintf("%s/tables/%s", parent, tableID)
 
 	if _, err := names.ParseDatabase(parent); err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s): %v", parent, err)
@@ -71,7 +71,7 @@ func (s *SpannerService) CreateSpannerTable(
 	// Retry belongs to the Connection, which applies it uniformly; see the
 	// invariants on conn.Connection.
 	if _, err := table.Create(ctx, s.conn); err != nil {
-		if isDuplicateNameInSchema(err, tableId) {
+		if isDuplicateNameInSchema(err, tableID) {
 			return nil, status.Errorf(codes.AlreadyExists, "Table (%s) already exists", table.GetName())
 		}
 
@@ -91,13 +91,13 @@ func (s *SpannerService) CreateSpannerTable(
 // share it so the two can never disagree about what a valid column is.
 func validateColumns(columns []*schema.SpannerTableColumn) error {
 	for i, column := range columns {
-		if valid := utils.ValidateArgument(column.GetName(), utils.SpannerGoogleSqlColumnIdRegex); !valid {
+		if valid := utils.ValidateArgument(column.GetName(), utils.SpannerGoogleSQLColumnIDRegex); !valid {
 			return status.Errorf(
 				codes.InvalidArgument,
 				"Invalid argument table.schema.columns[%d].name (%s), must match `%s`",
 				i,
 				column.GetName(),
-				utils.SpannerGoogleSqlColumnIdRegex,
+				utils.SpannerGoogleSQLColumnIDRegex,
 			)
 		}
 
@@ -134,8 +134,8 @@ func (s *SpannerService) GetSpannerTable(ctx context.Context, name string) (*sch
 	if err := utils.ValidateDialectArgument(
 		"name",
 		name,
-		utils.SpannerGoogleSqlTableNameRegex,
-		utils.SpannerPostgresSqlTableNameRegex,
+		utils.SpannerGoogleSQLTableNameRegex,
+		utils.SpannerPostgresSQLTableNameRegex,
 	); err != nil {
 		return nil, err
 	}
@@ -175,8 +175,8 @@ func (s *SpannerService) UpdateSpannerTable(
 	if err := utils.ValidateDialectArgument(
 		"table.name",
 		table.GetName(),
-		utils.SpannerGoogleSqlTableNameRegex,
-		utils.SpannerPostgresSqlTableNameRegex,
+		utils.SpannerGoogleSQLTableNameRegex,
+		utils.SpannerPostgresSQLTableNameRegex,
 	); err != nil {
 		return nil, err
 	}
@@ -218,7 +218,7 @@ func (s *SpannerService) UpdateSpannerTable(
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument table.name (%s): %v", table.Name, err)
 	}
-	tableId := tableName.Table
+	tableID := tableName.Table
 
 	// Get table state. A missing table is not fatal here: allowMissing decides
 	// below whether to create it.
@@ -237,7 +237,7 @@ func (s *SpannerService) UpdateSpannerTable(
 
 	// If table does not exist and allow missing is set, create the table
 	if existingTable == nil {
-		return s.CreateSpannerTable(ctx, tableName.DatabaseName().String(), tableId, table)
+		return s.CreateSpannerTable(ctx, tableName.DatabaseName().String(), tableID, table)
 	}
 
 	_, err = table.Update(ctx, s.conn, existingTable)
@@ -259,8 +259,8 @@ func (s *SpannerService) DeleteSpannerTable(ctx context.Context, name string) (*
 	if err := utils.ValidateDialectArgument(
 		"name",
 		name,
-		utils.SpannerGoogleSqlTableNameRegex,
-		utils.SpannerPostgresSqlTableNameRegex,
+		utils.SpannerGoogleSQLTableNameRegex,
+		utils.SpannerPostgresSQLTableNameRegex,
 	); err != nil {
 		return nil, err
 	}

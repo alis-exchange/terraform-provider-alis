@@ -3,8 +3,8 @@ package spanner
 import (
 	"context"
 
-	"terraform-provider-alis/internal"
 	"terraform-provider-alis/internal/spanner/names"
+	"terraform-provider-alis/internal/spanner/services"
 	"terraform-provider-alis/internal/utils"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -24,7 +24,7 @@ func NewTableIamBindingDataSource() datasource.DataSource {
 }
 
 type tableIamBindingDataSource struct {
-	config *internal.ProviderConfig
+	service *services.SpannerService
 }
 
 // tableIamBindingModel backs the table IAM binding data source. The resource
@@ -99,7 +99,7 @@ func (r *tableIamBindingDataSource) Read(ctx context.Context, req datasource.Rea
 
 	tableName := names.TableName{Project: project, Instance: instance, Database: database, Table: table}.String()
 
-	binding, err := r.config.SpannerService.GetTableIamBinding(ctx, tableName, role)
+	binding, err := r.service.GetTableIamBinding(ctx, tableName, role)
 	if err != nil {
 		// A missing binding is an error for a data source: silently returning
 		// null permissions would hide a misconfigured role reference.
@@ -129,12 +129,12 @@ func (r *tableIamBindingDataSource) Read(ctx context.Context, req datasource.Rea
 
 // Configure adds the provider configured client to the resource.
 func (r *tableIamBindingDataSource) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
-	config, ok := configureProviderConfig(req.ProviderData, &resp.Diagnostics)
+	service, ok := configureSpannerService(req.ProviderData, &resp.Diagnostics)
 	if !ok {
 		return
 	}
 
-	r.config = config
+	r.service = service
 }
 
 func (r *tableIamBindingDataSource) ConfigValidators(ctx context.Context) []datasource.ConfigValidator {

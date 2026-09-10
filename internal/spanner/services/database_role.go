@@ -16,19 +16,19 @@ import (
 // CreateDatabaseRole creates a database role by issuing CREATE ROLE DDL in
 // the parent database. The database's existence is verified first so a
 // missing database surfaces as its own error rather than a DDL failure.
-func (s *SpannerService) CreateDatabaseRole(ctx context.Context, parent, roleId string) (*databasepb.DatabaseRole, error) {
+func (s *SpannerService) CreateDatabaseRole(ctx context.Context, parent, roleID string) (*databasepb.DatabaseRole, error) {
 	// Validate arguments
 	if err := utils.ValidateDialectArgument(
 		"parent",
 		parent,
-		utils.SpannerGoogleSqlDatabaseNameRegex,
-		utils.SpannerPostgresSqlDatabaseNameRegex,
+		utils.SpannerGoogleSQLDatabaseNameRegex,
+		utils.SpannerPostgresSQLDatabaseNameRegex,
 	); err != nil {
 		return nil, err
 	}
 
 	// Ensure role is provided
-	if roleId == "" {
+	if roleID == "" {
 		return nil, status.Error(codes.InvalidArgument, "Invalid argument roleId, field is required but not provided")
 	}
 
@@ -37,12 +37,12 @@ func (s *SpannerService) CreateDatabaseRole(ctx context.Context, parent, roleId 
 		return nil, err
 	}
 
-	if err := s.conn.ExecuteDDL(ctx, parent, schema.CreateRoleDdl(roleId)); err != nil {
+	if err := s.conn.ExecuteDDL(ctx, parent, schema.CreateRoleDdl(roleID)); err != nil {
 		return nil, err
 	}
 
 	return &databasepb.DatabaseRole{
-		Name: fmt.Sprintf("%s/databaseRoles/%s", parent, roleId),
+		Name: fmt.Sprintf("%s/databaseRoles/%s", parent, roleID),
 	}, nil
 }
 
@@ -53,8 +53,8 @@ func (s *SpannerService) GetDatabaseRole(ctx context.Context, name string) (*dat
 	if err := utils.ValidateDialectArgument(
 		"name",
 		name,
-		utils.SpannerGoogleSqlDatabaseRoleNameRegex,
-		utils.SpannerPostgresSqlDatabaseRoleNameRegex,
+		utils.SpannerGoogleSQLDatabaseRoleNameRegex,
+		utils.SpannerPostgresSQLDatabaseRoleNameRegex,
 	); err != nil {
 		return nil, err
 	}
@@ -91,8 +91,8 @@ func (s *SpannerService) ListDatabaseRoles(
 	if err := utils.ValidateDialectArgument(
 		"parent",
 		parent,
-		utils.SpannerGoogleSqlDatabaseNameRegex,
-		utils.SpannerPostgresSqlDatabaseNameRegex,
+		utils.SpannerGoogleSQLDatabaseNameRegex,
+		utils.SpannerPostgresSQLDatabaseNameRegex,
 	); err != nil {
 		return nil, "", err
 	}
@@ -116,8 +116,8 @@ func (s *SpannerService) DeleteDatabaseRole(ctx context.Context, name string) er
 	if err := utils.ValidateDialectArgument(
 		"name",
 		name,
-		utils.SpannerGoogleSqlDatabaseRoleNameRegex,
-		utils.SpannerPostgresSqlDatabaseRoleNameRegex,
+		utils.SpannerGoogleSQLDatabaseRoleNameRegex,
+		utils.SpannerPostgresSQLDatabaseRoleNameRegex,
 	); err != nil {
 		return err
 	}
@@ -126,7 +126,7 @@ func (s *SpannerService) DeleteDatabaseRole(ctx context.Context, name string) er
 	if err != nil {
 		return status.Errorf(codes.InvalidArgument, "Invalid argument name (%s): %v", name, err)
 	}
-	roleId := roleName.Role
+	roleID := roleName.Role
 	database := roleName.DatabaseName().String()
 
 	// Verify the database exists before issuing DDL
@@ -134,5 +134,5 @@ func (s *SpannerService) DeleteDatabaseRole(ctx context.Context, name string) er
 		return err
 	}
 
-	return s.conn.ExecuteDDL(ctx, database, schema.DropRoleDdl(roleId))
+	return s.conn.ExecuteDDL(ctx, database, schema.DropRoleDdl(roleID))
 }

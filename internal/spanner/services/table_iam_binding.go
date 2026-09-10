@@ -21,8 +21,8 @@ func (s *SpannerService) SetTableIamBinding(ctx context.Context, parent string, 
 	if err := utils.ValidateDialectArgument(
 		"parent",
 		parent,
-		utils.SpannerGoogleSqlTableNameRegex,
-		utils.SpannerPostgresSqlTableNameRegex,
+		utils.SpannerGoogleSQLTableNameRegex,
+		utils.SpannerPostgresSQLTableNameRegex,
 	); err != nil {
 		return nil, err
 	}
@@ -37,8 +37,8 @@ func (s *SpannerService) SetTableIamBinding(ctx context.Context, parent string, 
 	if err := utils.ValidateDialectArgument(
 		"binding.role",
 		binding.Role,
-		utils.SpannerGoogleSqlRoleIdRegex,
-		utils.SpannerPostgresSqlRoleIdRegex,
+		utils.SpannerGoogleSQLRoleIDRegex,
+		utils.SpannerPostgresSQLRoleIDRegex,
 	); err != nil {
 		return nil, err
 	}
@@ -53,7 +53,7 @@ func (s *SpannerService) SetTableIamBinding(ctx context.Context, parent string, 
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s): %v", parent, err)
 	}
 	database := parentName.DatabaseName().String()
-	tableId := parentName.Table
+	tableID := parentName.Table
 
 	// Verify the database exists before issuing DDL
 	if _, err := s.conn.Dialect(ctx, database); err != nil {
@@ -82,10 +82,10 @@ func (s *SpannerService) SetTableIamBinding(ctx context.Context, parent string, 
 
 	var statements []string
 	if len(toRevoke) > 0 {
-		statements = append(statements, schema.RevokeTablePrivilegesDdl(tableId, binding.Role, permissionNames(toRevoke)))
+		statements = append(statements, schema.RevokeTablePrivilegesDdl(tableID, binding.Role, permissionNames(toRevoke)))
 	}
 	if len(toGrant) > 0 {
-		statements = append(statements, schema.GrantTablePrivilegesDdl(tableId, binding.Role, permissionNames(toGrant)))
+		statements = append(statements, schema.GrantTablePrivilegesDdl(tableID, binding.Role, permissionNames(toGrant)))
 	}
 
 	if err := s.conn.ExecuteDDL(ctx, database, statements...); err != nil {
@@ -125,8 +125,8 @@ func (s *SpannerService) GetTableIamBinding(ctx context.Context, parent, role st
 	if err := utils.ValidateDialectArgument(
 		"parent",
 		parent,
-		utils.SpannerGoogleSqlTableNameRegex,
-		utils.SpannerPostgresSqlTableNameRegex,
+		utils.SpannerGoogleSQLTableNameRegex,
+		utils.SpannerPostgresSQLTableNameRegex,
 	); err != nil {
 		return nil, err
 	}
@@ -134,8 +134,8 @@ func (s *SpannerService) GetTableIamBinding(ctx context.Context, parent, role st
 	if err := utils.ValidateDialectArgument(
 		"role",
 		role,
-		utils.SpannerGoogleSqlRoleIdRegex,
-		utils.SpannerPostgresSqlRoleIdRegex,
+		utils.SpannerGoogleSQLRoleIDRegex,
+		utils.SpannerPostgresSQLRoleIDRegex,
 	); err != nil {
 		return nil, err
 	}
@@ -145,11 +145,11 @@ func (s *SpannerService) GetTableIamBinding(ctx context.Context, parent, role st
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s): %v", parent, err)
 	}
 	database := parentName.DatabaseName().String()
-	tableId := parentName.Table
+	tableID := parentName.Table
 
 	var rows []*TablePermissionsRow
 	if err := s.conn.Query(ctx, database, &rows,
-		"SELECT * FROM INFORMATION_SCHEMA.TABLE_PRIVILEGES WHERE table_name = ? AND grantee = ?", tableId, role); err != nil {
+		"SELECT * FROM INFORMATION_SCHEMA.TABLE_PRIVILEGES WHERE table_name = ? AND grantee = ?", tableID, role); err != nil {
 		return nil, status.Errorf(codes.Internal, "Error getting table IAM binding: %v", err)
 	}
 
@@ -161,7 +161,7 @@ func (s *SpannerService) GetTableIamBinding(ctx context.Context, parent, role st
 		Role: role,
 	}
 	for _, row := range rows {
-		if row.GetPermission() == TablePolicyBindingPermission_UNSPECIFIED {
+		if row.GetPermission() == TablePolicyBindingPermissionUnspecified {
 			continue
 		}
 
@@ -181,8 +181,8 @@ func (s *SpannerService) DeleteTableIamBinding(ctx context.Context, parent, role
 	if err := utils.ValidateDialectArgument(
 		"parent",
 		parent,
-		utils.SpannerGoogleSqlTableNameRegex,
-		utils.SpannerPostgresSqlTableNameRegex,
+		utils.SpannerGoogleSQLTableNameRegex,
+		utils.SpannerPostgresSQLTableNameRegex,
 	); err != nil {
 		return err
 	}
@@ -190,8 +190,8 @@ func (s *SpannerService) DeleteTableIamBinding(ctx context.Context, parent, role
 	if err := utils.ValidateDialectArgument(
 		"role",
 		role,
-		utils.SpannerGoogleSqlRoleIdRegex,
-		utils.SpannerPostgresSqlRoleIdRegex,
+		utils.SpannerGoogleSQLRoleIDRegex,
+		utils.SpannerPostgresSQLRoleIDRegex,
 	); err != nil {
 		return err
 	}
@@ -201,7 +201,7 @@ func (s *SpannerService) DeleteTableIamBinding(ctx context.Context, parent, role
 		return status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s): %v", parent, err)
 	}
 	database := parentName.DatabaseName().String()
-	tableId := parentName.Table
+	tableID := parentName.Table
 
 	// Verify the database exists before issuing DDL
 	if _, err := s.conn.Dialect(ctx, database); err != nil {
@@ -228,5 +228,5 @@ func (s *SpannerService) DeleteTableIamBinding(ctx context.Context, parent, role
 		return nil
 	}
 
-	return s.conn.ExecuteDDL(ctx, database, schema.RevokeTablePrivilegesDdl(tableId, role, permissionNames(permissions)))
+	return s.conn.ExecuteDDL(ctx, database, schema.RevokeTablePrivilegesDdl(tableID, role, permissionNames(permissions)))
 }

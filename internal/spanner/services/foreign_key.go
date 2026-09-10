@@ -22,8 +22,8 @@ func (s *SpannerService) CreateSpannerTableForeignKeyConstraint(
 	if err := utils.ValidateDialectArgument(
 		"parent",
 		parent,
-		utils.SpannerGoogleSqlTableNameRegex,
-		utils.SpannerPostgresSqlTableNameRegex,
+		utils.SpannerGoogleSQLTableNameRegex,
+		utils.SpannerPostgresSQLTableNameRegex,
 	); err != nil {
 		return nil, err
 	}
@@ -34,8 +34,8 @@ func (s *SpannerService) CreateSpannerTableForeignKeyConstraint(
 	if err := utils.ValidateDialectArgument(
 		"constraint.name",
 		constraint.Name,
-		utils.SpannerGoogleSqlConstraintIdRegex,
-		utils.SpannerPostgresSqlConstraintIdRegex,
+		utils.SpannerGoogleSQLConstraintIDRegex,
+		utils.SpannerPostgresSQLConstraintIDRegex,
 	); err != nil {
 		return nil, err
 	}
@@ -46,8 +46,8 @@ func (s *SpannerService) CreateSpannerTableForeignKeyConstraint(
 	if err := utils.ValidateDialectArgument(
 		"constraint.referenced_table",
 		constraint.ReferencedTable,
-		utils.SpannerGoogleSqlTableIdRegex,
-		utils.SpannerPostgresSqlTableIdRegex,
+		utils.SpannerGoogleSQLTableIDRegex,
+		utils.SpannerPostgresSQLTableIDRegex,
 	); err != nil {
 		return nil, err
 	}
@@ -58,8 +58,8 @@ func (s *SpannerService) CreateSpannerTableForeignKeyConstraint(
 	if err := utils.ValidateDialectArgument(
 		"constraint.referenced_column",
 		constraint.ReferencedColumn,
-		utils.SpannerGoogleSqlColumnIdRegex,
-		utils.SpannerPostgresSqlColumnIdRegex,
+		utils.SpannerGoogleSQLColumnIDRegex,
+		utils.SpannerPostgresSQLColumnIDRegex,
 	); err != nil {
 		return nil, err
 	}
@@ -70,8 +70,8 @@ func (s *SpannerService) CreateSpannerTableForeignKeyConstraint(
 	if err := utils.ValidateDialectArgument(
 		"constraint.column",
 		constraint.Column,
-		utils.SpannerGoogleSqlColumnIdRegex,
-		utils.SpannerPostgresSqlColumnIdRegex,
+		utils.SpannerGoogleSQLColumnIDRegex,
+		utils.SpannerPostgresSQLColumnIDRegex,
 	); err != nil {
 		return nil, err
 	}
@@ -81,9 +81,9 @@ func (s *SpannerService) CreateSpannerTableForeignKeyConstraint(
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s): %v", parent, err)
 	}
 	database := parentName.DatabaseName().String()
-	tableId := parentName.Table
+	tableID := parentName.Table
 
-	ddl, err := constraint.CreateDdl(tableId)
+	ddl, err := constraint.CreateDdl(tableID)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "%v", err)
 	}
@@ -143,8 +143,8 @@ func (s *SpannerService) GetSpannerTableForeignKeyConstraint(
 	if err := utils.ValidateDialectArgument(
 		"parent",
 		parent,
-		utils.SpannerGoogleSqlTableNameRegex,
-		utils.SpannerPostgresSqlTableNameRegex,
+		utils.SpannerGoogleSQLTableNameRegex,
+		utils.SpannerPostgresSQLTableNameRegex,
 	); err != nil {
 		return nil, err
 	}
@@ -152,8 +152,8 @@ func (s *SpannerService) GetSpannerTableForeignKeyConstraint(
 	if err := utils.ValidateDialectArgument(
 		"name",
 		name,
-		utils.SpannerGoogleSqlConstraintIdRegex,
-		utils.SpannerPostgresSqlConstraintIdRegex,
+		utils.SpannerGoogleSQLConstraintIDRegex,
+		utils.SpannerPostgresSQLConstraintIDRegex,
 	); err != nil {
 		return nil, err
 	}
@@ -163,7 +163,7 @@ func (s *SpannerService) GetSpannerTableForeignKeyConstraint(
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s): %v", parent, err)
 	}
 	database := parentName.DatabaseName().String()
-	tableId := parentName.Table
+	tableID := parentName.Table
 
 	sqlStatement := `
 	SELECT
@@ -196,7 +196,7 @@ func (s *SpannerService) GetSpannerTableForeignKeyConstraint(
 	`
 
 	var result Constraint
-	if err := s.conn.Query(ctx, database, &result, sqlStatement, tableId, name); err != nil {
+	if err := s.conn.Query(ctx, database, &result, sqlStatement, tableID, name); err != nil {
 		if status.Code(err) == codes.NotFound {
 			return nil, status.Errorf(codes.NotFound, "Foreign key constraint %s not found", name)
 		}
@@ -204,11 +204,11 @@ func (s *SpannerService) GetSpannerTableForeignKeyConstraint(
 	}
 
 	constaint := &schema.SpannerTableForeignKeyConstraint{
-		Name:             result.CONSTRAINT_NAME,
-		ReferencedTable:  result.REFERENCED_TABLE,
-		ReferencedColumn: result.REFERENCED_COLUMN,
-		Column:           result.CONSTRAINED_COLUMN,
-		OnDelete:         schema.SpannerTableConstraintActionFromString(result.DELETE_RULE),
+		Name:             result.ConstraintName,
+		ReferencedTable:  result.ReferencedTable,
+		ReferencedColumn: result.ReferencedColumn,
+		Column:           result.ConstrainedColumn,
+		OnDelete:         schema.SpannerTableConstraintActionFromString(result.DeleteRule),
 	}
 
 	return constaint, nil
@@ -220,8 +220,8 @@ func (s *SpannerService) DeleteSpannerTableForeignKeyConstraint(ctx context.Cont
 	if err := utils.ValidateDialectArgument(
 		"parent",
 		parent,
-		utils.SpannerGoogleSqlTableNameRegex,
-		utils.SpannerPostgresSqlTableNameRegex,
+		utils.SpannerGoogleSQLTableNameRegex,
+		utils.SpannerPostgresSQLTableNameRegex,
 	); err != nil {
 		return err
 	}
@@ -229,8 +229,8 @@ func (s *SpannerService) DeleteSpannerTableForeignKeyConstraint(ctx context.Cont
 	if err := utils.ValidateDialectArgument(
 		"name",
 		name,
-		utils.SpannerGoogleSqlConstraintIdRegex,
-		utils.SpannerPostgresSqlConstraintIdRegex,
+		utils.SpannerGoogleSQLConstraintIDRegex,
+		utils.SpannerPostgresSQLConstraintIDRegex,
 	); err != nil {
 		return err
 	}
@@ -240,9 +240,9 @@ func (s *SpannerService) DeleteSpannerTableForeignKeyConstraint(ctx context.Cont
 		return status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s): %v", parent, err)
 	}
 	database := parentName.DatabaseName().String()
-	tableId := parentName.Table
+	tableID := parentName.Table
 
-	if err := s.conn.ExecuteDDL(ctx, database, schema.DropForeignKeyConstraintDdl(tableId, name)); err != nil {
+	if err := s.conn.ExecuteDDL(ctx, database, schema.DropForeignKeyConstraintDdl(tableID, name)); err != nil {
 		return status.Errorf(codes.Internal, "Error dropping foreign key constraint: %v", err)
 	}
 

@@ -10,7 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 )
 
-func TestAccSpannerTableTtlPolicy_basic(t *testing.T) {
+func TestAccSpannerTableTTLPolicy_basic(t *testing.T) {
 	env := acctest.Setup(t)
 	const table = "tftest_ttl_table"
 

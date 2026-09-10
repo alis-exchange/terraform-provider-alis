@@ -31,8 +31,8 @@ func (s *SpannerService) CreateSpannerTableRowDeletionPolicy(
 	if err := utils.ValidateDialectArgument(
 		"parent",
 		parent,
-		utils.SpannerGoogleSqlTableNameRegex,
-		utils.SpannerPostgresSqlTableNameRegex,
+		utils.SpannerGoogleSQLTableNameRegex,
+		utils.SpannerPostgresSQLTableNameRegex,
 	); err != nil {
 		return nil, err
 	}
@@ -46,8 +46,8 @@ func (s *SpannerService) CreateSpannerTableRowDeletionPolicy(
 	if err := utils.ValidateDialectArgument(
 		"ttl.column",
 		ttl.Column,
-		utils.SpannerGoogleSqlColumnIdRegex,
-		utils.SpannerPostgresSqlColumnIdRegex,
+		utils.SpannerGoogleSQLColumnIDRegex,
+		utils.SpannerPostgresSQLColumnIDRegex,
 	); err != nil {
 		return nil, err
 	}
@@ -63,7 +63,7 @@ func (s *SpannerService) CreateSpannerTableRowDeletionPolicy(
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s): %v", parent, err)
 	}
 	database := parentName.DatabaseName().String()
-	tableId := parentName.Table
+	tableID := parentName.Table
 
 	// Get parent table
 	if _, err := s.GetSpannerTable(ctx, parent); err != nil {
@@ -71,7 +71,7 @@ func (s *SpannerService) CreateSpannerTableRowDeletionPolicy(
 	}
 
 	// Create the deletion policy
-	ddl, err := ttl.CreateDdl(tableId)
+	ddl, err := ttl.CreateDdl(tableID)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "%v", err)
 	}
@@ -90,8 +90,8 @@ func (s *SpannerService) GetSpannerTableRowDeletionPolicy(ctx context.Context, p
 	if err := utils.ValidateDialectArgument(
 		"parent",
 		parent,
-		utils.SpannerGoogleSqlTableNameRegex,
-		utils.SpannerPostgresSqlTableNameRegex,
+		utils.SpannerGoogleSQLTableNameRegex,
+		utils.SpannerPostgresSQLTableNameRegex,
 	); err != nil {
 		return nil, err
 	}
@@ -101,7 +101,7 @@ func (s *SpannerService) GetSpannerTableRowDeletionPolicy(ctx context.Context, p
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s): %v", parent, err)
 	}
 	database := parentName.DatabaseName().String()
-	tableId := parentName.Table
+	tableID := parentName.Table
 
 	// Get parent table
 	if _, err := s.GetSpannerTable(ctx, parent); err != nil {
@@ -109,8 +109,8 @@ func (s *SpannerService) GetSpannerTableRowDeletionPolicy(ctx context.Context, p
 	}
 
 	type RowDeletionPolicy struct {
-		TABLE_NAME                     string
-		ROW_DELETION_POLICY_EXPRESSION string
+		TableName                   string `gorm:"column:TABLE_NAME"`
+		RowDeletionPolicyExpression string `gorm:"column:ROW_DELETION_POLICY_EXPRESSION"`
 	}
 	var policy RowDeletionPolicy
 	if err := s.conn.Query(
@@ -118,25 +118,25 @@ func (s *SpannerService) GetSpannerTableRowDeletionPolicy(ctx context.Context, p
 		database,
 		&policy,
 		"SELECT TABLE_NAME, ROW_DELETION_POLICY_EXPRESSION FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = ? AND ROW_DELETION_POLICY_EXPRESSION IS NOT NULL",
-		tableId,
+		tableID,
 	); err != nil {
 		if status.Code(err) == codes.NotFound {
 			return nil, status.Errorf(codes.NotFound, "Row deletion policy not found")
 		}
 		return nil, status.Errorf(codes.Internal, "Error getting row deletion policy: %v", err)
 	}
-	if policy.ROW_DELETION_POLICY_EXPRESSION == "" {
+	if policy.RowDeletionPolicyExpression == "" {
 		return nil, status.Errorf(codes.NotFound, "Row deletion policy not found")
 	}
 
 	// Find all matches and capture groups
-	matches := rowDeletionPolicyExpression.FindStringSubmatch(policy.ROW_DELETION_POLICY_EXPRESSION)
+	matches := rowDeletionPolicyExpression.FindStringSubmatch(policy.RowDeletionPolicyExpression)
 
 	if len(matches) != 3 {
 		return nil, status.Errorf(
 			codes.Internal,
 			"Error parsing row deletion policy: unexpected expression %q",
-			policy.ROW_DELETION_POLICY_EXPRESSION,
+			policy.RowDeletionPolicyExpression,
 		)
 	}
 
@@ -163,8 +163,8 @@ func (s *SpannerService) UpdateSpannerTableRowDeletionPolicy(
 	if err := utils.ValidateDialectArgument(
 		"parent",
 		parent,
-		utils.SpannerGoogleSqlTableNameRegex,
-		utils.SpannerPostgresSqlTableNameRegex,
+		utils.SpannerGoogleSQLTableNameRegex,
+		utils.SpannerPostgresSQLTableNameRegex,
 	); err != nil {
 		return nil, err
 	}
@@ -178,8 +178,8 @@ func (s *SpannerService) UpdateSpannerTableRowDeletionPolicy(
 	if err := utils.ValidateDialectArgument(
 		"ttl.column",
 		ttl.Column,
-		utils.SpannerGoogleSqlColumnIdRegex,
-		utils.SpannerPostgresSqlColumnIdRegex,
+		utils.SpannerGoogleSQLColumnIDRegex,
+		utils.SpannerPostgresSQLColumnIDRegex,
 	); err != nil {
 		return nil, err
 	}
@@ -195,7 +195,7 @@ func (s *SpannerService) UpdateSpannerTableRowDeletionPolicy(
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s): %v", parent, err)
 	}
 	database := parentName.DatabaseName().String()
-	tableId := parentName.Table
+	tableID := parentName.Table
 
 	// Get parent table
 	if _, err := s.GetSpannerTable(ctx, parent); err != nil {
@@ -203,7 +203,7 @@ func (s *SpannerService) UpdateSpannerTableRowDeletionPolicy(
 	}
 
 	// Replace the deletion policy
-	ddl, err := ttl.ReplaceDdl(tableId)
+	ddl, err := ttl.ReplaceDdl(tableID)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "%v", err)
 	}
@@ -219,8 +219,8 @@ func (s *SpannerService) DeleteSpannerTableRowDeletionPolicy(ctx context.Context
 	if err := utils.ValidateDialectArgument(
 		"parent",
 		parent,
-		utils.SpannerGoogleSqlTableNameRegex,
-		utils.SpannerPostgresSqlTableNameRegex,
+		utils.SpannerGoogleSQLTableNameRegex,
+		utils.SpannerPostgresSQLTableNameRegex,
 	); err != nil {
 		return err
 	}
@@ -230,7 +230,7 @@ func (s *SpannerService) DeleteSpannerTableRowDeletionPolicy(ctx context.Context
 		return status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s): %v", parent, err)
 	}
 	database := parentName.DatabaseName().String()
-	tableId := parentName.Table
+	tableID := parentName.Table
 
 	// Get parent table
 	if _, err := s.GetSpannerTable(ctx, parent); err != nil {
@@ -238,7 +238,7 @@ func (s *SpannerService) DeleteSpannerTableRowDeletionPolicy(ctx context.Context
 	}
 
 	// Drop the deletion policy
-	if err := s.conn.ExecuteDDL(ctx, database, schema.DropRowDeletionPolicyDdl(tableId)); err != nil {
+	if err := s.conn.ExecuteDDL(ctx, database, schema.DropRowDeletionPolicyDdl(tableID)); err != nil {
 		return status.Errorf(codes.Internal, "Error creating row deletion policy: %v", err)
 	}
 

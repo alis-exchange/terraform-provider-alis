@@ -3,8 +3,8 @@ package spanner
 import (
 	"context"
 
-	"terraform-provider-alis/internal"
 	"terraform-provider-alis/internal/spanner/names"
+	"terraform-provider-alis/internal/spanner/services"
 	"terraform-provider-alis/internal/utils"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -24,7 +24,7 @@ func NewDatabaseRolesDataSource() datasource.DataSource {
 }
 
 type databaseRolesDataSource struct {
-	config *internal.ProviderConfig
+	service *services.SpannerService
 }
 
 type databaseRolesModel struct {
@@ -86,7 +86,7 @@ func (d *databaseRolesDataSource) Read(ctx context.Context, req datasource.ReadR
 	nextPageToken := ""
 	roles := make([]string, 0)
 	for {
-		rolesRes, pageToken, err := d.config.SpannerService.ListDatabaseRoles(ctx, databaseName, 100, nextPageToken)
+		rolesRes, pageToken, err := d.service.ListDatabaseRoles(ctx, databaseName, 100, nextPageToken)
 		if err != nil {
 			resp.Diagnostics.AddError(
 				"Error Reading Database Roles",
@@ -119,12 +119,12 @@ func (d *databaseRolesDataSource) Read(ctx context.Context, req datasource.ReadR
 
 // Configure adds the provider configured client to the resource.
 func (d *databaseRolesDataSource) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
-	config, ok := configureProviderConfig(req.ProviderData, &resp.Diagnostics)
+	service, ok := configureSpannerService(req.ProviderData, &resp.Diagnostics)
 	if !ok {
 		return
 	}
 
-	d.config = config
+	d.service = service
 }
 
 func (d *databaseRolesDataSource) ConfigValidators(ctx context.Context) []datasource.ConfigValidator {

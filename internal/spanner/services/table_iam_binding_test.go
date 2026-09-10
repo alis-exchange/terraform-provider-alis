@@ -25,9 +25,9 @@ func privilegeRows(permissions ...string) []*TablePermissionsRow {
 	rows := make([]*TablePermissionsRow, 0, len(permissions))
 	for _, permission := range permissions {
 		rows = append(rows, &TablePermissionsRow{
-			TABLE_NAME:     "tftest_table",
-			PRIVILEGE_TYPE: permission,
-			GRANTEE:        testRole,
+			TableName:     "tftest_table",
+			PrivilegeType: permission,
+			Grantee:       testRole,
 		})
 	}
 
@@ -49,8 +49,8 @@ func TestSetTableIamBinding_MatchesRequestedPermissions(t *testing.T) {
 			name:     "grants everything when the role holds nothing",
 			existing: nil,
 			want: []TablePolicyBindingPermission{
-				TablePolicyBindingPermission_SELECT,
-				TablePolicyBindingPermission_INSERT,
+				TablePolicyBindingPermissionSelect,
+				TablePolicyBindingPermissionInsert,
 			},
 			wantDdl: []string{"GRANT SELECT, INSERT ON TABLE tftest_table TO ROLE tftest_role"},
 		},
@@ -58,9 +58,9 @@ func TestSetTableIamBinding_MatchesRequestedPermissions(t *testing.T) {
 			name:     "revokes the permission dropped from the request",
 			existing: []string{"SELECT", "INSERT", "UPDATE", "DELETE"},
 			want: []TablePolicyBindingPermission{
-				TablePolicyBindingPermission_SELECT,
-				TablePolicyBindingPermission_INSERT,
-				TablePolicyBindingPermission_UPDATE,
+				TablePolicyBindingPermissionSelect,
+				TablePolicyBindingPermissionInsert,
+				TablePolicyBindingPermissionUpdate,
 			},
 			wantDdl: []string{"REVOKE DELETE ON TABLE tftest_table FROM ROLE tftest_role"},
 		},
@@ -68,8 +68,8 @@ func TestSetTableIamBinding_MatchesRequestedPermissions(t *testing.T) {
 			name:     "grants and revokes in one batch",
 			existing: []string{"SELECT", "DELETE"},
 			want: []TablePolicyBindingPermission{
-				TablePolicyBindingPermission_SELECT,
-				TablePolicyBindingPermission_UPDATE,
+				TablePolicyBindingPermissionSelect,
+				TablePolicyBindingPermissionUpdate,
 			},
 			wantDdl: []string{
 				"REVOKE DELETE ON TABLE tftest_table FROM ROLE tftest_role",
@@ -79,15 +79,15 @@ func TestSetTableIamBinding_MatchesRequestedPermissions(t *testing.T) {
 		{
 			name:     "issues nothing when the grants already match",
 			existing: []string{"SELECT"},
-			want:     []TablePolicyBindingPermission{TablePolicyBindingPermission_SELECT},
+			want:     []TablePolicyBindingPermission{TablePolicyBindingPermissionSelect},
 			wantDdl:  nil,
 		},
 		{
 			name:     "orders operands by permission, not by request",
 			existing: nil,
 			want: []TablePolicyBindingPermission{
-				TablePolicyBindingPermission_DELETE,
-				TablePolicyBindingPermission_SELECT,
+				TablePolicyBindingPermissionDelete,
+				TablePolicyBindingPermissionSelect,
 			},
 			wantDdl: []string{"GRANT SELECT, DELETE ON TABLE tftest_table TO ROLE tftest_role"},
 		},
@@ -125,7 +125,7 @@ func TestSetTableIamBinding_RejectsRoleThatIsNotAnIdentifier(t *testing.T) {
 
 			_, err := NewSpannerService(fake).SetTableIamBinding(context.Background(), testTable, &TablePolicyBinding{
 				Role:        role,
-				Permissions: []TablePolicyBindingPermission{TablePolicyBindingPermission_SELECT},
+				Permissions: []TablePolicyBindingPermission{TablePolicyBindingPermissionSelect},
 			})
 
 			require.Error(t, err)

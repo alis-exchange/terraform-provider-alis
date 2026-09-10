@@ -21,7 +21,7 @@ var (
 	_ resource.ResourceWithUpgradeState = &spannerTableResource{}
 	_ resource.ResourceWithUpgradeState = &spannerTableIndexResource{}
 	_ resource.ResourceWithUpgradeState = &spannerTableForeignKeyResource{}
-	_ resource.ResourceWithUpgradeState = &spannerTableTtlPolicyResource{}
+	_ resource.ResourceWithUpgradeState = &spannerTableTTLPolicyResource{}
 	_ resource.ResourceWithUpgradeState = &tableIamBindingResource{}
 	_ resource.ResourceWithUpgradeState = &databaseRoleResource{}
 	_ resource.ResourceWithUpgradeState = &databaseSequenceResource{}
@@ -55,7 +55,7 @@ func (r *spannerTableForeignKeyResource) UpgradeState(ctx context.Context) map[i
 	return passthroughUpgradeV0(ctx, r)
 }
 
-func (r *spannerTableTtlPolicyResource) UpgradeState(ctx context.Context) map[int64]resource.StateUpgrader {
+func (r *spannerTableTTLPolicyResource) UpgradeState(ctx context.Context) map[int64]resource.StateUpgrader {
 	return passthroughUpgradeV0(ctx, r)
 }
 

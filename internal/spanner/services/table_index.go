@@ -24,8 +24,8 @@ func (s *SpannerService) CreateSpannerTableIndex(ctx context.Context, parent str
 	if err := utils.ValidateDialectArgument(
 		"parent",
 		parent,
-		utils.SpannerGoogleSqlTableNameRegex,
-		utils.SpannerPostgresSqlTableNameRegex,
+		utils.SpannerGoogleSQLTableNameRegex,
+		utils.SpannerPostgresSQLTableNameRegex,
 	); err != nil {
 		return nil, err
 	}
@@ -36,8 +36,8 @@ func (s *SpannerService) CreateSpannerTableIndex(ctx context.Context, parent str
 	if err := utils.ValidateDialectArgument(
 		"index.name",
 		index.Name,
-		utils.SpannerGoogleSqlIndexIdRegex,
-		utils.SpannerPostgresSqlIndexIdRegex,
+		utils.SpannerGoogleSQLIndexIDRegex,
+		utils.SpannerPostgresSQLIndexIDRegex,
 	); err != nil {
 		return nil, err
 	}
@@ -52,8 +52,8 @@ func (s *SpannerService) CreateSpannerTableIndex(ctx context.Context, parent str
 		if err := utils.ValidateDialectArgument(
 			"index.columns[%d].name",
 			column.Name,
-			utils.SpannerGoogleSqlColumnIdRegex,
-			utils.SpannerPostgresSqlColumnIdRegex,
+			utils.SpannerGoogleSQLColumnIDRegex,
+			utils.SpannerPostgresSQLColumnIDRegex,
 		); err != nil {
 			return nil, err
 		}
@@ -64,7 +64,7 @@ func (s *SpannerService) CreateSpannerTableIndex(ctx context.Context, parent str
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s): %v", parent, err)
 	}
 	database := parentName.DatabaseName().String()
-	tableId := parentName.Table
+	tableID := parentName.Table
 
 	// Get parent table
 	if _, err := s.GetSpannerTable(ctx, parent); err != nil {
@@ -72,7 +72,7 @@ func (s *SpannerService) CreateSpannerTableIndex(ctx context.Context, parent str
 	}
 
 	// Create index
-	ddl, err := index.CreateDdl(tableId)
+	ddl, err := index.CreateDdl(tableID)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "%v", err)
 	}
@@ -123,8 +123,8 @@ func indexesEquivalent(want, got *SpannerTableIndex) bool {
 
 // normalizeIndexColumnOrder resolves UNSPECIFIED to ASC, mirroring CreateDdl.
 func normalizeIndexColumnOrder(o SpannerTableIndexColumnOrder) SpannerTableIndexColumnOrder {
-	if o == SpannerTableIndexColumnOrder_UNSPECIFIED {
-		return SpannerTableIndexColumnOrder_ASC
+	if o == SpannerTableIndexColumnOrderUnspecified {
+		return SpannerTableIndexColumnOrderAsc
 	}
 	return o
 }
@@ -141,16 +141,16 @@ func (s *SpannerService) GetSpannerTableIndex(ctx context.Context, parent, name 
 	if err := utils.ValidateDialectArgument(
 		"parent",
 		parent,
-		utils.SpannerGoogleSqlTableNameRegex,
-		utils.SpannerPostgresSqlTableNameRegex,
+		utils.SpannerGoogleSQLTableNameRegex,
+		utils.SpannerPostgresSQLTableNameRegex,
 	); err != nil {
 		return nil, err
 	}
 	if err := utils.ValidateDialectArgument(
 		"name",
 		name,
-		utils.SpannerGoogleSqlIndexIdRegex,
-		utils.SpannerPostgresSqlIndexIdRegex,
+		utils.SpannerGoogleSQLIndexIDRegex,
+		utils.SpannerPostgresSQLIndexIDRegex,
 	); err != nil {
 		return nil, err
 	}
@@ -160,9 +160,9 @@ func (s *SpannerService) GetSpannerTableIndex(ctx context.Context, parent, name 
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s): %v", parent, err)
 	}
 	database := parentName.DatabaseName().String()
-	tableId := parentName.Table
+	tableID := parentName.Table
 
-	indexes, err := GetIndexes(ctx, s.conn, database, tableId)
+	indexes, err := GetIndexes(ctx, s.conn, database, tableID)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "Error getting table indices: %v", err)
 	}
@@ -187,8 +187,8 @@ func (s *SpannerService) ListSpannerTableIndices(ctx context.Context, parent str
 	if err := utils.ValidateDialectArgument(
 		"parent",
 		parent,
-		utils.SpannerGoogleSqlTableNameRegex,
-		utils.SpannerPostgresSqlTableNameRegex,
+		utils.SpannerGoogleSQLTableNameRegex,
+		utils.SpannerPostgresSQLTableNameRegex,
 	); err != nil {
 		return nil, err
 	}
@@ -198,9 +198,9 @@ func (s *SpannerService) ListSpannerTableIndices(ctx context.Context, parent str
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid argument parent (%s): %v", parent, err)
 	}
 	database := parentName.DatabaseName().String()
-	tableId := parentName.Table
+	tableID := parentName.Table
 
-	indexes, err := GetIndexes(ctx, s.conn, database, tableId)
+	indexes, err := GetIndexes(ctx, s.conn, database, tableID)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "Error getting table indices: %v", err)
 	}
@@ -221,16 +221,16 @@ func (s *SpannerService) DeleteSpannerTableIndex(ctx context.Context, parent, in
 	if err := utils.ValidateDialectArgument(
 		"parent",
 		parent,
-		utils.SpannerGoogleSqlTableNameRegex,
-		utils.SpannerPostgresSqlTableNameRegex,
+		utils.SpannerGoogleSQLTableNameRegex,
+		utils.SpannerPostgresSQLTableNameRegex,
 	); err != nil {
 		return nil, err
 	}
 	if err := utils.ValidateDialectArgument(
 		"index_name",
 		indexName,
-		utils.SpannerGoogleSqlIndexIdRegex,
-		utils.SpannerPostgresSqlIndexIdRegex,
+		utils.SpannerGoogleSQLIndexIDRegex,
+		utils.SpannerPostgresSQLIndexIDRegex,
 	); err != nil {
 		return nil, err
 	}

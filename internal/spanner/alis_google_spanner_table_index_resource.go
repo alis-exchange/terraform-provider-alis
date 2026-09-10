@@ -4,7 +4,6 @@ import (
 	"context"
 	"regexp"
 
-	"terraform-provider-alis/internal"
 	"terraform-provider-alis/internal/spanner/names"
 	"terraform-provider-alis/internal/spanner/services"
 	"terraform-provider-alis/internal/utils"
@@ -41,7 +40,7 @@ func NewSpannerTableIndexResource() resource.Resource {
 }
 
 type spannerTableIndexResource struct {
-	config *internal.ProviderConfig
+	service *services.SpannerService
 }
 
 type spannerTableIndexModel struct {
@@ -124,8 +123,8 @@ func (r *spannerTableIndexResource) Schema(ctx context.Context, _ resource.Schem
 					"The name must contain only letters (a-z, A-Z), numbers (0-9), or hyphens (-), and must start with a letter and not end in a hyphen.",
 				Validators: []validator.String{
 					validators.RegexMatches([]*regexp.Regexp{
-						utils.Pattern(utils.SpannerGoogleSqlIndexIdRegex),
-						utils.Pattern(utils.SpannerPostgresSqlIndexIdRegex),
+						utils.Pattern(utils.SpannerGoogleSQLIndexIDRegex),
+						utils.Pattern(utils.SpannerPostgresSQLIndexIDRegex),
 					}, "Name must be a valid Spanner Index ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions"),
 				},
 				PlanModifiers: []planmodifier.String{
@@ -159,8 +158,8 @@ func (r *spannerTableIndexResource) Schema(ctx context.Context, _ resource.Schem
 					"The name must satisfy the expression `^[a-zA-Z][a-zA-Z0-9_]{0,127}$`",
 				Validators: []validator.String{
 					validators.RegexMatches([]*regexp.Regexp{
-						utils.Pattern(utils.SpannerGoogleSqlTableIdRegex),
-						utils.Pattern(utils.SpannerPostgresSqlTableIdRegex),
+						utils.Pattern(utils.SpannerGoogleSQLTableIDRegex),
+						utils.Pattern(utils.SpannerPostgresSQLTableIDRegex),
 					}, "Name must be a valid Spanner Table ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions"),
 				},
 				PlanModifiers: []planmodifier.String{
@@ -181,8 +180,8 @@ func (r *spannerTableIndexResource) Schema(ctx context.Context, _ resource.Schem
 							MarkdownDescription: "The name of the column that makes up the index.",
 							Validators: []validator.String{
 								validators.RegexMatches([]*regexp.Regexp{
-									utils.Pattern(utils.SpannerGoogleSqlColumnIdRegex),
-									utils.Pattern(utils.SpannerPostgresSqlColumnIdRegex),
+									utils.Pattern(utils.SpannerGoogleSQLColumnIDRegex),
+									utils.Pattern(utils.SpannerPostgresSQLColumnIDRegex),
 								}, "Name must be a valid Spanner Column ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions"),
 							},
 							PlanModifiers: []planmodifier.String{
@@ -264,8 +263,8 @@ func (r *spannerTableIndexResource) Create(ctx context.Context, req resource.Cre
 	// Get project and instance name
 	project := plan.Project.ValueString()
 	instanceName := plan.Instance.ValueString()
-	databaseId := plan.Database.ValueString()
-	tableId := plan.Table.ValueString()
+	databaseID := plan.Database.ValueString()
+	tableID := plan.Table.ValueString()
 	indexName := plan.Name.ValueString()
 
 	columns := make([]spannerTableIndexColumn, 0, len(plan.Columns.Elements()))
@@ -276,12 +275,12 @@ func (r *spannerTableIndexResource) Create(ctx context.Context, req resource.Cre
 	}
 
 	for _, column := range columns {
-		order := services.SpannerTableIndexColumnOrder_ASC
+		order := services.SpannerTableIndexColumnOrderAsc
 		switch column.Order.ValueString() {
 		case "asc":
-			order = services.SpannerTableIndexColumnOrder_ASC
+			order = services.SpannerTableIndexColumnOrderAsc
 		case "desc":
-			order = services.SpannerTableIndexColumnOrder_DESC
+			order = services.SpannerTableIndexColumnOrderDesc
 		}
 		index.Columns = append(index.Columns, &services.SpannerTableIndexColumn{
 			Name:  column.Name.ValueString(),
@@ -295,10 +294,10 @@ func (r *spannerTableIndexResource) Create(ctx context.Context, req resource.Cre
 		index.Unique = wrapperspb.Bool(plan.Unique.ValueBool())
 	}
 
-	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String()
+	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseID, Table: tableID}.String()
 
 	// Create index
-	_, err := r.config.SpannerService.CreateSpannerTableIndex(ctx, tableName, index)
+	_, err := r.service.CreateSpannerTableIndex(ctx, tableName, index)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Creating Index",
@@ -336,13 +335,13 @@ func (r *spannerTableIndexResource) Read(ctx context.Context, req resource.ReadR
 	// Get project and instance name
 	project := state.Project.ValueString()
 	instanceName := state.Instance.ValueString()
-	databaseId := state.Database.ValueString()
-	tableId := state.Table.ValueString()
+	databaseID := state.Database.ValueString()
+	tableID := state.Table.ValueString()
 	indexName := state.Name.ValueString()
 
 	// Get table from API
-	index, err := r.config.SpannerService.GetSpannerTableIndex(ctx,
-		names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String(),
+	index, err := r.service.GetSpannerTableIndex(ctx,
+		names.TableName{Project: project, Instance: instanceName, Database: databaseID, Table: tableID}.String(),
 		indexName,
 	)
 	if err != nil {
@@ -357,8 +356,8 @@ func (r *spannerTableIndexResource) Read(ctx context.Context, req resource.ReadR
 			"Could not read Index ("+indexName+") on Table ("+names.TableName{
 				Project:  project,
 				Instance: instanceName,
-				Database: databaseId,
-				Table:    tableId,
+				Database: databaseID,
+				Table:    tableID,
 			}.String()+"): "+utils.ErrDetail(
 				err,
 			),
@@ -452,14 +451,14 @@ func (r *spannerTableIndexResource) Delete(ctx context.Context, req resource.Del
 	// Get project and instance name
 	project := state.Project.ValueString()
 	instanceName := state.Instance.ValueString()
-	databaseId := state.Database.ValueString()
-	tableId := state.Table.ValueString()
+	databaseID := state.Database.ValueString()
+	tableID := state.Table.ValueString()
 	indexName := state.Name.ValueString()
 
-	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseId, Table: tableId}.String()
+	tableName := names.TableName{Project: project, Instance: instanceName, Database: databaseID, Table: tableID}.String()
 
 	// Delete existing index
-	_, err := r.config.SpannerService.DeleteSpannerTableIndex(ctx, tableName, indexName)
+	_, err := r.service.DeleteSpannerTableIndex(ctx, tableName, indexName)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Deleting Index",
@@ -479,8 +478,8 @@ func (r *spannerTableIndexResource) ImportState(ctx context.Context, req resourc
 		return
 	}
 
-	if !utils.Pattern(utils.SpannerGoogleSqlTableIndexNameRegex).MatchString(req.ID) &&
-		!utils.Pattern(utils.SpannerPostgresSqlTableIndexNameRegex).MatchString(req.ID) {
+	if !utils.Pattern(utils.SpannerGoogleSQLTableIndexNameRegex).MatchString(req.ID) &&
+		!utils.Pattern(utils.SpannerPostgresSQLTableIndexNameRegex).MatchString(req.ID) {
 		resp.Diagnostics.AddError(
 			"Invalid Import ID",
 			"Import ID ("+req.ID+") contains an invalid project, instance, database, table or index ID. Expected format: projects/{project}/instances/{instance}/databases/{database}/tables/{table}/indexes/{index}.",
@@ -503,12 +502,12 @@ func (r *spannerTableIndexResource) ImportState(ctx context.Context, req resourc
 
 // Configure adds the provider configured client to the resource.
 func (r *spannerTableIndexResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	config, ok := configureProviderConfig(req.ProviderData, &resp.Diagnostics)
+	service, ok := configureSpannerService(req.ProviderData, &resp.Diagnostics)
 	if !ok {
 		return
 	}
 
-	r.config = config
+	r.service = service
 }
 
 func (r *spannerTableIndexResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {

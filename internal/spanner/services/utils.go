@@ -71,9 +71,9 @@ func GetIndexes(ctx context.Context, cn conn.Connection, database, tableName str
 		var order SpannerTableIndexColumnOrder
 		switch r.ColumnOrdering {
 		case "ASC":
-			order = SpannerTableIndexColumnOrder_ASC
+			order = SpannerTableIndexColumnOrderAsc
 		case "DESC":
-			order = SpannerTableIndexColumnOrder_DESC
+			order = SpannerTableIndexColumnOrderDesc
 		}
 		idx.Columns = append(idx.Columns, &SpannerTableIndexColumn{
 			Name:  r.ColumnName,

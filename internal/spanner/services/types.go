@@ -14,9 +14,9 @@ type (
 )
 
 const (
-	SpannerTableIndexColumnOrder_UNSPECIFIED = schema.SpannerTableIndexColumnOrder_UNSPECIFIED
-	SpannerTableIndexColumnOrder_ASC         = schema.SpannerTableIndexColumnOrder_ASC
-	SpannerTableIndexColumnOrder_DESC        = schema.SpannerTableIndexColumnOrder_DESC
+	SpannerTableIndexColumnOrderUnspecified = schema.SpannerTableIndexColumnOrderUnspecified
+	SpannerTableIndexColumnOrderAsc         = schema.SpannerTableIndexColumnOrderAsc
+	SpannerTableIndexColumnOrderDesc        = schema.SpannerTableIndexColumnOrderDesc
 )
 
 var SpannerTableIndexColumnOrders = schema.SpannerTableIndexColumnOrders
@@ -25,11 +25,11 @@ var SpannerTableIndexColumnOrders = schema.SpannerTableIndexColumnOrders
 type TablePolicyBindingPermission int64
 
 const (
-	TablePolicyBindingPermission_UNSPECIFIED TablePolicyBindingPermission = iota
-	TablePolicyBindingPermission_SELECT
-	TablePolicyBindingPermission_INSERT
-	TablePolicyBindingPermission_UPDATE
-	TablePolicyBindingPermission_DELETE
+	TablePolicyBindingPermissionUnspecified TablePolicyBindingPermission = iota
+	TablePolicyBindingPermissionSelect
+	TablePolicyBindingPermissionInsert
+	TablePolicyBindingPermissionUpdate
+	TablePolicyBindingPermissionDelete
 )
 
 func (t TablePolicyBindingPermission) String() string {
@@ -45,10 +45,10 @@ func (t TablePolicyBindingPermission) String() string {
 // REVOKE statements iterate it rather than a caller's slice, so their operand
 // order is fixed regardless of how the practitioner ordered the config.
 var TablePolicyBindingPermissions = []TablePolicyBindingPermission{
-	TablePolicyBindingPermission_SELECT,
-	TablePolicyBindingPermission_INSERT,
-	TablePolicyBindingPermission_UPDATE,
-	TablePolicyBindingPermission_DELETE,
+	TablePolicyBindingPermissionSelect,
+	TablePolicyBindingPermissionInsert,
+	TablePolicyBindingPermissionUpdate,
+	TablePolicyBindingPermissionDelete,
 }
 
 // SpannerTablePolicyBindingPermissions is a list of all Spanner table role binding permissions.
@@ -72,28 +72,29 @@ type TablePolicyBinding struct {
 	Permissions []TablePolicyBindingPermission
 }
 
-// TablePermissionsRow is one row of INFORMATION_SCHEMA.TABLE_PRIVILEGES.
-// Field names match the column names so the query scanner can map them.
+// TablePermissionsRow is one row of INFORMATION_SCHEMA.TABLE_PRIVILEGES. The
+// column tags are what the query scanner maps on, so they must keep matching
+// the column names the query returns.
 type TablePermissionsRow struct {
-	TABLE_NAME     string
-	PRIVILEGE_TYPE string
-	GRANTEE        string
+	TableName     string `gorm:"column:TABLE_NAME"`
+	PrivilegeType string `gorm:"column:PRIVILEGE_TYPE"`
+	Grantee       string `gorm:"column:GRANTEE"`
 }
 
 // GetPermission maps the row's PRIVILEGE_TYPE to a
 // TablePolicyBindingPermission, returning UNSPECIFIED for unrecognized types.
 func (r TablePermissionsRow) GetPermission() TablePolicyBindingPermission {
-	switch r.PRIVILEGE_TYPE {
+	switch r.PrivilegeType {
 	case "SELECT":
-		return TablePolicyBindingPermission_SELECT
+		return TablePolicyBindingPermissionSelect
 	case "INSERT":
-		return TablePolicyBindingPermission_INSERT
+		return TablePolicyBindingPermissionInsert
 	case "UPDATE":
-		return TablePolicyBindingPermission_UPDATE
+		return TablePolicyBindingPermissionUpdate
 	case "DELETE":
-		return TablePolicyBindingPermission_DELETE
+		return TablePolicyBindingPermissionDelete
 	default:
-		return TablePolicyBindingPermission_UNSPECIFIED
+		return TablePolicyBindingPermissionUnspecified
 	}
 }
 
@@ -110,17 +111,17 @@ type Index struct {
 }
 
 // Constraint is one row of the INFORMATION_SCHEMA constraint join used to
-// read foreign keys back from the database. Field names match the queried
-// column aliases so the query scanner can map them.
+// read foreign keys back from the database. The column tags are what the query
+// scanner maps on, so they must keep matching the aliases the join selects.
 type Constraint struct {
-	CONSTRAINT_NAME    string
-	CONSTRAINT_TYPE    string
-	CONSTRAINED_TABLE  string
-	CONSTRAINED_COLUMN string
-	UPDATE_RULE        string
-	DELETE_RULE        string
-	REFERENCED_TABLE   string
-	REFERENCED_COLUMN  string
+	ConstraintName    string `gorm:"column:CONSTRAINT_NAME"`
+	ConstraintType    string `gorm:"column:CONSTRAINT_TYPE"`
+	ConstrainedTable  string `gorm:"column:CONSTRAINED_TABLE"`
+	ConstrainedColumn string `gorm:"column:CONSTRAINED_COLUMN"`
+	UpdateRule        string `gorm:"column:UPDATE_RULE"`
+	DeleteRule        string `gorm:"column:DELETE_RULE"`
+	ReferencedTable   string `gorm:"column:REFERENCED_TABLE"`
+	ReferencedColumn  string `gorm:"column:REFERENCED_COLUMN"`
 }
 
 // SequenceRow is one row of INFORMATION_SCHEMA.SEQUENCES left-joined with

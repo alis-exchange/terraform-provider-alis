@@ -37,19 +37,9 @@ func (t *SpannerTable) GetDatabase() string {
 	return n.DatabaseName().String()
 }
 
-// GetDatabaseId returns the database id segment, or "" when the table name
-// is unset or malformed.
-func (t *SpannerTable) GetDatabaseId() string {
-	n, err := names.ParseTable(t.GetName())
-	if err != nil {
-		return ""
-	}
-	return n.Database
-}
-
-// GetTableId returns the table id segment, or "" when the table name is
+// GetTableID returns the table id segment, or "" when the table name is
 // unset or malformed.
-func (t *SpannerTable) GetTableId() string {
+func (t *SpannerTable) GetTableID() string {
 	n, err := names.ParseTable(t.GetName())
 	if err != nil {
 		return ""
@@ -84,7 +74,7 @@ func (t *SpannerTable) GetInterleave() *SpannerTableInterleave {
 // CreateDdl renders the CREATE TABLE statement, including primary key and
 // interleave clauses.
 func (t *SpannerTable) CreateDdl() (string, error) {
-	ddl := fmt.Sprintf("CREATE TABLE `%s` (", t.GetTableId())
+	ddl := fmt.Sprintf("CREATE TABLE `%s` (", t.GetTableID())
 
 	// Add columns
 	{
@@ -157,7 +147,7 @@ func (t *SpannerTable) AlterDdl(existingTable *SpannerTable) ([]string, []*Spann
 	var dropColumns []*SpannerTableColumn
 	for _, name := range existingNames {
 		if _, exists := updatedColumnsMap[name]; !exists {
-			statements = append(statements, fmt.Sprintf("ALTER TABLE `%s` DROP COLUMN `%s`", t.GetTableId(), name))
+			statements = append(statements, fmt.Sprintf("ALTER TABLE `%s` DROP COLUMN `%s`", t.GetTableID(), name))
 			dropColumns = append(dropColumns, existingColumnsMap[name])
 		}
 	}
@@ -169,7 +159,7 @@ func (t *SpannerTable) AlterDdl(existingTable *SpannerTable) ([]string, []*Spann
 			if err != nil {
 				return nil, nil, err
 			}
-			statements = append(statements, fmt.Sprintf("ALTER TABLE `%s` ADD COLUMN %s", t.GetTableId(), columnDdl))
+			statements = append(statements, fmt.Sprintf("ALTER TABLE `%s` ADD COLUMN %s", t.GetTableID(), columnDdl))
 		}
 	}
 
@@ -190,7 +180,7 @@ func (t *SpannerTable) AlterDdl(existingTable *SpannerTable) ([]string, []*Spann
 
 			if len(alterColumnDdls) > 0 {
 				for _, alterColumnDdl := range alterColumnDdls {
-					statements = append(statements, fmt.Sprintf("ALTER TABLE `%s` ALTER COLUMN %s", t.GetTableId(), alterColumnDdl))
+					statements = append(statements, fmt.Sprintf("ALTER TABLE `%s` ALTER COLUMN %s", t.GetTableID(), alterColumnDdl))
 				}
 			}
 		}
@@ -201,7 +191,7 @@ func (t *SpannerTable) AlterDdl(existingTable *SpannerTable) ([]string, []*Spann
 
 // DeleteDdl renders the DROP TABLE statement.
 func (t *SpannerTable) DeleteDdl() (string, error) {
-	return fmt.Sprintf("DROP TABLE `%s`", t.GetTableId()), nil
+	return fmt.Sprintf("DROP TABLE `%s`", t.GetTableID()), nil
 }
 
 // Create creates the table in Spanner.
@@ -277,7 +267,7 @@ func (t *SpannerTable) Get(ctx context.Context, cn conn.Connection, name string)
 		var row tableInfoRow
 		if err := cn.Query(ctx, t.GetDatabase(), &row,
 			`SELECT TABLE_NAME,PARENT_TABLE_NAME,ON_DELETE_ACTION,INTERLEAVE_TYPE FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = ?`,
-			t.GetTableId()); err != nil {
+			t.GetTableID()); err != nil {
 			if status.Code(err) == codes.NotFound {
 				return nil, ErrTableNotFound{
 					table: t.GetName(),
@@ -307,7 +297,7 @@ func (t *SpannerTable) Get(ctx context.Context, cn conn.Connection, name string)
 			t.GetDatabase(),
 			&rows,
 			`SELECT COLUMN_NAME,SPANNER_TYPE,IS_NULLABLE,COLUMN_DEFAULT,IS_GENERATED,IS_STORED,GENERATION_EXPRESSION FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = ? ORDER BY ORDINAL_POSITION`,
-			t.GetTableId(),
+			t.GetTableID(),
 		); err != nil {
 			return nil, err
 		}
@@ -381,7 +371,7 @@ func (t *SpannerTable) Get(ctx context.Context, cn conn.Connection, name string)
 			t.GetDatabase(),
 			&rows,
 			`SELECT COLUMN_NAME, ORDINAL_POSITION FROM INFORMATION_SCHEMA.INDEX_COLUMNS WHERE TABLE_NAME = ? AND INDEX_NAME = 'PRIMARY_KEY' ORDER BY ORDINAL_POSITION`,
-			t.GetTableId(),
+			t.GetTableID(),
 		); err != nil {
 			return nil, err
 		}
@@ -406,7 +396,7 @@ func (t *SpannerTable) Get(ctx context.Context, cn conn.Connection, name string)
 		var rows []*columnOptionRow
 		if err := cn.Query(ctx, t.GetDatabase(), &rows,
 			`SELECT COLUMN_NAME, OPTION_NAME, OPTION_VALUE FROM INFORMATION_SCHEMA.COLUMN_OPTIONS WHERE TABLE_NAME = ?`,
-			t.GetTableId()); err != nil {
+			t.GetTableID()); err != nil {
 			return nil, err
 		}
 

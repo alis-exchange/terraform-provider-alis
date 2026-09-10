@@ -6,7 +6,7 @@
 // Each resource translates between its Terraform plan/state model and the
 // structs of the schema package, then delegates all Spanner work to the
 // services.SpannerService shared through the provider configuration (see
-// configureProviderConfig). Resource identities follow the
+// configureSpannerService). Resource identities follow the
 // projects/{project}/instances/{instance}/databases/{database}/... convention
 // handled by the names package.
 package spanner

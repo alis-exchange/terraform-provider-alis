@@ -4,9 +4,9 @@ import (
 	"context"
 	"regexp"
 
-	"terraform-provider-alis/internal"
 	"terraform-provider-alis/internal/spanner/names"
 	sequenceschema "terraform-provider-alis/internal/spanner/schema"
+	"terraform-provider-alis/internal/spanner/services"
 	"terraform-provider-alis/internal/utils"
 	"terraform-provider-alis/internal/validators"
 
@@ -36,7 +36,7 @@ func NewDatabaseSequenceResource() resource.Resource {
 }
 
 type databaseSequenceResource struct {
-	config *internal.ProviderConfig
+	service *services.SpannerService
 }
 
 type databaseSequenceModel struct {
@@ -107,8 +107,8 @@ func (r *databaseSequenceResource) Schema(ctx context.Context, _ resource.Schema
 					"Changing this forces a new resource.",
 				Validators: []validator.String{
 					validators.RegexMatches([]*regexp.Regexp{
-						utils.Pattern(utils.SpannerGoogleSqlSequenceIdRegex),
-						utils.Pattern(utils.SpannerPostgresSqlSequenceIdRegex),
+						utils.Pattern(utils.SpannerGoogleSQLSequenceIDRegex),
+						utils.Pattern(utils.SpannerPostgresSQLSequenceIDRegex),
 					}, "Name must be a valid Spanner Sequence ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions"),
 				},
 				PlanModifiers: []planmodifier.String{
@@ -176,12 +176,12 @@ func (r *databaseSequenceResource) Create(ctx context.Context, req resource.Crea
 	// Retrieve project, instance and database from state
 	project := plan.Project.ValueString()
 	instance := plan.Instance.ValueString()
-	databaseId := plan.Database.ValueString()
-	sequenceId := plan.Sequence.ValueString()
+	databaseID := plan.Database.ValueString()
+	sequenceID := plan.Sequence.ValueString()
 
-	sequenceName := names.SequenceName{Project: project, Instance: instance, Database: databaseId, Sequence: sequenceId}.String()
+	sequenceName := names.SequenceName{Project: project, Instance: instance, Database: databaseID, Sequence: sequenceID}.String()
 
-	existingSequence, err := r.config.SpannerService.GetSpannerSequence(ctx, sequenceName)
+	existingSequence, err := r.service.GetSpannerSequence(ctx, sequenceName)
 	if err != nil && status.Code(err) != codes.NotFound {
 		resp.Diagnostics.AddError(
 			"Error Checking Existing Database Sequence",
@@ -228,8 +228,8 @@ func (r *databaseSequenceResource) Create(ctx context.Context, req resource.Crea
 		sequence.Options = sequenceOptions
 	}
 
-	_, err = r.config.SpannerService.CreateSpannerSequence(ctx,
-		names.DatabaseName{Project: project, Instance: instance, Database: databaseId}.String(),
+	_, err = r.service.CreateSpannerSequence(ctx,
+		names.DatabaseName{Project: project, Instance: instance, Database: databaseID}.String(),
 		sequence,
 	)
 	if err != nil {
@@ -261,12 +261,12 @@ func (r *databaseSequenceResource) Read(ctx context.Context, req resource.ReadRe
 	// Retrieve project, instance and database from state
 	project := state.Project.ValueString()
 	instance := state.Instance.ValueString()
-	databaseId := state.Database.ValueString()
-	sequenceId := state.Sequence.ValueString()
+	databaseID := state.Database.ValueString()
+	sequenceID := state.Sequence.ValueString()
 
-	sequenceName := names.SequenceName{Project: project, Instance: instance, Database: databaseId, Sequence: sequenceId}.String()
+	sequenceName := names.SequenceName{Project: project, Instance: instance, Database: databaseID, Sequence: sequenceID}.String()
 
-	sequence, err := r.config.SpannerService.GetSpannerSequence(ctx, sequenceName)
+	sequence, err := r.service.GetSpannerSequence(ctx, sequenceName)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			resp.State.RemoveResource(ctx)
@@ -282,7 +282,7 @@ func (r *databaseSequenceResource) Read(ctx context.Context, req resource.ReadRe
 	}
 
 	// Populate state from sequence
-	state.Sequence = types.StringValue(sequenceId)
+	state.Sequence = types.StringValue(sequenceID)
 
 	if sequence.Options != nil {
 		options := &spannerSequenceOptions{}
@@ -334,10 +334,10 @@ func (r *databaseSequenceResource) Update(ctx context.Context, req resource.Upda
 	// Get project and instance name
 	project := plan.Project.ValueString()
 	instanceName := plan.Instance.ValueString()
-	databaseId := plan.Database.ValueString()
-	sequenceId := plan.Sequence.ValueString()
+	databaseID := plan.Database.ValueString()
+	sequenceID := plan.Sequence.ValueString()
 
-	sequenceName := names.SequenceName{Project: project, Instance: instanceName, Database: databaseId, Sequence: sequenceId}.String()
+	sequenceName := names.SequenceName{Project: project, Instance: instanceName, Database: databaseID, Sequence: sequenceID}.String()
 
 	// Generate sequence from plan
 	sequence := &sequenceschema.SpannerSequence{
@@ -371,7 +371,7 @@ func (r *databaseSequenceResource) Update(ctx context.Context, req resource.Upda
 		sequence.Options = sequenceOptions
 	}
 
-	_, err := r.config.SpannerService.UpdateSpannerSequence(ctx, sequence)
+	_, err := r.service.UpdateSpannerSequence(ctx, sequence)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Updating Database Sequence",
@@ -381,7 +381,7 @@ func (r *databaseSequenceResource) Update(ctx context.Context, req resource.Upda
 	}
 
 	// Map response body to schema and populate Computed attribute values
-	plan.Sequence = types.StringValue(sequenceId)
+	plan.Sequence = types.StringValue(sequenceID)
 
 	// Set state to fully populated data
 	diags = resp.State.Set(ctx, plan)
@@ -413,11 +413,11 @@ func (r *databaseSequenceResource) Delete(ctx context.Context, req resource.Dele
 	project := state.Project.ValueString()
 	instance := state.Instance.ValueString()
 	database := state.Database.ValueString()
-	sequenceId := state.Sequence.ValueString()
+	sequenceID := state.Sequence.ValueString()
 
-	sequenceName := names.SequenceName{Project: project, Instance: instance, Database: database, Sequence: sequenceId}.String()
+	sequenceName := names.SequenceName{Project: project, Instance: instance, Database: database, Sequence: sequenceID}.String()
 
-	err := r.config.SpannerService.DeleteSpannerSequence(ctx, sequenceName)
+	err := r.service.DeleteSpannerSequence(ctx, sequenceName)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Deleting Database Sequence",
@@ -441,22 +441,22 @@ func (r *databaseSequenceResource) ImportState(ctx context.Context, req resource
 	project := importName.Project
 	instanceName := importName.Instance
 	databaseName := importName.Database
-	sequenceId := importName.Sequence
+	sequenceID := importName.Sequence
 
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("project"), project)...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("instance"), instanceName)...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("database"), databaseName)...)
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("sequence"), sequenceId)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("sequence"), sequenceID)...)
 }
 
 // Configure adds the provider configured client to the resource.
 func (r *databaseSequenceResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	config, ok := configureProviderConfig(req.ProviderData, &resp.Diagnostics)
+	service, ok := configureSpannerService(req.ProviderData, &resp.Diagnostics)
 	if !ok {
 		return
 	}
 
-	r.config = config
+	r.service = service
 }
 
 func (r *databaseSequenceResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {

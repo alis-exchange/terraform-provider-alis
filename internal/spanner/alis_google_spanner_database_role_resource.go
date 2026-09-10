@@ -4,8 +4,8 @@ import (
 	"context"
 	"regexp"
 
-	"terraform-provider-alis/internal"
 	"terraform-provider-alis/internal/spanner/names"
+	"terraform-provider-alis/internal/spanner/services"
 	"terraform-provider-alis/internal/utils"
 	"terraform-provider-alis/internal/validators"
 
@@ -34,7 +34,7 @@ func NewDatabaseRoleResource() resource.Resource {
 }
 
 type databaseRoleResource struct {
-	config *internal.ProviderConfig
+	service *services.SpannerService
 }
 
 type databaseRoleModel struct {
@@ -90,8 +90,8 @@ func (r *databaseRoleResource) Schema(ctx context.Context, _ resource.SchemaRequ
 				Required: true,
 				Validators: []validator.String{
 					validators.RegexMatches([]*regexp.Regexp{
-						utils.Pattern(utils.SpannerGoogleSqlRoleIdRegex),
-						utils.Pattern(utils.SpannerPostgresSqlRoleIdRegex),
+						utils.Pattern(utils.SpannerGoogleSQLRoleIDRegex),
+						utils.Pattern(utils.SpannerPostgresSQLRoleIDRegex),
 					}, "Role must be a valid Spanner database role ID, See https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#naming_conventions"),
 				},
 				PlanModifiers: []planmodifier.String{
@@ -135,7 +135,7 @@ func (r *databaseRoleResource) Create(ctx context.Context, req resource.CreateRe
 	databaseName := names.DatabaseName{Project: project, Instance: instance, Database: database}.String()
 	roleName := names.DatabaseRoleName{Project: project, Instance: instance, Database: database, Role: role}.String()
 
-	existingRole, err := r.config.SpannerService.GetDatabaseRole(ctx, roleName)
+	existingRole, err := r.service.GetDatabaseRole(ctx, roleName)
 	if err != nil && status.Code(err) != codes.NotFound {
 		resp.Diagnostics.AddError(
 			"Error Checking Existing Database Role",
@@ -150,7 +150,7 @@ func (r *databaseRoleResource) Create(ctx context.Context, req resource.CreateRe
 		return
 	}
 
-	_, err = r.config.SpannerService.CreateDatabaseRole(ctx, databaseName, role)
+	_, err = r.service.CreateDatabaseRole(ctx, databaseName, role)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Creating Database Role",
@@ -185,7 +185,7 @@ func (r *databaseRoleResource) Read(ctx context.Context, req resource.ReadReques
 
 	roleName := names.DatabaseRoleName{Project: project, Instance: instance, Database: database, Role: role}.String()
 
-	_, err := r.config.SpannerService.GetDatabaseRole(ctx, roleName)
+	_, err := r.service.GetDatabaseRole(ctx, roleName)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			resp.State.RemoveResource(ctx)
@@ -254,7 +254,7 @@ func (r *databaseRoleResource) Delete(ctx context.Context, req resource.DeleteRe
 
 	roleName := names.DatabaseRoleName{Project: project, Instance: instance, Database: database, Role: role}.String()
 
-	err := r.config.SpannerService.DeleteDatabaseRole(ctx, roleName)
+	err := r.service.DeleteDatabaseRole(ctx, roleName)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Deleting Database Role",
@@ -286,12 +286,12 @@ func (r *databaseRoleResource) ImportState(ctx context.Context, req resource.Imp
 
 // Configure adds the provider configured client to the resource.
 func (r *databaseRoleResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	config, ok := configureProviderConfig(req.ProviderData, &resp.Diagnostics)
+	service, ok := configureSpannerService(req.ProviderData, &resp.Diagnostics)
 	if !ok {
 		return
 	}
 
-	r.config = config
+	r.service = service
 }
 
 func (r *databaseRoleResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {

@@ -11,7 +11,7 @@ const (
 	SpannerTableDataTypeBytes
 	SpannerTableDataTypeDate
 	SpannerTableDataTypeTimestamp
-	SpannerTableDataTypeJson
+	SpannerTableDataTypeJSON
 	SpannerTableDataTypeProto
 	SpannerTableDataTypeStringArray
 	SpannerTableDataTypeInt64Array
@@ -43,7 +43,7 @@ var SpannerTableDataTypes = []string{
 	SpannerTableDataTypeBytes.String(),
 	SpannerTableDataTypeDate.String(),
 	SpannerTableDataTypeTimestamp.String(),
-	SpannerTableDataTypeJson.String(),
+	SpannerTableDataTypeJSON.String(),
 	SpannerTableDataTypeProto.String(),
 	SpannerTableDataTypeStringArray.String(),
 	SpannerTableDataTypeInt64Array.String(),

@@ -6,13 +6,13 @@ import (
 )
 
 // CreateRoleDdl renders the CREATE ROLE statement.
-func CreateRoleDdl(roleId string) string {
-	return "CREATE ROLE " + roleId
+func CreateRoleDdl(roleID string) string {
+	return "CREATE ROLE " + roleID
 }
 
 // DropRoleDdl renders the DROP ROLE statement.
-func DropRoleDdl(roleId string) string {
-	return "DROP ROLE " + roleId
+func DropRoleDdl(roleID string) string {
+	return "DROP ROLE " + roleID
 }
 
 // GrantTablePrivilegesDdl renders the GRANT statement for table permissions
