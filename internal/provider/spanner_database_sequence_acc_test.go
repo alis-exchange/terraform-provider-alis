@@ -2,6 +2,7 @@ package provider_test
 
 import (
 	"fmt"
+	"regexp"
 	"testing"
 
 	"terraform-provider-alis/internal/acctest"
@@ -76,11 +77,44 @@ resource "alis_google_spanner_database_sequence" "test" {
 				},
 			},
 			{
+				// The data source reads the renamed sequence and its options.
+				Config: config(renamedSequence, 2000) + fmt.Sprintf(`
+data "alis_google_spanner_database_sequence" "read" {
+  project  = %q
+  instance = %q
+  database = %q
+  sequence = alis_google_spanner_database_sequence.test.sequence
+}
+`, env.Project, env.Instance, env.Database),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(
+						"data.alis_google_spanner_database_sequence.read",
+						"options.sequence_kind",
+						"bit_reversed_positive",
+					),
+					resource.TestCheckResourceAttr("data.alis_google_spanner_database_sequence.read", "options.skip_range.max", "5000000"),
+					resource.TestCheckResourceAttr("data.alis_google_spanner_database_sequence.read", "options.start_with_counter", "2000"),
+				),
+			},
+			{
 				ResourceName:                         "alis_google_spanner_database_sequence.test",
 				ImportState:                          true,
 				ImportStateId:                        fmt.Sprintf("%s/sequences/%s", env.DatabaseName, renamedSequence),
 				ImportStateVerify:                    true,
 				ImportStateVerifyIdentifierAttribute: "sequence",
+			},
+			{
+				// A missing sequence is an error, not an empty result.
+				Config: config(renamedSequence, 2000) + fmt.Sprintf(`
+data "alis_google_spanner_database_sequence" "missing" {
+  project  = %q
+  instance = %q
+  database = %q
+  sequence = "tftest_missing_seq"
+}
+`, env.Project, env.Instance, env.Database),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`Error Reading Database Sequence`),
 			},
 		},
 	})
