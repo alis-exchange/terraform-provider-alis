@@ -3,6 +3,7 @@ package provider_test
 import (
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"testing"
 
 	"terraform-provider-alis/internal/acctest"
@@ -85,6 +86,23 @@ resource "alis_google_spanner_proto_bundle" "test" {
 				),
 			},
 			{
+				// The data source lists the owned types the bundle now holds.
+				Config: config(fixture("owned_v2.fds")) + fmt.Sprintf(`
+data "alis_google_spanner_proto_bundle" "read" {
+  project  = %q
+  instance = %q
+  database = %q
+  packages = [%q]
+
+  depends_on = [alis_google_spanner_proto_bundle.test]
+}
+`, env.Project, env.Instance, env.Database, pkg),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.alis_google_spanner_proto_bundle.read", "types.#", "3"),
+					resource.TestCheckTypeSetElemAttr("data.alis_google_spanner_proto_bundle.read", "types.*", "tftest.v1.Simple"),
+				),
+			},
+			{
 				ResourceName:                         address,
 				ImportState:                          true,
 				ImportStateId:                        env.DatabaseName + "/protoBundles/" + pkg,
@@ -93,6 +111,19 @@ resource "alis_google_spanner_proto_bundle" "test" {
 				// Sources live only in configuration, and the hash is derived
 				// from them, so neither can be seeded by an import.
 				ImportStateVerifyIgnore: []string{"sources", "descriptors_sha256"},
+			},
+			{
+				// A package with no types in the bundle is an error, not an empty set.
+				Config: config(fixture("owned_v2.fds")) + fmt.Sprintf(`
+data "alis_google_spanner_proto_bundle" "missing" {
+  project  = %q
+  instance = %q
+  database = %q
+  packages = ["tftest.absent"]
+}
+`, env.Project, env.Instance, env.Database),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`Error Reading Proto Bundle`),
 			},
 		},
 	})

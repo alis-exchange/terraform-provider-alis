@@ -28,6 +28,7 @@ func TestAllDataSourceSchemas_FollowConvention(t *testing.T) {
 		{"table_index", NewTableIndexDataSource(), []string{"project", "instance", "database", "table", "name"}},
 		{"database_sequence", NewDatabaseSequenceDataSource(), []string{"project", "instance", "database", "sequence"}},
 		{"table", NewSpannerTableDataSource(), []string{"project", "instance", "database", "name"}},
+		{"proto_bundle", NewProtoBundleDataSource(), []string{"project", "instance", "database", "packages"}},
 	}
 
 	for _, tc := range cases {
