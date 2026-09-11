@@ -20,6 +20,8 @@ resource "alis_google_spanner_table" "test_bundle_table" {
   instance = var.SPANNER_INSTANCE
   database = var.SPANNER_DATABASE
   name     = "tf_test_proto_bundle"
+  # A throwaway table: allow terraform destroy to exercise the delete path.
+  prevent_destroy = false
   schema = {
     columns = [
       {
