@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+// Same package and file name as owned.proto with one extra field, so a
+// descriptor-set hash change (and a merge conflict) can be driven from
+// fixtures alone.
+package tftest.v1;
+
+import "dep.proto";
+
+enum Kind {
+  KIND_UNSPECIFIED = 0;
+}
+
+message Simple {
+  string name = 1;
+  Kind kind = 2;
+  tfdep.Shared shared = 3;
+  int64 count = 4;
+
+  message Nested {
+    int32 n = 1;
+  }
+}

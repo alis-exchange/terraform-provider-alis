@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package tftest.v1;
+
+import "dep.proto";
+
+enum Kind {
+  KIND_UNSPECIFIED = 0;
+}
+
+message Simple {
+  string name = 1;
+  Kind kind = 2;
+  tfdep.Shared shared = 3;
+
+  message Nested {
+    int32 n = 1;
+  }
+}

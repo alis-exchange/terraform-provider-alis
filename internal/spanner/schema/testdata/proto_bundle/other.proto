@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+// A nested proto package under tftest.v1: its types must NOT count as owned
+// by "tftest.v1" (protog's uppercase-next-identifier rule).
+package tftest.v1.sub;
+
+message Leaf {
+  string x = 1;
+}

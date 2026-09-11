@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+// A dependency outside the owned package: imported by owned.proto so the
+// fixtures exercise "insert missing imports, never update or delete them".
+package tfdep;
+
+message Shared {
+  string id = 1;
+}
