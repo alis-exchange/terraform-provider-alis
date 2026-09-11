@@ -101,9 +101,9 @@ func (r *protoBundleResource) Schema(ctx context.Context, _ resource.SchemaReque
 			"packages": rschema.SetAttribute{
 				Required:    true,
 				ElementType: types.StringType,
-				MarkdownDescription: "Proto packages this resource owns in the bundle, for example `alis.os.ideas.v1`. " +
+				MarkdownDescription: "Proto packages this resource owns in the bundle, for example `com.example.books.v1`. " +
 					"Only messages and enums directly in these packages are updated or deleted; imported types from other packages " +
-					"are inserted when missing but otherwise left to their own owner. A nested package (`alis.os.ideas.v1.sub`) is not " +
+					"are inserted when missing but otherwise left to their own owner. A nested package (`com.example.books.v1.sub`) is not " +
 					"owned by its parent. Removing a package from this set stops managing its types without deleting them.",
 				Validators: []validator.Set{setvalidator.SizeAtLeast(1)},
 			},

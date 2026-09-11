@@ -23,25 +23,25 @@ See https://cloud.google.com/spanner/docs/reference/standard-sql/protocol-buffer
 # One package's slice of the database's proto bundle. Define writes the
 # descriptor set as fds_including_imports next to the neuron's infra folder;
 # a gs:// object or prefix works the same way.
-resource "alis_google_spanner_proto_bundle" "ideas" {
+resource "alis_google_spanner_proto_bundle" "books" {
   project  = var.GOOGLE_PROJECT
   instance = var.SPANNER_INSTANCE
   database = "tf-test"
-  packages = ["alis.os.ideas.v1"]
+  packages = ["com.example.books.v1"]
   sources = [
     { local_path = "${path.module}/../fds_including_imports" },
-    # { gcs_uri = "gs://my-bucket/alis.os.ideas.v1/fds_including_imports" },
+    # { gcs_uri = "gs://my-bucket/com.example.books.v1/fds_including_imports" },
   ]
 }
 
 # Tables with PROTO columns must wait for the bundle: Spanner rejects a column
 # whose type is not in the bundle yet, and refuses to delete a type a column
 # still references.
-resource "alis_google_spanner_table" "ideas" {
+resource "alis_google_spanner_table" "books" {
   project  = var.GOOGLE_PROJECT
   instance = var.SPANNER_INSTANCE
   database = "tf-test"
-  name     = "ideas"
+  name     = "books"
   schema = {
     columns = [
       {
@@ -52,14 +52,14 @@ resource "alis_google_spanner_table" "ideas" {
         required       = true,
       },
       {
-        name          = "idea",
+        name          = "book",
         type          = "PROTO",
-        proto_package = "alis.os.ideas.v1.Idea",
+        proto_package = "com.example.books.v1.Book",
       },
     ]
   }
 
-  depends_on = [alis_google_spanner_proto_bundle.ideas]
+  depends_on = [alis_google_spanner_proto_bundle.books]
 }
 ```
 
@@ -74,7 +74,7 @@ resource "alis_google_spanner_table" "ideas" {
 Changing this forces a new resource.
 - `instance` (String) The Spanner instance ID that contains the database.
 Changing this forces a new resource.
-- `packages` (Set of String) Proto packages this resource owns in the bundle, for example `alis.os.ideas.v1`. Only messages and enums directly in these packages are updated or deleted; imported types from other packages are inserted when missing but otherwise left to their own owner. A nested package (`alis.os.ideas.v1.sub`) is not owned by its parent. Removing a package from this set stops managing its types without deleting them.
+- `packages` (Set of String) Proto packages this resource owns in the bundle, for example `com.example.books.v1`. Only messages and enums directly in these packages are updated or deleted; imported types from other packages are inserted when missing but otherwise left to their own owner. A nested package (`com.example.books.v1.sub`) is not owned by its parent. Removing a package from this set stops managing its types without deleting them.
 - `project` (String) The Google Cloud project ID containing the Spanner instance and database.
 Changing this forces a new resource.
 - `sources` (Attributes List) Where the FileDescriptorSet comes from. Each entry sets exactly one of `local_path` or `gcs_uri`. All sources are merged by proto file name; the same file with different content in two sources is an error. The sources are read at plan time, so they must exist wherever `terraform plan` runs. (see [below for nested schema](#nestedatt--sources))
@@ -125,7 +125,7 @@ The terraform import command can also be used:
 # A proto bundle slice is imported by database and package. Sources are not
 # recorded in Spanner, so the first plan after import shows an in-place
 # update that re-sends the package's descriptors from the configured sources.
-terraform import alis_google_spanner_proto_bundle.ideas "projects/{project}/instances/{instance}/databases/{database}/protoBundles/{package}"
+terraform import alis_google_spanner_proto_bundle.books "projects/{project}/instances/{instance}/databases/{database}/protoBundles/{package}"
 ```
 
 

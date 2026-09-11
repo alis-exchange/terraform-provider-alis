@@ -126,11 +126,11 @@ directory, or a `gs://` object or prefix) with the proto packages the service
 owns, and add `depends_on` from every table with `PROTO` columns:
 
 ```hcl
-resource "alis_google_spanner_proto_bundle" "ideas" {
+resource "alis_google_spanner_proto_bundle" "books" {
   project  = var.GOOGLE_PROJECT
   instance = var.SPANNER_INSTANCE
   database = "tf-test"
-  packages = ["alis.os.ideas.v1"]
+  packages = ["com.example.books.v1"]
   sources  = [{ local_path = "${path.module}/../fds_including_imports" }]
 }
 ```

@@ -26,7 +26,7 @@ func TestParseAndFormatRoundTrip(t *testing.T) {
 		},
 		{
 			"proto bundle", func(s string) (interface{ String() string }, error) { n, err := ParseProtoBundle(s); return n, err },
-			"projects/my-project/instances/my-instance/databases/my-db/protoBundles/alis.os.ideas.v1",
+			"projects/my-project/instances/my-instance/databases/my-db/protoBundles/com.example.books.v1",
 		},
 		{
 			"database role", func(s string) (interface{ String() string }, error) { n, err := ParseDatabaseRole(s); return n, err },
