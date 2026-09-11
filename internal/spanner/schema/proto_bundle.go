@@ -122,3 +122,132 @@ func MarshalDescriptorSet(fds *descriptorpb.FileDescriptorSet) ([]byte, string, 
 	sum := sha256.Sum256(data)
 	return data, hex.EncodeToString(sum[:]), nil
 }
+
+// ProtoBundleDiff is the reconciliation between the live bundle and the
+// desired descriptor set for one set of owned packages. Slices are sorted so
+// the rendered DDL is deterministic.
+type ProtoBundleDiff struct {
+	// Insert holds desired types missing from the bundle, owned or not:
+	// an owned type can depend on an imported one.
+	Insert []string
+	// Update holds owned types already in the bundle. Their descriptors are
+	// re-sent whether or not they changed; Spanner treats an identical
+	// UPDATE as a no-op.
+	Update []string
+	// Delete holds owned types in the bundle that are no longer desired.
+	Delete []string
+	// Ignore holds foreign types, present or absent, that this diff leaves
+	// to whoever owns them.
+	Ignore []string
+}
+
+// IsEmpty reports whether the diff carries no DDL-worthy change.
+func (d ProtoBundleDiff) IsEmpty() bool {
+	return len(d.Insert) == 0 && len(d.Update) == 0 && len(d.Delete) == 0
+}
+
+// DiffProtoBundle computes the diff between current (types in the live
+// bundle) and desired (types in the descriptor set) under packages.
+func DiffProtoBundle(current, desired map[string]struct{}, packages []string) ProtoBundleDiff {
+	var d ProtoBundleDiff
+	for name := range desired {
+		switch {
+		case !hasKey(current, name):
+			d.Insert = append(d.Insert, name)
+		case InPackage(name, packages):
+			d.Update = append(d.Update, name)
+		default:
+			d.Ignore = append(d.Ignore, name)
+		}
+	}
+	for name := range current {
+		if hasKey(desired, name) {
+			continue
+		}
+		if InPackage(name, packages) {
+			d.Delete = append(d.Delete, name)
+		} else {
+			d.Ignore = append(d.Ignore, name)
+		}
+	}
+	slices.Sort(d.Insert)
+	slices.Sort(d.Update)
+	slices.Sort(d.Delete)
+	slices.Sort(d.Ignore)
+	return d
+}
+
+func hasKey(m map[string]struct{}, k string) bool {
+	_, ok := m[k]
+	return ok
+}
+
+const createProtoBundlePrefix = "CREATE PROTO BUNDLE"
+
+// ParseBundleTypes extracts the type names from the CREATE PROTO BUNDLE
+// statement in a database's DDL, as returned by GetDatabaseDdl. Spanner
+// renders the live bundle as one such statement regardless of how it was
+// built; INFORMATION_SCHEMA has no view of bundle types.
+func ParseBundleTypes(statements []string) map[string]struct{} {
+	types := map[string]struct{}{}
+	for _, stmt := range statements {
+		if !strings.HasPrefix(stmt, createProtoBundlePrefix) {
+			continue
+		}
+		open := strings.Index(stmt, "(")
+		closeIdx := strings.LastIndex(stmt, ")")
+		if open < 0 || closeIdx <= open {
+			continue
+		}
+		for entry := range strings.SplitSeq(stmt[open+1:closeIdx], ",") {
+			name := strings.Trim(strings.TrimSpace(entry), "`")
+			if name != "" {
+				types[name] = struct{}{}
+			}
+		}
+	}
+	return types
+}
+
+// ProtoBundleDdl renders the single statement that applies d: CREATE when
+// the bundle does not exist yet, ALTER otherwise, "" when d is empty.
+func ProtoBundleDdl(existingCount int, d ProtoBundleDiff) string {
+	if d.IsEmpty() {
+		return ""
+	}
+	if existingCount == 0 {
+		return createProtoBundlePrefix + " " + quotedList(d.Insert)
+	}
+	stmt := "ALTER PROTO BUNDLE"
+	if len(d.Insert) > 0 {
+		stmt += " INSERT " + quotedList(d.Insert)
+	}
+	if len(d.Update) > 0 {
+		stmt += " UPDATE " + quotedList(d.Update)
+	}
+	if len(d.Delete) > 0 {
+		stmt += " DELETE " + quotedList(d.Delete)
+	}
+	return stmt
+}
+
+// ProtoBundleDeleteDdl renders the statement removing owned from a bundle of
+// existingCount types. Deleting every remaining type is not allowed through
+// ALTER, so that case drops the bundle instead. "" when nothing is owned.
+func ProtoBundleDeleteDdl(existingCount int, owned []string) string {
+	if len(owned) == 0 {
+		return ""
+	}
+	if len(owned) >= existingCount {
+		return "DROP PROTO BUNDLE"
+	}
+	return "ALTER PROTO BUNDLE DELETE " + quotedList(owned)
+}
+
+func quotedList(names []string) string {
+	quoted := make([]string, len(names))
+	for i, n := range names {
+		quoted[i] = "`" + n + "`"
+	}
+	return "(" + strings.Join(quoted, ", ") + ")"
+}
