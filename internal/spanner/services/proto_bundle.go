@@ -112,17 +112,23 @@ func (s *SpannerService) GetProtoBundleTypes(ctx context.Context, database strin
 // dropping the bundle when nothing else would remain. Foreign types are left
 // untouched. A no-op when nothing is owned.
 func (s *SpannerService) DeleteProtoBundle(ctx context.Context, database string, packages []string) error {
-	statements, _, err := s.conn.DatabaseDdl(ctx, database)
+	statements, live, err := s.conn.DatabaseDdl(ctx, database)
 	if err != nil {
 		return err
 	}
 	current := schema.ParseBundleTypes(statements)
 	owned := sortedTypes(schema.OwnedTypes(current, packages))
 	ddl := schema.ProtoBundleDeleteDdl(len(current), owned)
-	if ddl == "" {
+	switch ddl {
+	case "":
 		return nil
+	case schema.DropProtoBundleDdl:
+		return s.conn.ExecuteDDL(ctx, database, ddl)
+	default:
+		// Spanner rejects an ALTER PROTO BUNDLE without descriptors, even for
+		// a pure DELETE; the live bundle's own descriptors satisfy it.
+		return s.conn.ExecuteDDLWithDescriptors(ctx, database, live, ddl)
 	}
-	return s.conn.ExecuteDDL(ctx, database, ddl)
 }
 
 func sortedTypes(types map[string]struct{}) []string {

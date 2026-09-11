@@ -184,6 +184,10 @@ func hasKey(m map[string]struct{}, k string) bool {
 
 const createProtoBundlePrefix = "CREATE PROTO BUNDLE"
 
+// DropProtoBundleDdl removes the bundle outright; used when a delete would
+// otherwise leave it empty.
+const DropProtoBundleDdl = "DROP PROTO BUNDLE"
+
 // ParseBundleTypes extracts the type names from the CREATE PROTO BUNDLE
 // statement in a database's DDL, as returned by GetDatabaseDdl. Spanner
 // renders the live bundle as one such statement regardless of how it was
@@ -232,14 +236,15 @@ func ProtoBundleDdl(existingCount int, d ProtoBundleDiff) string {
 }
 
 // ProtoBundleDeleteDdl renders the statement removing owned from a bundle of
-// existingCount types. Deleting every remaining type is not allowed through
-// ALTER, so that case drops the bundle instead. "" when nothing is owned.
+// existingCount types. When nothing else would remain the bundle is dropped
+// outright, leaving the database as it was before any bundle existed rather
+// than with an empty one. "" when nothing is owned.
 func ProtoBundleDeleteDdl(existingCount int, owned []string) string {
 	if len(owned) == 0 {
 		return ""
 	}
 	if len(owned) >= existingCount {
-		return "DROP PROTO BUNDLE"
+		return DropProtoBundleDdl
 	}
 	return "ALTER PROTO BUNDLE DELETE " + quotedList(owned)
 }

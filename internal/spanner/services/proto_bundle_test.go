@@ -178,12 +178,15 @@ func TestGetProtoBundleTypes(t *testing.T) {
 func TestDeleteProtoBundle(t *testing.T) {
 	t.Run("owned only", func(t *testing.T) {
 		fake := connfake.New()
-		fake.SetDatabaseDdl(protoBundleDB, []string{bundleStatement("tftest.v1.Simple", "other.pkg.T")}, nil)
+		fake.SetDatabaseDdl(protoBundleDB, []string{bundleStatement("tftest.v1.Simple", "other.pkg.T")}, []byte{9, 9})
 		svc := NewSpannerService(fake)
 		if err := svc.DeleteProtoBundle(context.Background(), protoBundleDB, ownedPackages); err != nil {
 			t.Fatalf("DeleteProtoBundle: %v", err)
 		}
 		fake.AssertSubsequence(t, "ALTER PROTO BUNDLE DELETE (`tftest.v1.Simple`)")
+		if ops := ddlOps(t, fake); len(ops) != 1 || string(ops[0].ProtoDescriptors) != string([]byte{9, 9}) {
+			t.Fatalf("ops = %+v, want the live descriptors attached to the ALTER DELETE", ops)
+		}
 	})
 
 	t.Run("last type drops the bundle", func(t *testing.T) {
