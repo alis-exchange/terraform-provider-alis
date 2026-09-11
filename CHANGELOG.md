@@ -1,8 +1,11 @@
-# [](https://github.com/alis-exchange/terraform-provider-alis/compare/v2.0.0-beta7...v) (2026-09-10)
+# [](https://github.com/alis-exchange/terraform-provider-alis/compare/v2.0.0-beta8...v) (2026-09-11)
+
+# [2.0.0-beta8](https://github.com/alis-exchange/terraform-provider-alis/compare/v2.0.0-beta7...v2.0.0-beta8) (2026-09-11)
 
 
 ### Bug Fixes
 
+* **services:** attach live descriptors to proto bundle deletes ([a3abbff](https://github.com/alis-exchange/terraform-provider-alis/commit/a3abbff683c7fe78ae4b0a7269c2a2ae5c9f40d1))
 * **spanner:** adopt matching index/foreign key on create retry after timeout ([b744fcb](https://github.com/alis-exchange/terraform-provider-alis/commit/b744fcb6e89d8d846a5af90cae90a2b4a4fd40dc))
 * **spanner:** keep unmanaged interleave out of refreshed table state ([a61c73b](https://github.com/alis-exchange/terraform-provider-alis/commit/a61c73b91d79ba6eb481c093fe52aac0c211124a))
 * **spanner:** reject protected table destroy and replacement during plan ([2e5c109](https://github.com/alis-exchange/terraform-provider-alis/commit/2e5c10969f911d470a2667265b631cb96fc45b1a))
@@ -10,7 +13,16 @@
 
 ### Features
 
+* **conn:** add database/sql row scanner for INFORMATION_SCHEMA reads ([d5a22d8](https://github.com/alis-exchange/terraform-provider-alis/commit/d5a22d84509577ec7cf5004c7347cff4e6af73f4))
+* **conn:** add DatabaseDdl read to the connection port ([4837066](https://github.com/alis-exchange/terraform-provider-alis/commit/483706656cd6a180d91b4a5408eb0779a9b7b3db))
+* **names:** add ProtoBundleName ([caf15ca](https://github.com/alis-exchange/terraform-provider-alis/commit/caf15cab218101202c0a940e9a2e1332653cc239))
+* **schema:** descriptor set merge, hash and type walk ([c103907](https://github.com/alis-exchange/terraform-provider-alis/commit/c103907f3c82019f1f47a13274e0adc62d55b3dd))
+* **schema:** load descriptor sets from local and gs:// sources ([b090855](https://github.com/alis-exchange/terraform-provider-alis/commit/b09085558f0d02e12be9efc07cc35c92acd675e6))
+* **schema:** proto bundle diff and DDL renderers ([c31c1a9](https://github.com/alis-exchange/terraform-provider-alis/commit/c31c1a97cfd80a0cd15b61f5e9d13986d9a695db))
+* **services:** proto bundle apply, read and delete ([3cf4854](https://github.com/alis-exchange/terraform-provider-alis/commit/3cf4854d6b99bf4df3a8314d707eef10dddff44f))
+* **spanner:** add alis_google_spanner_proto_bundle resource ([616876d](https://github.com/alis-exchange/terraform-provider-alis/commit/616876db4275661b18e45c46bfd590a6111f2692))
 * **spanner:** add proto_date_ddl function for computed-column DDL ([7849c03](https://github.com/alis-exchange/terraform-provider-alis/commit/7849c038b749283ed2035ce7d29696ea33109f96))
+* **utils:** add GcsReader for descriptor-set sources ([ad8e955](https://github.com/alis-exchange/terraform-provider-alis/commit/ad8e9551adcd898999f481ef78691b40894b6064))
 
 # [2.0.0-beta5](https://github.com/alis-exchange/terraform-provider-alis/compare/v2.0.0-beta4...v2.0.0-beta5) (2026-08-14)
 
