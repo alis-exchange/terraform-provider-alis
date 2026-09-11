@@ -117,11 +117,28 @@ resource "alis_google_spanner_table_index" "users_email" {
 
 These never affected the stored `FLOAT64` DDL; delete them from the config.
 
-### `file_descriptor`
+### `file_descriptor` — use `alis_google_spanner_proto_bundle`
 
-The provider no longer uploads proto file descriptors. A `PROTO` column is
-declared through `proto_package` alone, and the proto bundle must already
-exist in the database.
+The column attribute is gone: a `PROTO` column is declared through
+`proto_package` alone, and the bundle is managed by its own resource. Point an
+`alis_google_spanner_proto_bundle` at the same descriptor set (a local file or
+directory, or a `gs://` object or prefix) with the proto packages the service
+owns, and add `depends_on` from every table with `PROTO` columns:
+
+```hcl
+resource "alis_google_spanner_proto_bundle" "ideas" {
+  project  = var.GOOGLE_PROJECT
+  instance = var.SPANNER_INSTANCE
+  database = "tf-test"
+  packages = ["alis.os.ideas.v1"]
+  sources  = [{ local_path = "${path.module}/../fds_including_imports" }]
+}
+```
+
+The resource owns only the types in `packages`; imported types from other
+packages are inserted when missing and otherwise left alone, so several
+services can manage one database's bundle. A bundle a previous `protog`
+run created is adopted on the first apply.
 
 ## `default_value` semantics — quote string literals
 
