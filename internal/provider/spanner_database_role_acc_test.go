@@ -2,6 +2,7 @@ package provider_test
 
 import (
 	"fmt"
+	"regexp"
 	"testing"
 
 	"terraform-provider-alis/internal/acctest"
@@ -50,11 +51,38 @@ data "alis_google_spanner_database_roles" "all" {
 				),
 			},
 			{
+				// The singular data source reads the role just created.
+				Config: config + fmt.Sprintf(`
+data "alis_google_spanner_database_role" "read" {
+  project  = %[1]q
+  instance = %[2]q
+  database = %[3]q
+  role     = %[4]q
+
+  depends_on = [alis_google_spanner_database_role.test]
+}
+`, env.Project, env.Instance, env.Database, role),
+				Check: resource.TestCheckResourceAttr("data.alis_google_spanner_database_role.read", "role", role),
+			},
+			{
 				ResourceName:                         "alis_google_spanner_database_role.test",
 				ImportState:                          true,
 				ImportStateId:                        fmt.Sprintf("%s/databaseRoles/%s", env.DatabaseName, role),
 				ImportStateVerify:                    true,
 				ImportStateVerifyIdentifierAttribute: "role",
+			},
+			{
+				// A missing role is an error, not an empty result.
+				Config: config + fmt.Sprintf(`
+data "alis_google_spanner_database_role" "missing" {
+  project  = %[1]q
+  instance = %[2]q
+  database = %[3]q
+  role     = "tftest_missing_role"
+}
+`, env.Project, env.Instance, env.Database),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`Error Reading Database Role`),
 			},
 		},
 	})

@@ -274,6 +274,7 @@ func (p *googleProvider) Configure(ctx context.Context, req provider.ConfigureRe
 func (p *googleProvider) DataSources(_ context.Context) []func() datasource.DataSource {
 	return []func() datasource.DataSource{
 		spanner.NewDatabaseRolesDataSource,
+		spanner.NewDatabaseRoleDataSource,
 		spanner.NewTableIamBindingDataSource,
 	}
 }
