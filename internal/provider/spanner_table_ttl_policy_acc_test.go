@@ -2,6 +2,7 @@ package provider_test
 
 import (
 	"fmt"
+	"regexp"
 	"testing"
 
 	"terraform-provider-alis/internal/acctest"
@@ -55,12 +56,42 @@ resource "alis_google_spanner_table_ttl_policy" "test" {
 				Check: resource.TestCheckResourceAttr("alis_google_spanner_table_ttl_policy.test", "ttl", "7"),
 			},
 			{
+				// The data source reads the policy just updated.
+				Config: config(7) + fmt.Sprintf(`
+data "alis_google_spanner_table_ttl_policy" "read" {
+  project  = %q
+  instance = %q
+  database = %q
+  table    = alis_google_spanner_table.base.name
+
+  depends_on = [alis_google_spanner_table_ttl_policy.test]
+}
+`, env.Project, env.Instance, env.Database),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.alis_google_spanner_table_ttl_policy.read", "column", "created_at"),
+					resource.TestCheckResourceAttr("data.alis_google_spanner_table_ttl_policy.read", "ttl", "7"),
+				),
+			},
+			{
 				// A TTL policy is imported by its table's name.
 				ResourceName:                         "alis_google_spanner_table_ttl_policy.test",
 				ImportState:                          true,
 				ImportStateId:                        fmt.Sprintf("%s/tables/%s", env.DatabaseName, table),
 				ImportStateVerify:                    true,
 				ImportStateVerifyIdentifierAttribute: "table",
+			},
+			{
+				// A table without a policy (here: one that does not exist) is an error.
+				Config: config(7) + fmt.Sprintf(`
+data "alis_google_spanner_table_ttl_policy" "missing" {
+  project  = %q
+  instance = %q
+  database = %q
+  table    = "tftest_no_such_table"
+}
+`, env.Project, env.Instance, env.Database),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`Error Reading TTL Policy`),
 			},
 			{
 				// Drop only the policy, keeping its table: this is what proves

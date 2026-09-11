@@ -23,6 +23,7 @@ func TestAllDataSourceSchemas_FollowConvention(t *testing.T) {
 		{"database_roles", NewDatabaseRolesDataSource(), []string{"project", "instance", "database"}},
 		{"table_iam_binding", NewTableIamBindingDataSource(), []string{"project", "instance", "database", "table", "role"}},
 		{"database_role", NewDatabaseRoleDataSource(), []string{"project", "instance", "database", "role"}},
+		{"table_ttl_policy", NewTableTTLPolicyDataSource(), []string{"project", "instance", "database", "table"}},
 	}
 
 	for _, tc := range cases {
