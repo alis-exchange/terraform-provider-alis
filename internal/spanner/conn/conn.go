@@ -56,6 +56,13 @@ type Connection interface {
 	// descriptors on the same request. Same semantics as ExecuteDDL otherwise.
 	ExecuteDDLWithDescriptors(ctx context.Context, database string, protoDescriptors []byte, statements ...string) error
 
+	// DatabaseDdl returns the database's current DDL statements and the proto
+	// descriptors backing its proto bundle (nil when the database has none).
+	// An admin metadata read: codes.NotFound means the database does not
+	// exist. Proto bundle reconciliation reads the live bundle through this
+	// rather than INFORMATION_SCHEMA, which does not expose bundle types.
+	DatabaseDdl(ctx context.Context, database string) (statements []string, protoDescriptors []byte, err error)
+
 	// Query runs sql with positional params and scans rows into dest.
 	// Column-to-field mapping happens inside the adapter, so fakes can serve
 	// canned structs.

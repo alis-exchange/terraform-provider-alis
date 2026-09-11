@@ -190,6 +190,18 @@ func (g *gcpConn) ExecuteDDLWithDescriptors(ctx context.Context, database string
 	return op.Wait(ctx)
 }
 
+func (g *gcpConn) DatabaseDdl(ctx context.Context, database string) ([]string, []byte, error) {
+	admin, err := g.adminClient(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	res, err := admin.GetDatabaseDdl(ctx, &databasepb.GetDatabaseDdlRequest{Database: database})
+	if err != nil {
+		return nil, nil, err
+	}
+	return res.GetStatements(), res.GetProtoDescriptors(), nil
+}
+
 func (g *gcpConn) Query(ctx context.Context, database string, dest any, query string, params ...any) error {
 	db, err := g.session(database)
 	if err != nil {

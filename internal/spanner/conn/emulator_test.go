@@ -2,6 +2,7 @@ package conn_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"terraform-provider-alis/internal/spanner/conn"
@@ -46,6 +47,25 @@ func TestEmulator_PortEndToEnd(t *testing.T) {
 		)
 		if err != nil {
 			t.Fatalf("ExecuteDDL: %v", err)
+		}
+	})
+
+	t.Run("DatabaseDdl returns statements and no descriptors without a bundle", func(t *testing.T) {
+		statements, descriptors, err := cn.DatabaseDdl(ctx, db)
+		if err != nil {
+			t.Fatalf("DatabaseDdl: %v", err)
+		}
+		found := false
+		for _, s := range statements {
+			if strings.HasPrefix(s, "CREATE TABLE singers") {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("statements = %q, want the singers CREATE TABLE", statements)
+		}
+		if len(descriptors) != 0 {
+			t.Fatalf("descriptors = %d bytes, want none before a bundle exists", len(descriptors))
 		}
 	})
 
@@ -211,6 +231,24 @@ func TestEmulator_SupportMatrix(t *testing.T) {
 			t.Skipf("emulator rejects CREATE PROTO BUNDLE: %v", err)
 		}
 		t.Log("proto bundles supported")
+
+		// The bundle read-back is what the proto bundle resource refreshes from.
+		statements, descriptors, err := cn.DatabaseDdl(ctx, db)
+		if err != nil {
+			t.Fatalf("DatabaseDdl: %v", err)
+		}
+		found := false
+		for _, s := range statements {
+			if strings.HasPrefix(s, "CREATE PROTO BUNDLE") && strings.Contains(s, "google.protobuf.BoolValue") {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("statements = %q, want a CREATE PROTO BUNDLE containing BoolValue", statements)
+		}
+		if len(descriptors) == 0 {
+			t.Fatal("DatabaseDdl returned no proto descriptors after CREATE PROTO BUNDLE")
+		}
 	})
 
 	t.Run("column options surfacing (allow_commit_timestamp)", func(t *testing.T) {

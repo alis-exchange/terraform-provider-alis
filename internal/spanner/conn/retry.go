@@ -98,6 +98,17 @@ func (r *retryConn) ExecuteDDLWithDescriptors(ctx context.Context, database stri
 	})
 }
 
+func (r *retryConn) DatabaseDdl(ctx context.Context, database string) ([]string, []byte, error) {
+	var statements []string
+	var descriptors []byte
+	err := r.do(ctx, func() error {
+		var err error
+		statements, descriptors, err = r.inner.DatabaseDdl(ctx, database)
+		return err
+	})
+	return statements, descriptors, err
+}
+
 func (r *retryConn) Query(ctx context.Context, database string, dest any, sql string, params ...any) error {
 	return r.do(ctx, func() error { return r.inner.Query(ctx, database, dest, sql, params...) })
 }

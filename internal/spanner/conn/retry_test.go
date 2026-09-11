@@ -119,3 +119,29 @@ func TestWithRetry(t *testing.T) {
 		}
 	})
 }
+
+// DatabaseDdl is an admin metadata read; like DatabaseRoles it must ride the
+// uniform retry policy so a transient Aborted during a parallel apply does not
+// fail a proto bundle refresh.
+func TestWithRetry_DatabaseDdl(t *testing.T) {
+	ctx := context.Background()
+	db := "projects/p/instances/i/databases/d"
+	fake := connfake.New()
+	fake.SetDatabaseDdl(db, []string{"CREATE PROTO BUNDLE (`a.B`)"}, []byte{1, 2, 3})
+	fake.FailNext(connfake.OpDatabaseDdl, 1, status.Error(codes.Aborted, "transient"))
+	c := conn.WithRetry(fake, fastPolicy(3))
+
+	statements, descriptors, err := c.DatabaseDdl(ctx, db)
+	if err != nil {
+		t.Fatalf("DatabaseDdl after retry: %v", err)
+	}
+	if len(statements) != 1 || statements[0] != "CREATE PROTO BUNDLE (`a.B`)" {
+		t.Errorf("statements = %q, want the seeded bundle statement", statements)
+	}
+	if string(descriptors) != string([]byte{1, 2, 3}) {
+		t.Errorf("descriptors = %v, want seeded bytes", descriptors)
+	}
+	if got := len(fake.OpsOf(connfake.OpDatabaseDdl)); got != 2 {
+		t.Errorf("attempts = %d, want 2 (one Aborted + one success)", got)
+	}
+}

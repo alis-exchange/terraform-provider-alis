@@ -28,6 +28,7 @@ const (
 	OpExecuteDDL    OpKind = "ExecuteDDL"
 	OpQuery         OpKind = "Query"
 	OpDatabaseRoles OpKind = "DatabaseRoles"
+	OpDatabaseDdl   OpKind = "DatabaseDdl"
 )
 
 // Op is one recorded call, in arrival order.
@@ -57,6 +58,7 @@ type Fake struct {
 	ops      []Op
 	dialects map[string]conn.Dialect
 	roles    map[string][]string
+	ddl      map[string]ddlStub
 	stubs    []queryStub // matched most-recently-registered first
 	failures map[OpKind]*failure
 }
@@ -68,6 +70,7 @@ func New() *Fake {
 	return &Fake{
 		dialects: map[string]conn.Dialect{},
 		roles:    map[string][]string{},
+		ddl:      map[string]ddlStub{},
 		failures: map[OpKind]*failure{},
 	}
 }
@@ -77,6 +80,20 @@ func (f *Fake) SetDatabaseRoles(database string, names []string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.roles[database] = names
+}
+
+type ddlStub struct {
+	statements  []string
+	descriptors []byte
+}
+
+// SetDatabaseDdl seeds the DDL statements and proto descriptors DatabaseDdl
+// returns for database; unseeded databases report no statements and nil
+// descriptors.
+func (f *Fake) SetDatabaseDdl(database string, statements []string, descriptors []byte) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.ddl[database] = ddlStub{statements: statements, descriptors: descriptors}
 }
 
 // --- Seeding ---
@@ -205,6 +222,16 @@ func (f *Fake) ExecuteDDL(_ context.Context, database string, statements ...stri
 
 func (f *Fake) ExecuteDDLWithDescriptors(_ context.Context, database string, protoDescriptors []byte, statements ...string) error {
 	return f.record(Op{Kind: OpExecuteDDL, Database: database, Statements: statements, ProtoDescriptors: protoDescriptors})
+}
+
+func (f *Fake) DatabaseDdl(_ context.Context, database string) ([]string, []byte, error) {
+	if err := f.record(Op{Kind: OpDatabaseDdl, Database: database}); err != nil {
+		return nil, nil, err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	stub := f.ddl[database]
+	return stub.statements, stub.descriptors, nil
 }
 
 func (f *Fake) Query(_ context.Context, database string, dest any, sql string, params ...any) error {
