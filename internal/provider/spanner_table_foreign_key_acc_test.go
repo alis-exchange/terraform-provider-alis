@@ -2,6 +2,7 @@ package provider_test
 
 import (
 	"fmt"
+	"regexp"
 	"testing"
 
 	"terraform-provider-alis/internal/acctest"
@@ -112,11 +113,43 @@ resource "alis_google_spanner_table_foreign_key" "test" {
 				Check: resource.TestCheckResourceAttr("alis_google_spanner_table_foreign_key.test", "on_delete", "NO ACTION"),
 			},
 			{
+				// The data source reads the constraint as recreated with NO ACTION.
+				Config: config("NO ACTION") + fmt.Sprintf(`
+data "alis_google_spanner_table_foreign_key" "read" {
+  project  = %q
+  instance = %q
+  database = %q
+  table    = alis_google_spanner_table.orders.name
+  name     = alis_google_spanner_table_foreign_key.test.name
+}
+`, env.Project, env.Instance, env.Database),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.alis_google_spanner_table_foreign_key.read", "referenced_table", usersTable),
+					resource.TestCheckResourceAttr("data.alis_google_spanner_table_foreign_key.read", "column", "user_id"),
+					resource.TestCheckResourceAttr("data.alis_google_spanner_table_foreign_key.read", "referenced_column", "id"),
+					resource.TestCheckResourceAttr("data.alis_google_spanner_table_foreign_key.read", "on_delete", "NO ACTION"),
+				),
+			},
+			{
 				ResourceName:                         "alis_google_spanner_table_foreign_key.test",
 				ImportState:                          true,
 				ImportStateId:                        fmt.Sprintf("%s/tables/%s/constraints/%s", env.DatabaseName, ordersTable, fkName),
 				ImportStateVerify:                    true,
 				ImportStateVerifyIdentifierAttribute: "name",
+			},
+			{
+				// A missing constraint is an error, not an empty result.
+				Config: config("NO ACTION") + fmt.Sprintf(`
+data "alis_google_spanner_table_foreign_key" "missing" {
+  project  = %q
+  instance = %q
+  database = %q
+  table    = alis_google_spanner_table.orders.name
+  name     = "FK_tftest_missing"
+}
+`, env.Project, env.Instance, env.Database),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`Error Reading Foreign Key Constraint`),
 			},
 			{
 				// Drop only the constraint, keeping both tables: this is what
