@@ -25,6 +25,10 @@ func TestParseAndFormatRoundTrip(t *testing.T) {
 			"projects/my-project/instances/my-instance/databases/my-db/sequences/my_sequence",
 		},
 		{
+			"proto bundle", func(s string) (interface{ String() string }, error) { n, err := ParseProtoBundle(s); return n, err },
+			"projects/my-project/instances/my-instance/databases/my-db/protoBundles/alis.os.ideas.v1",
+		},
+		{
 			"database role", func(s string) (interface{ String() string }, error) { n, err := ParseDatabaseRole(s); return n, err },
 			"projects/my-project/instances/my-instance/databases/my-db/databaseRoles/my_role",
 		},
@@ -91,6 +95,15 @@ func TestParseRejectsMalformedNames(t *testing.T) {
 	}
 	if _, err := ParseSequence("projects/p/instances/i/databases/d/tables/t"); err == nil {
 		t.Error("ParseSequence accepted a table name")
+	}
+	if _, err := ParseProtoBundle("projects/p/instances/i/databases/d/protoBundles"); err == nil {
+		t.Error("ParseProtoBundle accepted a name with no package segment")
+	}
+	if _, err := ParseProtoBundle("projects/p/instances/i/databases/d/protoBundles/pkg/extra"); err == nil {
+		t.Error("ParseProtoBundle accepted a name with an extra segment")
+	}
+	if _, err := ParseProtoBundle("projects/p/instances/i/databases/d/sequences/s"); err == nil {
+		t.Error("ParseProtoBundle accepted a sequence name")
 	}
 
 	// Errors are matchable via the sentinel.

@@ -117,6 +117,35 @@ func (n SequenceName) DatabaseName() DatabaseName {
 	return DatabaseName{Project: n.Project, Instance: n.Instance, Database: n.Database}
 }
 
+// ProtoBundleName is projects/{p}/instances/{i}/databases/{d}/protoBundles/{package}.
+// A database has one proto bundle; the package segment identifies the slice
+// of it a resource owns, so this is an import-ID shape rather than a Spanner
+// resource name.
+type ProtoBundleName struct {
+	Project  string
+	Instance string
+	Database string
+	Package  string
+}
+
+// ParseProtoBundle parses a ProtoBundleName; failures wrap ErrInvalidName.
+func ParseProtoBundle(name string) (ProtoBundleName, error) {
+	ids, err := parseSegments(name, "projects", "instances", "databases", "protoBundles")
+	if err != nil {
+		return ProtoBundleName{}, err
+	}
+	return ProtoBundleName{Project: ids[0], Instance: ids[1], Database: ids[2], Package: ids[3]}, nil
+}
+
+func (n ProtoBundleName) String() string {
+	return fmt.Sprintf("%s/protoBundles/%s", n.DatabaseName().String(), n.Package)
+}
+
+// DatabaseName returns the parent database's name.
+func (n ProtoBundleName) DatabaseName() DatabaseName {
+	return DatabaseName{Project: n.Project, Instance: n.Instance, Database: n.Database}
+}
+
 // DatabaseRoleName is projects/{p}/instances/{i}/databases/{d}/databaseRoles/{r}.
 type DatabaseRoleName struct {
 	Project  string
