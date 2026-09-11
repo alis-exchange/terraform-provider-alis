@@ -2,6 +2,7 @@ package provider_test
 
 import (
 	"fmt"
+	"regexp"
 	"testing"
 
 	"terraform-provider-alis/internal/acctest"
@@ -74,11 +75,43 @@ resource "alis_google_spanner_table_index" "test" {
 				Check: resource.TestCheckResourceAttr("alis_google_spanner_table_index.test", "columns.#", "1"),
 			},
 			{
+				// The data source reads the index as recreated with one column.
+				Config: config(false) + fmt.Sprintf(`
+data "alis_google_spanner_table_index" "read" {
+  project  = %q
+  instance = %q
+  database = %q
+  table    = alis_google_spanner_table.base.name
+  name     = alis_google_spanner_table_index.test.name
+}
+`, env.Project, env.Instance, env.Database),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.alis_google_spanner_table_index.read", "columns.#", "1"),
+					resource.TestCheckResourceAttr("data.alis_google_spanner_table_index.read", "columns.0.name", "display_name"),
+					resource.TestCheckResourceAttr("data.alis_google_spanner_table_index.read", "columns.0.order", "asc"),
+					resource.TestCheckResourceAttr("data.alis_google_spanner_table_index.read", "unique", "false"),
+				),
+			},
+			{
 				ResourceName:                         "alis_google_spanner_table_index.test",
 				ImportState:                          true,
 				ImportStateId:                        fmt.Sprintf("%s/tables/%s/indexes/%s", env.DatabaseName, table, index),
 				ImportStateVerify:                    true,
 				ImportStateVerifyIdentifierAttribute: "name",
+			},
+			{
+				// A missing index is an error, not an empty result.
+				Config: config(false) + fmt.Sprintf(`
+data "alis_google_spanner_table_index" "missing" {
+  project  = %q
+  instance = %q
+  database = %q
+  table    = alis_google_spanner_table.base.name
+  name     = "tftest_missing_idx"
+}
+`, env.Project, env.Instance, env.Database),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`Error Reading Index`),
 			},
 			{
 				// Drop only the index. CheckDestroy runs after the table is

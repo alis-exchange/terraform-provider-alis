@@ -277,6 +277,7 @@ func (p *googleProvider) DataSources(_ context.Context) []func() datasource.Data
 		spanner.NewDatabaseRoleDataSource,
 		spanner.NewTableTTLPolicyDataSource,
 		spanner.NewTableForeignKeyDataSource,
+		spanner.NewTableIndexDataSource,
 		spanner.NewTableIamBindingDataSource,
 	}
 }
