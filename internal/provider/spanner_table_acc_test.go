@@ -2,6 +2,7 @@ package provider_test
 
 import (
 	"fmt"
+	"regexp"
 	"testing"
 
 	"terraform-provider-alis/internal/acctest"
@@ -111,6 +112,24 @@ func TestAccSpannerTable_basic(t *testing.T) {
 				),
 			},
 			{
+				// The data source hydrates the five-column table from INFORMATION_SCHEMA.
+				Config: tableConfig(env, table, 500, true) + fmt.Sprintf(`
+data "alis_google_spanner_table" "read" {
+  project  = %q
+  instance = %q
+  database = %q
+  name     = alis_google_spanner_table.test.name
+}
+`, env.Project, env.Instance, env.Database),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.alis_google_spanner_table.read", "schema.columns.#", "5"),
+					resource.TestCheckResourceAttr("data.alis_google_spanner_table.read", "schema.columns.0.name", "id"),
+					resource.TestCheckResourceAttr("data.alis_google_spanner_table.read", "schema.columns.0.is_primary_key", "true"),
+					resource.TestCheckResourceAttr("data.alis_google_spanner_table.read", "schema.columns.1.size", "500"),
+					resource.TestCheckNoResourceAttr("data.alis_google_spanner_table.read", "interleave.parent_table"),
+				),
+			},
+			{
 				ResourceName:      "alis_google_spanner_table.test",
 				ImportState:       true,
 				ImportStateId:     fmt.Sprintf("%s/tables/%s", env.DatabaseName, table),
@@ -118,6 +137,19 @@ func TestAccSpannerTable_basic(t *testing.T) {
 				// Framework resources have no "id" attribute; compare on name.
 				ImportStateVerifyIdentifierAttribute: "name",
 				ImportStateVerifyIgnore:              importIgnore,
+			},
+			{
+				// A missing table is an error, not an empty result.
+				Config: tableConfig(env, table, 500, true) + fmt.Sprintf(`
+data "alis_google_spanner_table" "missing" {
+  project  = %q
+  instance = %q
+  database = %q
+  name     = "tftest_missing_table"
+}
+`, env.Project, env.Instance, env.Database),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`Error Reading Table`),
 			},
 		},
 	})

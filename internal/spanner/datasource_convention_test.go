@@ -27,6 +27,7 @@ func TestAllDataSourceSchemas_FollowConvention(t *testing.T) {
 		{"table_foreign_key", NewTableForeignKeyDataSource(), []string{"project", "instance", "database", "table", "name"}},
 		{"table_index", NewTableIndexDataSource(), []string{"project", "instance", "database", "table", "name"}},
 		{"database_sequence", NewDatabaseSequenceDataSource(), []string{"project", "instance", "database", "sequence"}},
+		{"table", NewSpannerTableDataSource(), []string{"project", "instance", "database", "name"}},
 	}
 
 	for _, tc := range cases {
