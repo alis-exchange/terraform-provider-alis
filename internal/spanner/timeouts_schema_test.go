@@ -15,13 +15,14 @@ import (
 // accept the config attribute but never apply it.
 func TestAllResourceSchemas_HaveTimeoutsBlock(t *testing.T) {
 	resources := map[string]resource.Resource{
-		"table":       NewSpannerTableResource(),
-		"index":       NewSpannerTableIndexResource(),
-		"foreign_key": NewTableForeignKeyResource(),
-		"ttl_policy":  NewTableTTLPolicyResource(),
-		"iam_binding": NewTableIamBindingResource(),
-		"role":        NewDatabaseRoleResource(),
-		"sequence":    NewDatabaseSequenceResource(),
+		"table":        NewSpannerTableResource(),
+		"index":        NewSpannerTableIndexResource(),
+		"foreign_key":  NewTableForeignKeyResource(),
+		"ttl_policy":   NewTableTTLPolicyResource(),
+		"iam_binding":  NewTableIamBindingResource(),
+		"role":         NewDatabaseRoleResource(),
+		"sequence":     NewDatabaseSequenceResource(),
+		"proto_bundle": NewProtoBundleResource(),
 	}
 
 	for name, r := range resources {

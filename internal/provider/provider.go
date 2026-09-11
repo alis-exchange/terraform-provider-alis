@@ -245,6 +245,16 @@ func (p *googleProvider) Configure(ctx context.Context, req provider.ConfigureRe
 	//
 	// conn.New is the single place the resolved credentials reach every Spanner
 	// client.
+	//
+	// The Cloud Storage reader serves gs:// descriptor-set sources of the
+	// proto bundle resource; a failure to build it only disables those
+	// sources, it must not block Spanner-only configurations.
+	var serviceOpts []spannerservices.Option
+	if gcsReader, err := utils.NewGcsReader(ctx, googleCreds); err != nil {
+		tflog.Warn(ctx, "Cloud Storage client unavailable; gs:// descriptor sources are disabled", map[string]any{"error": err.Error()})
+	} else {
+		serviceOpts = append(serviceOpts, spannerservices.WithBlobReader(gcsReader))
+	}
 	spannerService := spannerservices.NewSpannerService(
 		sharedConnection(
 			connectionKey(config.Project.ValueString(), credentials, accessToken, googleCreds),
@@ -252,6 +262,7 @@ func (p *googleProvider) Configure(ctx context.Context, req provider.ConfigureRe
 				return conn.New(conn.Options{Credentials: googleCreds})
 			},
 		),
+		serviceOpts...,
 	)
 	resp.DataSourceData = spannerService
 	resp.ResourceData = spannerService
@@ -277,6 +288,7 @@ func (p *googleProvider) Resources(_ context.Context) []func() resource.Resource
 		spanner.NewTableIamBindingResource,
 		spanner.NewTableTTLPolicyResource,
 		spanner.NewDatabaseSequenceResource,
+		spanner.NewProtoBundleResource,
 	}
 }
 

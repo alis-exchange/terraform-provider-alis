@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"cloud.google.com/go/spanner"
+	"cloud.google.com/go/storage"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	oath2 "golang.org/x/oauth2"
 	googleoauth "golang.org/x/oauth2/google"
@@ -33,10 +34,15 @@ func GetGoogleCredentials(
 	scopes ...string,
 ) (*googleoauth.Credentials, error) {
 	// Set default scopes if none are provided
+	// Storage read-only rides along so the proto bundle resource can fetch
+	// gs:// descriptor sets with the same credentials: service-account JSON
+	// credentials are scoped at token time, and Spanner-only scopes would be
+	// rejected by Cloud Storage.
 	if len(scopes) == 0 {
 		scopes = []string{
 			spanner.Scope,
 			spanner.AdminScope,
+			storage.ScopeReadOnly,
 		}
 	}
 
