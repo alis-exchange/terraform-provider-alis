@@ -1,4 +1,22 @@
-# [](https://github.com/alis-exchange/terraform-provider-alis/compare/v2.0.0-beta8...v) (2026-09-11)
+# [](https://github.com/alis-exchange/terraform-provider-alis/compare/v2.0.0-beta9...v) (2026-10-05)
+
+# [2.0.0-beta9](https://github.com/alis-exchange/terraform-provider-alis/compare/v2.0.0-beta8...v2.0.0-beta9) (2026-10-05)
+
+
+### Bug Fixes
+
+* **spanner:** match table columns by name on refresh so in-place column changes converge ([91bfeb9](https://github.com/alis-exchange/terraform-provider-alis/commit/91bfeb90343852b12809b2076a71577515a83783))
+
+
+### Features
+
+* **spanner:** add alis_google_spanner_database_role data source ([23624c4](https://github.com/alis-exchange/terraform-provider-alis/commit/23624c405d0b65e80ccb76e851c80884b470c0b4))
+* **spanner:** add alis_google_spanner_database_sequence data source ([0da3f05](https://github.com/alis-exchange/terraform-provider-alis/commit/0da3f05ee40eefe93e07bfb5acdb5925b37161c4))
+* **spanner:** add alis_google_spanner_proto_bundle data source ([a9b2525](https://github.com/alis-exchange/terraform-provider-alis/commit/a9b2525c27eb1f01b541eec8d601d15932a4fd08))
+* **spanner:** add alis_google_spanner_table data source ([42f3e4d](https://github.com/alis-exchange/terraform-provider-alis/commit/42f3e4d09114a1e25f00f6a5acc1a3d658c01a5a))
+* **spanner:** add alis_google_spanner_table_foreign_key data source ([049adf9](https://github.com/alis-exchange/terraform-provider-alis/commit/049adf953ff72a6b6628deff89cb463a80295340))
+* **spanner:** add alis_google_spanner_table_index data source ([b5ca560](https://github.com/alis-exchange/terraform-provider-alis/commit/b5ca560b0dc634076a55417d8ed5e21d2859cbe2))
+* **spanner:** add alis_google_spanner_table_ttl_policy data source ([687e1bf](https://github.com/alis-exchange/terraform-provider-alis/commit/687e1bf8e7f7ff459b7917cf7f291a15c6e8f554))
 
 # [2.0.0-beta8](https://github.com/alis-exchange/terraform-provider-alis/compare/v2.0.0-beta7...v2.0.0-beta8) (2026-09-11)
 
