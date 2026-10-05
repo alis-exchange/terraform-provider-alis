@@ -133,7 +133,8 @@ Replacements forced from outside the configuration (`terraform apply -replace=..
 
 Required:
 
-- `columns` (Attributes List) The columns of the table. (see [below for nested schema](#nestedatt--schema--columns))
+- `columns` (Attributes List) The columns of the table.
+Columns are matched by name, so their order here does not control the physical column order. Spanner appends a column added to an existing table at the end and cannot reorder columns, so after an in-place change the database order can differ from this list without causing a diff. (see [below for nested schema](#nestedatt--schema--columns))
 
 <a id="nestedatt--schema--columns"></a>
 ### Nested Schema for `schema.columns`

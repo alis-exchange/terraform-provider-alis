@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"slices"
 	"testing"
 
 	"terraform-provider-alis/internal/spanner/conn/connfake"
@@ -307,5 +308,27 @@ func TestPreserveUnsetBooleans(t *testing.T) {
 	// True from hydration is real drift and must never be masked.
 	if c := byName["drifted"]; c.IsComputed == nil || !c.IsComputed.GetValue() {
 		t.Errorf("drifted: hydrated true must survive, got %v", c.IsComputed)
+	}
+}
+
+func TestOrderLikePrior(t *testing.T) {
+	prior := []*SpannerTableColumn{
+		{Name: "key"}, {Name: "payload"}, {Name: "owner_key"}, {Name: "create_time"}, {Name: "dropped"},
+	}
+	// Live order after owner was replaced in place, plus a column added
+	// outside Terraform; dropped is gone.
+	hydrated := []*SpannerTableColumn{
+		{Name: "key"}, {Name: "payload"}, {Name: "create_time"}, {Name: "owner_key"}, {Name: "added"},
+	}
+
+	got := OrderLikePrior(prior, hydrated)
+
+	var names []string
+	for _, c := range got {
+		names = append(names, c.Name)
+	}
+	want := []string{"key", "payload", "owner_key", "create_time", "added"}
+	if !slices.Equal(names, want) {
+		t.Errorf("OrderLikePrior = %v, want %v", names, want)
 	}
 }

@@ -284,7 +284,10 @@ func (r *spannerTableResource) Schema(ctx context.Context, _ resource.SchemaRequ
 								},
 							},
 						},
-						MarkdownDescription: "The columns of the table.",
+						MarkdownDescription: "The columns of the table.\n" +
+							"Columns are matched by name, so their order here does not control the physical column order. " +
+							"Spanner appends a column added to an existing table at the end and cannot reorder columns, " +
+							"so after an in-place change the database order can differ from this list without causing a diff.",
 						PlanModifiers: []planmodifier.List{
 							listplanmodifier.RequiresReplaceIf(
 								tableColumnsRequireReplace,
@@ -492,6 +495,7 @@ func (r *spannerTableResource) Read(ctx context.Context, req resource.ReadReques
 					return
 				}
 				tableschema.PreserveUnsetBooleans(priorColumns, table.Schema.Columns)
+				table.Schema.Columns = tableschema.OrderLikePrior(priorColumns, table.Schema.Columns)
 			}
 
 			generatedList, d := tableColumnsToModel(ctx, table.Schema.Columns)

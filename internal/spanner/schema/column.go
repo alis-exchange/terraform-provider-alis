@@ -40,6 +40,38 @@ func PreserveUnsetBooleans(prior, hydrated []*SpannerTableColumn) {
 	}
 }
 
+// OrderLikePrior returns hydrated sorted into the prior state's column order,
+// matching by name. Columns the prior state does not know keep their hydrated
+// order after the known ones. Spanner appends a column added in place at the
+// end of the table and cannot reorder columns, so after a column is replaced
+// in place the physical order never matches the config again; keeping the
+// prior order stops that alone from showing as a perpetual list diff, while
+// real attribute changes and added or dropped columns still do.
+func OrderLikePrior(prior, hydrated []*SpannerTableColumn) []*SpannerTableColumn {
+	position := make(map[string]int, len(prior))
+	for i, c := range prior {
+		position[c.Name] = i
+	}
+
+	ordered := make([]*SpannerTableColumn, 0, len(hydrated))
+	known := make([]*SpannerTableColumn, len(prior))
+	var unknown []*SpannerTableColumn
+	for _, c := range hydrated {
+		if i, ok := position[c.Name]; ok {
+			known[i] = c
+		} else {
+			unknown = append(unknown, c)
+		}
+	}
+	for _, c := range known {
+		if c != nil {
+			ordered = append(ordered, c)
+		}
+	}
+
+	return append(ordered, unknown...)
+}
+
 // SpannerTableColumn represents a Spanner table column.
 type SpannerTableColumn struct {
 	// The name of the column.
